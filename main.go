@@ -95,7 +95,7 @@ func getPrompt() string {
 		prompt += fmt.Sprintf(" %s✗%s", colorRed, colorReset)
 	}
 
-	prompt += fmt.Sprintf("\n%s╰%s%s ", colorBold, symbol, colorReset)
+	prompt += fmt.Sprintf("\r\n%s╰%s%s ", colorBold, symbol, colorReset)
 
 	return prompt
 }
