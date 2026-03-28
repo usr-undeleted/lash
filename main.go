@@ -1,19 +1,22 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 )
 
 var lastExitCode int = 0
 var backgroundPids = make(map[int]*exec.Cmd)
+var pendingNotifs []string
+var notifMu sync.Mutex
 
 func getExitCode(err error) int {
 	if err == nil {
@@ -110,8 +113,20 @@ func reapZombies() {
 			if status.Exited() {
 				exitCode = status.ExitStatus()
 			}
-			fmt.Printf("\n[%d] done (exit %d)\n", pid, exitCode)
+			notifMu.Lock()
+			pendingNotifs = append(pendingNotifs, fmt.Sprintf("[%d] done (exit %d)\n", pid, exitCode))
+			notifMu.Unlock()
 		}
+	}
+}
+
+func drainNotifs() {
+	notifMu.Lock()
+	msgs := pendingNotifs
+	pendingNotifs = nil
+	notifMu.Unlock()
+	for _, m := range msgs {
+		fmt.Print(m)
 	}
 }
 
@@ -120,8 +135,6 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT)
 	go func() {
 		for range sigCh {
-			fmt.Println()
-			fmt.Print(getPrompt())
 		}
 	}()
 
@@ -133,14 +146,23 @@ func main() {
 		}
 	}()
 
-	reader := bufio.NewReader(os.Stdin)
+	editor := NewLineEditor()
 	for {
 		reapZombies()
-		fmt.Print(getPrompt())
-		line, err := reader.ReadString('\n')
+		drainNotifs()
+		prompt := getPrompt()
+		line, err := editor.ReadLine(prompt)
+		if err == io.EOF {
+			fmt.Println()
+			break
+		}
 		if err != nil {
 			fmt.Println()
 			break
+		}
+		if line == "\x03" {
+			lastExitCode = 130
+			continue
 		}
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -155,7 +177,7 @@ func main() {
 }
 
 type chainEntry struct {
-	operator string // "&&", "||", ";"
+	operator string
 	args     []string
 }
 
@@ -237,9 +259,9 @@ func expandString(s string) string {
 				i += 2
 				continue
 			}
-			if s[i+1] >= 'A' && s[i+1] <= 'Z' || s[i+1] >= 'a' && s[i+1] <= 'z' || s[i+1] == '_' {
+			if isAlphaOrUnderscore(s[i+1]) {
 				j := i + 1
-				for j < len(s) && (s[j] >= 'A' && s[j] <= 'Z' || s[j] >= 'a' && s[j] <= 'z' || s[j] >= '0' && s[j] <= '9' || s[j] == '_') {
+				for j < len(s) && isAlnumOrUnderscore(s[j]) {
 					j++
 				}
 				varName := s[i+1 : j]
@@ -257,6 +279,14 @@ func expandString(s string) string {
 		i++
 	}
 	return result.String()
+}
+
+func isAlphaOrUnderscore(c byte) bool {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'
+}
+
+func isAlnumOrUnderscore(c byte) bool {
+	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
 }
 
 func executeChain(chain []chainEntry) {
