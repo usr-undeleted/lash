@@ -13,15 +13,6 @@ import (
 
 var lastExitCode int = 0
 
-const (
-	colorReset  = "\x1b[0m"
-	colorRed    = "\x1b[31m"
-	colorGreen  = "\x1b[32m"
-	colorYellow = "\x1b[33m"
-	colorBold   = "\x1b[1m"
-	colorCyan   = "\x1b[36m"
-)
-
 func getExitCode(err error) int {
 	if err == nil {
 		return 0
@@ -31,6 +22,15 @@ func getExitCode(err error) int {
 	}
 	return 1
 }
+
+const (
+	colorReset  = "\x1b[0m"
+	colorRed    = "\x1b[31m"
+	colorGreen  = "\x1b[32m"
+	colorYellow = "\x1b[33m"
+	colorBold   = "\x1b[1m"
+	colorCyan   = "\x1b[36m"
+)
 
 func getGitBranch() string {
 	dir, err := os.Getwd()
@@ -76,13 +76,6 @@ func getPrompt() string {
 		symbol = "#"
 	}
 
-	statusIcon := "✔"
-	statusColor := colorGreen
-	if lastExitCode != 0 {
-		statusIcon = "✗"
-		statusColor = colorRed
-	}
-
 	prompt := fmt.Sprintf("%s%s%s@%s%s %sin %s%s%s",
 		colorBold, colorCyan, user, host, colorReset,
 		colorBold, colorYellow, dir, colorReset)
@@ -93,9 +86,11 @@ func getPrompt() string {
 			colorReset, colorBold, branch, colorReset)
 	}
 
-	prompt += fmt.Sprintf("\n%s╰%s%s %s%s%s ",
-		colorBold, symbol, colorReset,
-		statusColor, statusIcon, colorReset)
+	if lastExitCode >= 1 {
+		prompt += fmt.Sprintf(" %s✗%s", colorRed, colorReset)
+	}
+
+	prompt += fmt.Sprintf("\n%s╰%s%s ", colorBold, symbol, colorReset)
 
 	return prompt
 }
