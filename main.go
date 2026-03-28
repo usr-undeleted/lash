@@ -6,9 +6,58 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 )
+
+var lastExitCode int = 0
+
+const (
+	colorReset  = "\x1b[0m"
+	colorRed    = "\x1b[31m"
+	colorGreen  = "\x1b[32m"
+	colorYellow = "\x1b[33m"
+	colorBold   = "\x1b[1m"
+	colorCyan   = "\x1b[36m"
+)
+
+func getExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		return exitErr.ExitCode()
+	}
+	return 1
+}
+
+func getGitBranch() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for {
+		headPath := filepath.Join(dir, ".git", "HEAD")
+		data, err := os.ReadFile(headPath)
+		if err == nil {
+			content := strings.TrimSpace(string(data))
+			if strings.HasPrefix(content, "ref: refs/heads/") {
+				return strings.TrimPrefix(content, "ref: refs/heads/")
+			}
+			if len(content) >= 7 {
+				return content[:7]
+			}
+			return content
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return ""
+}
 
 func getPrompt() string {
 	user := os.Getenv("USER")
@@ -21,7 +70,34 @@ func getPrompt() string {
 	if strings.HasPrefix(dir, home) {
 		dir = "~" + dir[len(home):]
 	}
-	return fmt.Sprintf("%s@%s in %s\n╰$ ", user, host, dir)
+
+	symbol := "$"
+	if os.Getuid() == 0 {
+		symbol = "#"
+	}
+
+	statusIcon := "✔"
+	statusColor := colorGreen
+	if lastExitCode != 0 {
+		statusIcon = "✗"
+		statusColor = colorRed
+	}
+
+	prompt := fmt.Sprintf("%s%s%s@%s%s %sin %s%s%s",
+		colorBold, colorCyan, user, host, colorReset,
+		colorBold, colorYellow, dir, colorReset)
+
+	branch := getGitBranch()
+	if branch != "" {
+		prompt += fmt.Sprintf(" %son %s%s%s",
+			colorReset, colorBold, branch, colorReset)
+	}
+
+	prompt += fmt.Sprintf("\n%s╰%s%s %s%s%s ",
+		colorBold, symbol, colorReset,
+		statusColor, statusIcon, colorReset)
+
+	return prompt
 }
 
 func main() {
@@ -130,7 +206,7 @@ func isBuiltin(cmd string) bool {
 func executeBuiltin(args []string) {
 	switch args[0] {
 	case "exit":
-		os.Exit(0)
+		os.Exit(lastExitCode)
 	case "cd":
 		dir := ""
 		if len(args) > 1 {
@@ -140,13 +216,18 @@ func executeBuiltin(args []string) {
 		}
 		if err := os.Chdir(dir); err != nil {
 			fmt.Fprintf(os.Stderr, "cd: %s\n", err)
+			lastExitCode = 1
+		} else {
+			lastExitCode = 0
 		}
 	case "pwd":
 		dir, err := os.Getwd()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "pwd: %s\n", err)
+			lastExitCode = 1
 		} else {
 			fmt.Println(dir)
+			lastExitCode = 0
 		}
 	}
 }
@@ -185,6 +266,7 @@ func executeSimple(args []string, background bool) {
 		f, err := os.Open(inFile)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			lastExitCode = 1
 			return
 		}
 		defer f.Close()
@@ -201,6 +283,7 @@ func executeSimple(args []string, background bool) {
 		f, err := os.OpenFile(outFile, flag, 0644)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			lastExitCode = 1
 			return
 		}
 		defer f.Close()
@@ -210,13 +293,15 @@ func executeSimple(args []string, background bool) {
 	if background {
 		if err := cmd.Start(); err != nil {
 			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			lastExitCode = 1
 			return
 		}
 		fmt.Printf("[%d]\n", cmd.Process.Pid)
 		return
 	}
 
-	cmd.Run()
+	err := cmd.Run()
+	lastExitCode = getExitCode(err)
 }
 
 func executePipeline(segments [][]string, background bool) {
@@ -230,6 +315,7 @@ func executePipeline(segments [][]string, background bool) {
 		r, w, err := os.Pipe()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			lastExitCode = 1
 			return
 		}
 		pipes[i] = pipePair{r, w}
@@ -249,6 +335,7 @@ func executePipeline(segments [][]string, background bool) {
 			f, err := os.Open(inFile)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				lastExitCode = 1
 				return
 			}
 			defer f.Close()
@@ -269,6 +356,7 @@ func executePipeline(segments [][]string, background bool) {
 			f, err := os.OpenFile(outFile, flag, 0644)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				lastExitCode = 1
 				return
 			}
 			defer f.Close()
@@ -290,9 +378,12 @@ func executePipeline(segments [][]string, background bool) {
 		p.w.Close()
 	}
 
+	lastExit := 0
 	for _, cmd := range cmds {
-		cmd.Wait()
+		err := cmd.Wait()
+		lastExit = getExitCode(err)
 	}
+	lastExitCode = lastExit
 
 	for _, p := range pipes {
 		p.r.Close()
