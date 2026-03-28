@@ -7,11 +7,13 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 )
 
 var lastExitCode int = 0
+var backgroundPids = make(map[int]*exec.Cmd)
 
 func getExitCode(err error) int {
 	if err == nil {
@@ -95,18 +97,45 @@ func getPrompt() string {
 	return prompt
 }
 
+func reapZombies() {
+	for {
+		var status syscall.WaitStatus
+		pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
+		if pid <= 0 || err != nil {
+			break
+		}
+		if _, ok := backgroundPids[pid]; ok {
+			delete(backgroundPids, pid)
+			exitCode := 0
+			if status.Exited() {
+				exitCode = status.ExitStatus()
+			}
+			fmt.Printf("\n[%d] done (exit %d)\n", pid, exitCode)
+		}
+	}
+}
+
 func main() {
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT)
 	go func() {
-		for range sig {
+		for range sigCh {
 			fmt.Println()
 			fmt.Print(getPrompt())
 		}
 	}()
 
+	childCh := make(chan os.Signal, 1)
+	signal.Notify(childCh, syscall.SIGCHLD)
+	go func() {
+		for range childCh {
+			reapZombies()
+		}
+	}()
+
 	reader := bufio.NewReader(os.Stdin)
 	for {
+		reapZombies()
 		fmt.Print(getPrompt())
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -118,7 +147,128 @@ func main() {
 			continue
 		}
 
-		tokens := tokenize(line)
+		chains := splitChains(line)
+		for _, chain := range chains {
+			executeChain(chain)
+		}
+	}
+}
+
+type chainEntry struct {
+	operator string // "&&", "||", ";"
+	args     []string
+}
+
+func splitChains(line string) [][]chainEntry {
+	var groups [][]chainEntry
+	var current []chainEntry
+	tokens := tokenize(line)
+	i := 0
+	for i < len(tokens) {
+		if tokens[i] == ";" {
+			if len(current) > 0 {
+				groups = append(groups, current)
+				current = nil
+			}
+			i++
+			continue
+		}
+		var args []string
+		for i < len(tokens) && tokens[i] != "&&" && tokens[i] != "||" && tokens[i] != ";" {
+			args = append(args, tokens[i])
+			i++
+		}
+		if len(args) > 0 {
+			current = append(current, chainEntry{operator: "", args: args})
+		}
+		if i < len(tokens) && (tokens[i] == "&&" || tokens[i] == "||") {
+			op := tokens[i]
+			i++
+			var nextArgs []string
+			for i < len(tokens) && tokens[i] != "&&" && tokens[i] != "||" && tokens[i] != ";" {
+				nextArgs = append(nextArgs, tokens[i])
+				i++
+			}
+			if len(nextArgs) > 0 {
+				current = append(current, chainEntry{operator: op, args: nextArgs})
+			}
+		}
+	}
+	if len(current) > 0 {
+		groups = append(groups, current)
+	}
+	return groups
+}
+
+func expandVariables(tokens []string) []string {
+	expanded := make([]string, len(tokens))
+	for i, t := range tokens {
+		expanded[i] = expandString(t)
+	}
+	return expanded
+}
+
+func expandString(s string) string {
+	var result strings.Builder
+	i := 0
+	for i < len(s) {
+		if s[i] == '$' && i+1 < len(s) {
+			if s[i+1] == '?' {
+				result.WriteString(strconv.Itoa(lastExitCode))
+				i += 2
+				continue
+			}
+			if s[i+1] == '{' {
+				end := strings.Index(s[i:], "}")
+				if end >= 0 {
+					varName := s[i+2 : i+end]
+					val := os.Getenv(varName)
+					if val == "" {
+						result.WriteString("$" + s[i+1:i+end+1])
+					} else {
+						result.WriteString(val)
+					}
+					i += end + 1
+					continue
+				}
+			}
+			if s[i+1] == '$' {
+				result.WriteString(strconv.Itoa(os.Getpid()))
+				i += 2
+				continue
+			}
+			if s[i+1] >= 'A' && s[i+1] <= 'Z' || s[i+1] >= 'a' && s[i+1] <= 'z' || s[i+1] == '_' {
+				j := i + 1
+				for j < len(s) && (s[j] >= 'A' && s[j] <= 'Z' || s[j] >= 'a' && s[j] <= 'z' || s[j] >= '0' && s[j] <= '9' || s[j] == '_') {
+					j++
+				}
+				varName := s[i+1 : j]
+				val := os.Getenv(varName)
+				if val == "" {
+					result.WriteString(s[i:j])
+				} else {
+					result.WriteString(val)
+				}
+				i = j
+				continue
+			}
+		}
+		result.WriteByte(s[i])
+		i++
+	}
+	return result.String()
+}
+
+func executeChain(chain []chainEntry) {
+	for _, entry := range chain {
+		if entry.operator == "&&" && lastExitCode != 0 {
+			continue
+		}
+		if entry.operator == "||" && lastExitCode == 0 {
+			continue
+		}
+
+		tokens := expandVariables(entry.args)
 		if len(tokens) == 0 {
 			continue
 		}
@@ -133,9 +283,9 @@ func main() {
 		if len(segments) == 1 {
 			if isBuiltin(segments[0][0]) {
 				executeBuiltin(segments[0])
-				continue
+			} else {
+				executeSimple(segments[0], background)
 			}
-			executeSimple(segments[0], background)
 		} else {
 			executePipeline(segments, background)
 		}
@@ -192,7 +342,7 @@ func tokenize(line string) []string {
 
 func isBuiltin(cmd string) bool {
 	switch cmd {
-	case "exit", "cd", "pwd":
+	case "exit", "cd", "pwd", "jobs", "export":
 		return true
 	}
 	return false
@@ -201,7 +351,14 @@ func isBuiltin(cmd string) bool {
 func executeBuiltin(args []string) {
 	switch args[0] {
 	case "exit":
-		os.Exit(lastExitCode)
+		code := lastExitCode
+		if len(args) > 1 {
+			n, err := strconv.Atoi(args[1])
+			if err == nil {
+				code = n
+			}
+		}
+		os.Exit(code)
 	case "cd":
 		dir := ""
 		if len(args) > 1 {
@@ -222,6 +379,31 @@ func executeBuiltin(args []string) {
 			lastExitCode = 1
 		} else {
 			fmt.Println(dir)
+			lastExitCode = 0
+		}
+	case "jobs":
+		if len(backgroundPids) == 0 {
+			lastExitCode = 0
+			return
+		}
+		for pid := range backgroundPids {
+			fmt.Printf("[%d] running\n", pid)
+		}
+		lastExitCode = 0
+	case "export":
+		if len(args) < 2 {
+			lastExitCode = 1
+			return
+		}
+		for _, a := range args[1:] {
+			eqIdx := strings.Index(a, "=")
+			if eqIdx < 1 {
+				lastExitCode = 1
+				continue
+			}
+			key := a[:eqIdx]
+			val := a[eqIdx+1:]
+			os.Setenv(key, val)
 			lastExitCode = 0
 		}
 	}
@@ -291,7 +473,9 @@ func executeSimple(args []string, background bool) {
 			lastExitCode = 1
 			return
 		}
+		backgroundPids[cmd.Process.Pid] = cmd
 		fmt.Printf("[%d]\n", cmd.Process.Pid)
+		lastExitCode = 0
 		return
 	}
 

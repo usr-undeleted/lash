@@ -1,6 +1,6 @@
 # lash — Roadmap
 
-## Phase 1: Core Foundations (current)
+## Phase 1: Core Foundations
 
 - [x] REPL loop with dynamic prompt
 - [x] Basic command execution (fork+exec)
@@ -10,12 +10,12 @@
 - [x] Background processes (`&`)
 - [x] Basic Ctrl+C handling
 - [x] Quoting (single and double quotes)
-- [ ] Command chaining (`&&`, `||`, `;`)
-- [ ] Exit status codes (`$?`)
-- [ ] Signal handling for background jobs (`SIGCHLD`)
-- [ ] Proper zombie reaping for background processes
+- [x] Command chaining (`&&`, `||`, `;`)
+- [x] Exit status codes (`$?`)
+- [x] Signal handling for background jobs (`SIGCHLD`)
+- [x] Proper zombie reaping for background processes
 
-## Phase 2: Essential Interactive Features
+## Phase 2: Essential Interactive Features (current)
 
 - [ ] Command history (up/down arrows)
 - [ ] Line editing (left/right arrows, backspace, delete, Home/End)
