@@ -9,6 +9,7 @@ lash = larp shell
 fart  
 # compiling  
 go build -o lash  
+# [roadmap](ROADMAP.md)
 # contributors
 @usr-undeleted  
 @Vaspyyy
