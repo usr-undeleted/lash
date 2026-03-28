@@ -149,7 +149,8 @@ func main() {
 		}
 	}()
 
-	editor := NewLineEditor()
+	cfg := LoadConfig()
+	editor := NewLineEditor(cfg)
 	for {
 		reapZombies()
 		drainNotifs()
@@ -174,7 +175,7 @@ func main() {
 
 		chains := splitChains(line)
 		for _, chain := range chains {
-			executeChain(chain)
+			executeChain(chain, cfg)
 		}
 	}
 }
@@ -292,7 +293,7 @@ func isAlnumOrUnderscore(c byte) bool {
 	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
 }
 
-func executeChain(chain []chainEntry) {
+func executeChain(chain []chainEntry, cfg *Config) {
 	for _, entry := range chain {
 		if entry.operator == "&&" && lastExitCode != 0 {
 			continue
@@ -315,7 +316,7 @@ func executeChain(chain []chainEntry) {
 		segments := splitPipes(tokens)
 		if len(segments) == 1 {
 			if isBuiltin(segments[0][0]) {
-				executeBuiltin(segments[0])
+				executeBuiltin(segments[0], cfg)
 			} else {
 				executeSimple(segments[0], background)
 			}
@@ -375,13 +376,13 @@ func tokenize(line string) []string {
 
 func isBuiltin(cmd string) bool {
 	switch cmd {
-	case "exit", "cd", "pwd", "jobs", "export":
+	case "exit", "cd", "pwd", "jobs", "export", "lash":
 		return true
 	}
 	return false
 }
 
-func executeBuiltin(args []string) {
+func executeBuiltin(args []string, cfg *Config) {
 	switch args[0] {
 	case "exit":
 		code := lastExitCode
@@ -438,6 +439,37 @@ func executeBuiltin(args []string) {
 			val := a[eqIdx+1:]
 			os.Setenv(key, val)
 			lastExitCode = 0
+		}
+	case "lash":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "lash: usage: lash set-config <key> <value>")
+			lastExitCode = 1
+			return
+		}
+		switch args[1] {
+		case "set-config":
+			if len(args) < 4 {
+				fmt.Fprintln(os.Stderr, "lash: usage: lash set-config <key> <value>")
+				lastExitCode = 1
+				return
+			}
+			key := args[2]
+			val := args[3]
+			if !cfg.Set(key, val) {
+				fmt.Fprintf(os.Stderr, "lash: unknown config key: %s\n", key)
+				lastExitCode = 1
+				return
+			}
+			if err := cfg.Save(); err != nil {
+				fmt.Fprintf(os.Stderr, "lash: failed to save config: %s\n", err)
+				lastExitCode = 1
+				return
+			}
+			fmt.Printf("lash: set %s = %s\n", key, val)
+			lastExitCode = 0
+		default:
+			fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", args[1])
+			lastExitCode = 1
 		}
 	}
 }

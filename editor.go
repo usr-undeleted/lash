@@ -17,10 +17,11 @@ type LineEditor struct {
 	cursor  int
 	history []string
 	histIdx int
+	config  *Config
 }
 
-func NewLineEditor() *LineEditor {
-	return &LineEditor{}
+func NewLineEditor(cfg *Config) *LineEditor {
+	return &LineEditor{config: cfg}
 }
 
 func isTerminal() bool {
@@ -46,7 +47,7 @@ func (e *LineEditor) readLineFallback(prompt string) (string, error) {
 
 func getTermWidth() int {
 	type winsize struct {
-		ws_row, ws_col      uint16
+		ws_row, ws_col       uint16
 		ws_xpixel, ws_ypixel uint16
 	}
 	ws := &winsize{}
@@ -414,7 +415,12 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	fmt.Print("\r")
 	fmt.Printf("\033[%dC", pvis)
 	fmt.Print("\033[J")
-	os.Stdout.Write([]byte(string(e.buf)))
+
+	if e.config != nil && e.config.SyntaxColor && len(e.buf) > 0 {
+		os.Stdout.Write([]byte(e.syntaxHighlight()))
+	} else {
+		os.Stdout.Write([]byte(string(e.buf)))
+	}
 
 	newW := bufWidth(e.buf)
 	cursorW := bufWidth(e.buf[:e.cursor])
@@ -424,4 +430,39 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	}
 
 	return newW
+}
+
+func (e *LineEditor) syntaxHighlight() string {
+	text := string(e.buf)
+	tokens := tokenize(text)
+	if len(tokens) == 0 {
+		return text
+	}
+
+	inQuote := false
+	quoteChar := rune(0)
+	actualFirstEnd := 0
+	for i, r := range e.buf {
+		if !inQuote && (r == '\'' || r == '"') {
+			inQuote = true
+			quoteChar = r
+		} else if inQuote && r == quoteChar {
+			inQuote = false
+		}
+		actualFirstEnd = i + 1
+		if !inQuote && (r == ' ' || r == '\t') {
+			if i > 0 {
+				actualFirstEnd = i
+			}
+			break
+		}
+	}
+
+	cmdPart := string(e.buf[:actualFirstEnd])
+	rest := string(e.buf[actualFirstEnd:])
+
+	if isValidCommand(tokens[0]) {
+		return colorGreen + cmdPart + colorReset + rest
+	}
+	return colorRed + cmdPart + colorReset + rest
 }
