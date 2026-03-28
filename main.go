@@ -442,7 +442,7 @@ func executeBuiltin(args []string, cfg *Config) {
 		}
 	case "lash":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "lash: usage: lash set-config <key> <value>")
+			fmt.Fprintln(os.Stderr, "lash: usage: lash <set-config|version> [args...]")
 			lastExitCode = 1
 			return
 		}
@@ -466,6 +466,9 @@ func executeBuiltin(args []string, cfg *Config) {
 				return
 			}
 			fmt.Printf("lash: set %s = %s\n", key, val)
+			lastExitCode = 0
+		case "version":
+			printVersion()
 			lastExitCode = 0
 		default:
 			fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", args[1])
