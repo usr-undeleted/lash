@@ -53,3 +53,10 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+# Shell binary
+/lash
+
+# Go module
+!go.mod
+!go.sum
