@@ -399,49 +399,28 @@ func (e *LineEditor) deleteWordBack(prompt string, prevW *int) {
 }
 
 func (e *LineEditor) redraw(prompt string, prevBufW int) int {
+	pvis := visibleWidth(prompt)
+
 	termW := getTermWidth()
 	if termW <= 0 {
 		termW = 80
 	}
 
-	nlIdx := strings.Index(prompt, "\n")
-	firstLineVisWidth := 0
-	if nlIdx >= 0 {
-		firstLineVisWidth = visibleWidth(prompt[:nlIdx])
+	prevRows := (pvis + prevBufW + termW - 1) / termW
+	if prevRows > 1 {
+		fmt.Printf("\033[%dA", prevRows-1)
 	}
-	pvis := visibleWidth(prompt)
 
-	firstLineRows := (firstLineVisWidth + termW - 1) / termW
-	if firstLineRows == 0 {
-		firstLineRows = 1
-	}
-	secondLineCols := pvis + prevBufW
-	secondLineRows := (secondLineCols + termW - 1) / termW
-	totalRows := firstLineRows + secondLineRows
-
-	if totalRows > 1 {
-		fmt.Printf("\033[%dA", totalRows-1)
-	}
-	fmt.Print("\r\033[0J")
-	os.Stdout.Write([]byte(prompt))
+	fmt.Print("\r")
+	fmt.Printf("\033[%dC", pvis)
+	fmt.Print("\033[J")
 	os.Stdout.Write([]byte(string(e.buf)))
 
 	newW := bufWidth(e.buf)
 	cursorW := bufWidth(e.buf[:e.cursor])
 	back := newW - cursorW
 	if back > 0 {
-		fmt.Printf("\033[999D")
-		targetTotal := pvis + cursorW
-		targetRow := (targetTotal - 1) / termW
-		currentTotal := pvis + newW
-		currentRow := (currentTotal - 1) / termW
-		if currentRow > 0 && targetRow < currentRow {
-			fmt.Printf("\033[%dA", currentRow-targetRow)
-		}
-		targetCol := targetTotal - targetRow*termW
-		if targetCol > 0 {
-			fmt.Printf("\033[%dC", targetCol)
-		}
+		fmt.Printf("\033[%dD", back)
 	}
 
 	return newW
