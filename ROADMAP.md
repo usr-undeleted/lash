@@ -17,15 +17,15 @@
 
 ## Phase 2: Essential Interactive Features (current)
 
-- [ ] Command history (up/down arrows)
-- [ ] Line editing (left/right arrows, backspace, delete, Home/End)
+- [x] Command history (up/down arrows)
+- [x] Line editing (left/right arrows, backspace, delete, Home/End)
 - [ ] Tab completion (commands, file paths)
 - [ ] Reverse search (Ctrl+R)
-- [ ] Ctrl+L to clear screen
-- [ ] Ctrl+D to exit on empty line
-- [ ] Ctrl+A / Ctrl+E (beginning/end of line)
-- [ ] Ctrl+K / Ctrl+U (kill to end/beginning of line)
-- [ ] Ctrl+W (delete word backwards)
+- [x] Ctrl+L to clear screen
+- [x] Ctrl+D to exit on empty line
+- [x] Ctrl+A / Ctrl+E (beginning/end of line)
+- [x] Ctrl+K / Ctrl+U (kill to end/beginning of line)
+- [x] Ctrl+W (delete word backwards)
 - [ ] Job control: `jobs`, `fg`, `bg`, `kill` builtins
 - [ ] Suspended processes (Ctrl+Z)
 - [ ] More built-ins: `export`, `unset`, `env`, `set`, `echo` with flags (`-n`, `-e`), `type`, `which`, `true`, `false`, `test`/`[`
