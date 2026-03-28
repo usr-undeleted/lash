@@ -448,8 +448,14 @@ func executeBuiltin(args []string, cfg *Config) {
 		}
 		switch args[1] {
 		case "set-config":
+			if len(args) == 3 && args[2] == "list" {
+				fmt.Println("syntax-color = <0|1>   highlight commands green/red as you type")
+				lastExitCode = 0
+				return
+			}
 			if len(args) < 4 {
 				fmt.Fprintln(os.Stderr, "lash: usage: lash set-config <key> <value>")
+				fmt.Fprintln(os.Stderr, "       lash set-config list")
 				lastExitCode = 1
 				return
 			}
