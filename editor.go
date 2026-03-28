@@ -46,7 +46,7 @@ func (e *LineEditor) readLineFallback(prompt string) (string, error) {
 
 func getTermWidth() int {
 	type winsize struct {
-		ws_row, ws_col    uint16
+		ws_row, ws_col      uint16
 		ws_xpixel, ws_ypixel uint16
 	}
 	ws := &winsize{}
@@ -62,21 +62,22 @@ func getTermWidth() int {
 func visibleWidth(s string) int {
 	w := 0
 	esc := false
-	for i := 0; i < len(s); i++ {
-		if s[i] == '\x1b' {
+	runes := []rune(s)
+	for i := 0; i < len(runes); i++ {
+		if runes[i] == '\x1b' {
 			esc = true
 			continue
 		}
 		if esc {
-			if s[i] == 'm' {
+			if runes[i] == 'm' {
 				esc = false
 			}
 			continue
 		}
-		if s[i] == '\n' {
+		if runes[i] == '\n' {
 			w = 0
 		} else {
-			w++
+			w += runeWidth(runes[i])
 		}
 	}
 	return w
@@ -116,7 +117,6 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 	e.buf = nil
 	e.cursor = 0
 	e.histIdx = len(e.history)
-	pvis := visibleWidth(prompt)
 	prevW := 0
 
 	os.Stdout.Write([]byte(prompt))
@@ -132,7 +132,7 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 		}
 
 		if b[0] == '\x1b' {
-			e.handleEscape(prompt, pvis, &prevW)
+			e.handleEscape(prompt, &prevW)
 			continue
 		}
 
@@ -149,7 +149,7 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 			if e.cursor > 0 {
 				e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
 				e.cursor--
-				prevW = e.redraw(prompt, pvis, prevW)
+				prevW = e.redraw(prompt, prevW)
 			}
 
 		case 3:
@@ -164,43 +164,43 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 			}
 			if e.cursor < len(e.buf) {
 				e.buf = append(e.buf[:e.cursor], e.buf[e.cursor+1:]...)
-				prevW = e.redraw(prompt, pvis, prevW)
+				prevW = e.redraw(prompt, prevW)
 			}
 
 		case 23:
-			e.deleteWordBack(prompt, pvis, &prevW)
+			e.deleteWordBack(prompt, &prevW)
 
 		case 21:
 			e.buf = e.buf[e.cursor:]
 			e.cursor = 0
-			prevW = e.redraw(prompt, pvis, prevW)
+			prevW = e.redraw(prompt, prevW)
 
 		case 11:
 			e.buf = e.buf[:e.cursor]
-			prevW = e.redraw(prompt, pvis, prevW)
+			prevW = e.redraw(prompt, prevW)
 
 		case 1:
 			if e.cursor > 0 {
 				e.cursor = 0
-				prevW = e.redraw(prompt, pvis, prevW)
+				prevW = e.redraw(prompt, prevW)
 			}
 
 		case 5:
 			if e.cursor < len(e.buf) {
 				e.cursor = len(e.buf)
-				prevW = e.redraw(prompt, pvis, prevW)
+				prevW = e.redraw(prompt, prevW)
 			}
 
 		case 12:
 			os.Stdout.Write([]byte("\x1b[2J\x1b[H"))
 			os.Stdout.Write([]byte(prompt))
-			prevW = e.redraw(prompt, pvis, 0)
+			prevW = e.redraw(prompt, 0)
 
 		default:
 			if b[0] >= 32 {
 				e.buf = append(e.buf[:e.cursor], append([]rune{rune(b[0])}, e.buf[e.cursor:]...)...)
 				e.cursor++
-				prevW = e.redraw(prompt, pvis, prevW)
+				prevW = e.redraw(prompt, prevW)
 			}
 		}
 	}
@@ -215,18 +215,18 @@ func (e *LineEditor) readByte() byte {
 	return b[0]
 }
 
-func (e *LineEditor) handleEscape(prompt string, pvis int, prevW *int) {
+func (e *LineEditor) handleEscape(prompt string, prevW *int) {
 	b2 := e.readByte()
 	if b2 == '[' {
-		e.handleCSI(prompt, pvis, prevW)
+		e.handleCSI(prompt, prevW)
 	} else if b2 == 'O' {
-		e.handleSS3(prompt, pvis, prevW)
+		e.handleSS3(prompt, prevW)
 	} else if b2 == '\x7f' || b2 == 8 {
-		e.deleteWordBack(prompt, pvis, prevW)
+		e.deleteWordBack(prompt, prevW)
 	}
 }
 
-func (e *LineEditor) handleCSI(prompt string, pvis int, prevW *int) {
+func (e *LineEditor) handleCSI(prompt string, prevW *int) {
 	var params []int
 	var current int
 	for {
@@ -244,7 +244,7 @@ func (e *LineEditor) handleCSI(prompt string, pvis int, prevW *int) {
 					e.histIdx--
 					e.buf = []rune(e.history[e.histIdx])
 					e.cursor = len(e.buf)
-					*prevW = e.redraw(prompt, pvis, *prevW)
+					*prevW = e.redraw(prompt, *prevW)
 				}
 			case 'B':
 				if e.histIdx < len(e.history) {
@@ -255,11 +255,11 @@ func (e *LineEditor) handleCSI(prompt string, pvis int, prevW *int) {
 						e.buf = nil
 					}
 					e.cursor = len(e.buf)
-					*prevW = e.redraw(prompt, pvis, *prevW)
+					*prevW = e.redraw(prompt, *prevW)
 				}
 			case 'C':
 				if len(params) >= 2 && params[1] == 5 {
-					e.moveWordForward(prompt, pvis, prevW)
+					e.moveWordForward(prompt, prevW)
 				} else {
 					if e.cursor < len(e.buf) {
 						e.cursor++
@@ -268,7 +268,7 @@ func (e *LineEditor) handleCSI(prompt string, pvis int, prevW *int) {
 				}
 			case 'D':
 				if len(params) >= 2 && params[1] == 5 {
-					e.moveWordBack(prompt, pvis, prevW)
+					e.moveWordBack(prompt, prevW)
 				} else {
 					if e.cursor > 0 {
 						e.cursor--
@@ -277,32 +277,32 @@ func (e *LineEditor) handleCSI(prompt string, pvis int, prevW *int) {
 				}
 			case 'H':
 				if len(params) >= 2 && params[1] == 5 {
-					e.moveWordBack(prompt, pvis, prevW)
+					e.moveWordBack(prompt, prevW)
 				} else {
 					e.cursor = 0
-					*prevW = e.redraw(prompt, pvis, *prevW)
+					*prevW = e.redraw(prompt, *prevW)
 				}
 			case 'F':
 				if len(params) >= 2 && params[1] == 5 {
-					e.moveWordForward(prompt, pvis, prevW)
+					e.moveWordForward(prompt, prevW)
 				} else {
 					e.cursor = len(e.buf)
-					*prevW = e.redraw(prompt, pvis, *prevW)
+					*prevW = e.redraw(prompt, *prevW)
 				}
 			case '~':
 				if len(params) > 0 {
 					switch params[0] {
 					case 1:
 						e.cursor = 0
-						*prevW = e.redraw(prompt, pvis, *prevW)
+						*prevW = e.redraw(prompt, *prevW)
 					case 3:
 						if e.cursor < len(e.buf) {
 							e.buf = append(e.buf[:e.cursor], e.buf[e.cursor+1:]...)
-							*prevW = e.redraw(prompt, pvis, *prevW)
+							*prevW = e.redraw(prompt, *prevW)
 						}
 					case 4:
 						e.cursor = len(e.buf)
-						*prevW = e.redraw(prompt, pvis, *prevW)
+						*prevW = e.redraw(prompt, *prevW)
 					}
 				}
 			}
@@ -311,7 +311,7 @@ func (e *LineEditor) handleCSI(prompt string, pvis int, prevW *int) {
 	}
 }
 
-func (e *LineEditor) handleSS3(prompt string, pvis int, prevW *int) {
+func (e *LineEditor) handleSS3(prompt string, prevW *int) {
 	b := e.readByte()
 	switch b {
 	case 'A':
@@ -319,7 +319,7 @@ func (e *LineEditor) handleSS3(prompt string, pvis int, prevW *int) {
 			e.histIdx--
 			e.buf = []rune(e.history[e.histIdx])
 			e.cursor = len(e.buf)
-			*prevW = e.redraw(prompt, pvis, *prevW)
+			*prevW = e.redraw(prompt, *prevW)
 		}
 	case 'B':
 		if e.histIdx < len(e.history) {
@@ -330,7 +330,7 @@ func (e *LineEditor) handleSS3(prompt string, pvis int, prevW *int) {
 				e.buf = nil
 			}
 			e.cursor = len(e.buf)
-			*prevW = e.redraw(prompt, pvis, *prevW)
+			*prevW = e.redraw(prompt, *prevW)
 		}
 	case 'C':
 		if e.cursor < len(e.buf) {
@@ -344,14 +344,14 @@ func (e *LineEditor) handleSS3(prompt string, pvis int, prevW *int) {
 		}
 	case 'H':
 		e.cursor = 0
-		*prevW = e.redraw(prompt, pvis, *prevW)
+		*prevW = e.redraw(prompt, *prevW)
 	case 'F':
 		e.cursor = len(e.buf)
-		*prevW = e.redraw(prompt, pvis, *prevW)
+		*prevW = e.redraw(prompt, *prevW)
 	}
 }
 
-func (e *LineEditor) moveWordBack(prompt string, pvis int, prevW *int) {
+func (e *LineEditor) moveWordBack(prompt string, prevW *int) {
 	if e.cursor > 0 {
 		pos := e.cursor
 		if pos < len(e.buf) && e.buf[pos-1] != ' ' && (pos >= len(e.buf) || e.buf[pos] == ' ') {
@@ -364,11 +364,11 @@ func (e *LineEditor) moveWordBack(prompt string, pvis int, prevW *int) {
 			pos--
 		}
 		e.cursor = pos
-		*prevW = e.redraw(prompt, pvis, *prevW)
+		*prevW = e.redraw(prompt, *prevW)
 	}
 }
 
-func (e *LineEditor) moveWordForward(prompt string, pvis int, prevW *int) {
+func (e *LineEditor) moveWordForward(prompt string, prevW *int) {
 	if e.cursor < len(e.buf) {
 		pos := e.cursor
 		for pos < len(e.buf) && e.buf[pos] == ' ' {
@@ -378,11 +378,11 @@ func (e *LineEditor) moveWordForward(prompt string, pvis int, prevW *int) {
 			pos++
 		}
 		e.cursor = pos
-		*prevW = e.redraw(prompt, pvis, *prevW)
+		*prevW = e.redraw(prompt, *prevW)
 	}
 }
 
-func (e *LineEditor) deleteWordBack(prompt string, pvis int, prevW *int) {
+func (e *LineEditor) deleteWordBack(prompt string, prevW *int) {
 	if e.cursor == 0 {
 		return
 	}
@@ -395,15 +395,16 @@ func (e *LineEditor) deleteWordBack(prompt string, pvis int, prevW *int) {
 	}
 	e.buf = append(e.buf[:pos], e.buf[e.cursor:]...)
 	e.cursor = pos
-	*prevW = e.redraw(prompt, pvis, *prevW)
+	*prevW = e.redraw(prompt, *prevW)
 }
 
-func (e *LineEditor) redraw(prompt string, pvis int, prevBufW int) int {
+func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	termW := getTermWidth()
 	if termW <= 0 {
 		termW = 80
 	}
 
+	pvis := visibleWidth(prompt)
 	prevTotal := pvis + prevBufW
 	prevRows := prevTotal / termW
 	if prevTotal%termW > 0 || prevRows == 0 {
@@ -413,12 +414,9 @@ func (e *LineEditor) redraw(prompt string, pvis int, prevBufW int) int {
 	if prevRows > 1 {
 		fmt.Printf("\033[%dA", prevRows-1)
 	}
-	fmt.Print("\r")
-	if pvis > 0 {
-		fmt.Printf("\033[%dC", pvis)
-	}
-	fmt.Print("\033[J")
-	fmt.Print(string(e.buf))
+	fmt.Print("\r\033[K")
+	os.Stdout.Write([]byte(prompt))
+	os.Stdout.Write([]byte(string(e.buf)))
 
 	newW := bufWidth(e.buf)
 	cursorW := bufWidth(e.buf[:e.cursor])
