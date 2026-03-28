@@ -10,7 +10,19 @@ import (
 	"syscall"
 )
 
-const PROMPT = "lash> "
+func getPrompt() string {
+	user := os.Getenv("USER")
+	host, _ := os.Hostname()
+	dir, err := os.Getwd()
+	if err != nil {
+		dir = "?"
+	}
+	home := os.Getenv("HOME")
+	if strings.HasPrefix(dir, home) {
+		dir = "~" + dir[len(home):]
+	}
+	return fmt.Sprintf("%s@%s in %s\n╰$ ", user, host, dir)
+}
 
 func main() {
 	sig := make(chan os.Signal, 1)
@@ -18,13 +30,13 @@ func main() {
 	go func() {
 		for range sig {
 			fmt.Println()
-			fmt.Print(PROMPT)
+			fmt.Print(getPrompt())
 		}
 	}()
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Print(PROMPT)
+		fmt.Print(getPrompt())
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			fmt.Println()
