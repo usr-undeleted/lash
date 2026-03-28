@@ -510,6 +510,11 @@ func executeSimple(args []string, background bool) {
 	}
 
 	err := cmd.Run()
+	if err != nil {
+		if _, ok := err.(*exec.ExitError); !ok {
+			fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", cmdArgs[0])
+		}
+	}
 	lastExitCode = getExitCode(err)
 }
 
