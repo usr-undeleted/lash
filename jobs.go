@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"unsafe"
 )
 
 type JobState int
@@ -22,6 +23,7 @@ const (
 type Job struct {
 	Number   int
 	PID      int
+	PGID     int
 	State    JobState
 	Command  string
 	ExitCode int
@@ -39,6 +41,12 @@ var (
 
 func initJobControl() {
 	fgPIDs = make(map[int]bool)
+
+	signal.Ignore(syscall.SIGTTOU)
+
+	syscall.Setpgid(0, 0)
+	tcsetpgrp(int(os.Stdin.Fd()), syscall.Getpgrp())
+
 	sigCh := make(chan os.Signal, 32)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTSTP)
 	go func() {
@@ -64,7 +72,7 @@ func initJobControl() {
 	}()
 }
 
-func addJob(pid int, state JobState, command string) *Job {
+func addJob(pid, pgid int, state JobState, command string) *Job {
 	jobMu.Lock()
 	defer jobMu.Unlock()
 
@@ -84,6 +92,7 @@ func addJob(pid int, state JobState, command string) *Job {
 	job := &Job{
 		Number:  nextJobNum,
 		PID:     pid,
+		PGID:    pgid,
 		State:   state,
 		Command: command,
 	}
@@ -249,6 +258,12 @@ func clearFgPIDs() {
 	fgActive = false
 }
 
+func isForegroundPID(pid int) bool {
+	fgMu.Lock()
+	defer fgMu.Unlock()
+	return fgPIDs[pid]
+}
+
 func handleChildReap(pid int, status syscall.WaitStatus) {
 	job := findJobByPID(pid)
 	if job == nil {
@@ -274,13 +289,41 @@ func handleChildReap(pid int, status syscall.WaitStatus) {
 	}
 }
 
-func waitForeground(pids []int, command string) int {
+func tcsetpgrp(fd int, pgid int) error {
+	var p int32 = int32(pgid)
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), syscall.TIOCSPGRP, uintptr(unsafe.Pointer(&p)))
+	if errno != 0 {
+		return errno
+	}
+	return nil
+}
+
+func giveTerminal(pgid int) {
+	_ = tcsetpgrp(int(os.Stdin.Fd()), pgid)
+}
+
+func takeTerminal() {
+	_ = tcsetpgrp(int(os.Stdin.Fd()), syscall.Getpgrp())
+}
+
+func waitForeground(pids []int, pgid int, command string) int {
 	setFgPIDs(pids)
 	defer clearFgPIDs()
 
 	remaining := make(map[int]bool)
 	for _, p := range pids {
 		remaining[p] = true
+	}
+
+	for _, p := range pids {
+		syscall.Setpgid(p, pgid)
+	}
+	syscall.Setpgid(0, 0)
+	giveTerminal(pgid)
+	defer takeTerminal()
+
+	for _, p := range pids {
+		syscall.Kill(p, syscall.SIGCONT)
 	}
 
 	lastExit := 0
@@ -303,11 +346,7 @@ func waitForeground(pids []int, command string) int {
 		}
 
 		if status.Stopped() {
-			for otherPid := range remaining {
-				if otherPid != pid {
-					syscall.Kill(otherPid, syscall.SIGTSTP)
-				}
-			}
+			syscall.Kill(-pgid, syscall.SIGTSTP)
 			for otherPid := range remaining {
 				if otherPid == pid {
 					delete(remaining, otherPid)
@@ -316,8 +355,11 @@ func waitForeground(pids []int, command string) int {
 				var s2 syscall.WaitStatus
 				for {
 					wp, we := syscall.Wait4(otherPid, &s2, syscall.WUNTRACED, nil)
-					if we == syscall.EINTR {
-						continue
+					if we != nil {
+						if we == syscall.EINTR {
+							continue
+						}
+						break
 					}
 					if wp == otherPid {
 						break
@@ -326,7 +368,7 @@ func waitForeground(pids []int, command string) int {
 				}
 				delete(remaining, otherPid)
 			}
-			job := addJob(pids[0], JobStopped, command)
+			job := addJob(pids[0], pgid, JobStopped, command)
 			fmt.Printf("\n[%d]+  Stopped    %s\n", job.Number, job.Command)
 			return -1
 		}
@@ -361,7 +403,7 @@ func listSignals() []syscall.Signal {
 func parseSignal(s string) (syscall.Signal, error) {
 	n, err := strconv.Atoi(s)
 	if err == nil {
-		return syscall.Signal(n), nil
+		return syscall.Signal(n), err
 	}
 	name := strings.ToUpper(s)
 	if !strings.HasPrefix(name, "SIG") {
