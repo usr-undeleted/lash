@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-v2.8-blue">
+  <img src="https://img.shields.io/badge/version-v2.9-blue">
   <img src="https://img.shields.io/badge/Go-1.26-00ADD8?logo=go">
   <img src="https://img.shields.io/badge/license-GPLv3-blue">
 </p>
@@ -19,8 +19,11 @@ ai generated golang slop code linux shell made for some thingimajig, only contri
 lash = larp shell  
 fart  
 whenever this thing is FINALLY finished, we hope to see actualy good go devs make this be actually good (as in not ridden with ai stuff), so if you're willingly to contribute with actual good human code, just wait for us to give you the green light, as in, finally typing enough prompts until its deemed done  
-# compiling  
-go build -o lash  
+# compiling
+```
+chmod +x build.sh
+./build.sh
+```
 # [roadmap](ROADMAP.md)
 # contributors
 <p align="left">
