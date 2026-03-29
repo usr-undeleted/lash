@@ -28,7 +28,7 @@
 - [x] Ctrl+W (delete word backwards)
 - [ ] Job control: `jobs`, `fg`, `bg`, `kill` builtins
 - [ ] Suspended processes (Ctrl+Z)
-- [ ] More built-ins: `export`, `unset`, `env`, `set`, `echo` with flags (`-n`, `-e`), `type`, `which`, `true`, `false`, `test`/`[`
+- [x] More built-ins: `export`, `unset`, `env`, `set`, `echo` with flags (`-n`, `-e`), `type`, `which`, `true`, `false`, `test`/`[`
 
 ## Phase 3: Variable & Expansion Engine
 

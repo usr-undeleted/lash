@@ -20,6 +20,7 @@ type LineEditor struct {
 	history []string
 	histIdx int
 	config  *Config
+	reader  *bufio.Reader
 }
 
 func NewLineEditor(cfg *Config) *LineEditor {
@@ -39,8 +40,10 @@ func (e *LineEditor) ReadLine(prompt string) (string, error) {
 
 func (e *LineEditor) readLineFallback(prompt string) (string, error) {
 	fmt.Print(prompt)
-	reader := bufio.NewReader(os.Stdin)
-	line, err := reader.ReadString('\n')
+	if e.reader == nil {
+		e.reader = bufio.NewReader(os.Stdin)
+	}
+	line, err := e.reader.ReadString('\n')
 	if err != nil {
 		return "", err
 	}

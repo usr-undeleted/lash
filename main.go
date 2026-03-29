@@ -356,35 +356,73 @@ func tokenize(line string) []string {
 	inDouble := false
 	var current strings.Builder
 	var tokens []string
+	bytes := []byte(line)
 
-	for _, ch := range line {
-		switch {
-		case ch == '\'' && !inDouble:
+	flushCurrent := func() {
+		if current.Len() > 0 {
+			tokens = append(tokens, current.String())
+			current.Reset()
+		}
+	}
+
+	for i := 0; i < len(bytes); i++ {
+		ch := rune(bytes[i])
+
+		if ch == '\'' && !inDouble {
 			inSingle = !inSingle
-		case ch == '"' && !inSingle:
-			inDouble = !inDouble
-		case ch == ' ' || ch == '\t':
-			if !inSingle && !inDouble {
-				if current.Len() > 0 {
-					tokens = append(tokens, current.String())
-					current.Reset()
-				}
-				continue
-			}
 			current.WriteRune(ch)
+			continue
+		}
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			current.WriteRune(ch)
+			continue
+		}
+
+		if inSingle || inDouble {
+			current.WriteRune(ch)
+			continue
+		}
+
+		if ch == ' ' || ch == '\t' {
+			flushCurrent()
+			continue
+		}
+
+		switch ch {
+		case ';', '|', '<':
+			flushCurrent()
+			tokens = append(tokens, string(ch))
+		case '&':
+			if i+1 < len(bytes) && bytes[i+1] == '&' {
+				flushCurrent()
+				tokens = append(tokens, "&&")
+				i++
+			} else {
+				flushCurrent()
+				tokens = append(tokens, "&")
+			}
+		case '>':
+			if i+1 < len(bytes) && bytes[i+1] == '>' {
+				flushCurrent()
+				tokens = append(tokens, ">>")
+				i++
+			} else {
+				flushCurrent()
+				tokens = append(tokens, ">")
+			}
 		default:
 			current.WriteRune(ch)
 		}
 	}
-	if current.Len() > 0 {
-		tokens = append(tokens, current.String())
-	}
+	flushCurrent()
 	return tokens
 }
 
 func isBuiltin(cmd string) bool {
 	switch cmd {
-	case "exit", "cd", "pwd", "jobs", "export", "lash":
+	case "exit", "cd", "pwd", "jobs", "export", "lash",
+		"echo", "true", "false", "unset", "env", "type", "which":
 		return true
 	}
 	return false
@@ -488,7 +526,136 @@ func executeBuiltin(args []string, cfg *Config) {
 			fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", args[1])
 			lastExitCode = 1
 		}
+	case "echo":
+		noNewline := false
+		interpretEscapes := false
+		i := 1
+		for i < len(args) {
+			if args[i] == "-n" {
+				noNewline = true
+				i++
+			} else if args[i] == "-e" {
+				interpretEscapes = true
+				i++
+			} else if args[i] == "-ne" || args[i] == "-en" {
+				noNewline = true
+				interpretEscapes = true
+				i++
+			} else {
+				break
+			}
+		}
+		output := strings.Join(args[i:], " ")
+		if interpretEscapes {
+			output = interpretEscapeSequences(output)
+		}
+		if noNewline {
+			fmt.Print(output)
+		} else {
+			fmt.Println(output)
+		}
+		lastExitCode = 0
+	case "true":
+		lastExitCode = 0
+	case "false":
+		lastExitCode = 1
+	case "unset":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "unset: usage: unset <var> [var...]")
+			lastExitCode = 1
+			return
+		}
+		for _, a := range args[1:] {
+			os.Unsetenv(a)
+		}
+		lastExitCode = 0
+	case "env":
+		for _, e := range os.Environ() {
+			fmt.Println(e)
+		}
+		lastExitCode = 0
+	case "type":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "type: usage: type <command>")
+			lastExitCode = 1
+			return
+		}
+		for _, a := range args[1:] {
+			if isBuiltin(a) {
+				fmt.Printf("%s is a shell builtin\n", a)
+			} else {
+				path, err := exec.LookPath(a)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "type: %s: not found\n", a)
+					lastExitCode = 1
+					return
+				}
+				fmt.Printf("%s is %s\n", a, path)
+			}
+		}
+		lastExitCode = 0
+	case "which":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "which: usage: which <command>")
+			lastExitCode = 1
+			return
+		}
+		for _, a := range args[1:] {
+			path, err := exec.LookPath(a)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "which: no %s in (%s)\n", a, os.Getenv("PATH"))
+				lastExitCode = 1
+				return
+			}
+			fmt.Println(path)
+		}
+		lastExitCode = 0
 	}
+}
+
+func interpretEscapeSequences(s string) string {
+	var result strings.Builder
+	i := 0
+	for i < len(s) {
+		if s[i] == '\\' && i+1 < len(s) {
+			switch s[i+1] {
+			case 'n':
+				result.WriteByte('\n')
+				i += 2
+			case 't':
+				result.WriteByte('\t')
+				i += 2
+			case 'r':
+				result.WriteByte('\r')
+				i += 2
+			case '\\':
+				result.WriteByte('\\')
+				i += 2
+			case 'a':
+				result.WriteByte('\a')
+				i += 2
+			case 'b':
+				result.WriteByte('\b')
+				i += 2
+			case 'f':
+				result.WriteByte('\f')
+				i += 2
+			case 'v':
+				result.WriteByte('\v')
+				i += 2
+			case '0':
+				result.WriteByte(0)
+				i += 2
+			default:
+				result.WriteByte(s[i])
+				i++
+			}
+		} else {
+			result.WriteByte(s[i])
+			i++
+		}
+	}
+	return result.String()
 }
 
 func parseRedirection(args []string) (cmdArgs []string, stdin string, stdout string, appendMode bool) {
