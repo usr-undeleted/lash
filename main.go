@@ -275,12 +275,7 @@ func expandString(s string) string {
 				end := strings.Index(s[i:], "}")
 				if end >= 0 {
 					varName := s[i+2 : i+end]
-					val := os.Getenv(varName)
-					if val == "" {
-						result.WriteString("$" + s[i+1:i+end+1])
-					} else {
-						result.WriteString(val)
-					}
+					result.WriteString(os.Getenv(varName))
 					i += end + 1
 					continue
 				}
@@ -296,12 +291,7 @@ func expandString(s string) string {
 					j++
 				}
 				varName := s[i+1 : j]
-				val := os.Getenv(varName)
-				if val == "" {
-					result.WriteString(s[i:j])
-				} else {
-					result.WriteString(val)
-				}
+				result.WriteString(os.Getenv(varName))
 				i = j
 				continue
 			}
