@@ -2,7 +2,7 @@
 
 ![version](https://img.shields.io/badge/version-v2.8-blue)
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)
-![license](https://img.shields.io/badge/license-MIT-green)
+![license](https://img.shields.io/badge/license-GPLv3-blue)
 <p align="left">
   <img src="logo/lash.png" alt="Test" width="450">
 </p>
