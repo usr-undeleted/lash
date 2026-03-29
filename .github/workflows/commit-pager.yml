@@ -46,6 +46,9 @@ jobs:
                 }],
                 max_tokens: 300
               }')")
+          echo "Raw API response:"
+          echo "$RESPONSE" | head -c 500
+          echo ""
           echo "$RESPONSE" | jq -r '.choices[0].message.content // "Failed to summarize"' > /tmp/summary.txt
           echo "summary<<GITHUB_DELIM" >> "$GITHUB_OUTPUT"
           cat /tmp/summary.txt >> "$GITHUB_OUTPUT"
