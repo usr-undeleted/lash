@@ -142,7 +142,7 @@ func expandPS1Escapes(ps1 string) string {
 			}
 			b.WriteString(filepath.Base(dir))
 		case 'n':
-			b.WriteByte('\n')
+			b.WriteString("\r\n")
 		case 'r':
 			b.WriteByte('\r')
 		case 't':

@@ -80,8 +80,10 @@ func visibleWidth(s string) int {
 			}
 			continue
 		}
-		if runes[i] == '\n' {
-			w = 0
+		if runes[i] == '\n' || runes[i] == '\r' {
+			if runes[i] == '\n' {
+				w = 0
+			}
 		} else {
 			w += runeWidth(runes[i])
 		}
