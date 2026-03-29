@@ -1,10 +1,13 @@
 # lash
 
-![version](https://img.shields.io/badge/version-v2.8-blue)
-![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)
-![license](https://img.shields.io/badge/license-GPLv3-blue)
-<p align="left">
-  <img src="logo/lash.png" alt="Test" width="450">
+<p align="center">
+  <img src="logo/lash.png" alt="lash" width="450">
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-v2.8-blue">
+  <img src="https://img.shields.io/badge/Go-1.26-00ADD8?logo=go">
+  <img src="https://img.shields.io/badge/license-GPLv3-blue">
 </p>
 
 # wgat it is
