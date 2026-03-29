@@ -501,6 +501,9 @@ func executeBuiltin(args []string, cfg *Config) {
 			}
 			key := a[:eqIdx]
 			val := a[eqIdx+1:]
+			if len(val) >= 2 && ((val[0] == '\'' && val[len(val)-1] == '\'') || (val[0] == '"' && val[len(val)-1] == '"')) {
+				val = val[1 : len(val)-1]
+			}
 			os.Setenv(key, val)
 			lastExitCode = 0
 		}
