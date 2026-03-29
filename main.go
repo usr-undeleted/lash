@@ -11,11 +11,15 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 )
 
 var lastExitCode int = 0
+var cmdNumber int = 0
 var pendingNotifs []string
 var notifMu sync.Mutex
+
+const defaultPS1 = `\[\e[1;36m\]\u@\h\[\e[0m\] \[\e[1;33m\]\w\[\e[0m\] on \[\e[1m\]\g\[\e[0m\]\x\r\n\[\e[1m\]╰\$\[\e[0m\] `
 
 func getExitCode(err error) int {
 	if err == nil {
@@ -67,39 +71,143 @@ func getGitBranch() string {
 }
 
 func getPrompt() string {
-	user := os.Getenv("USER")
-	host, _ := os.Hostname()
-	dir, err := os.Getwd()
-	if err != nil {
-		dir = "?"
+	ps1 := os.Getenv("PS1")
+	if ps1 == "" {
+		ps1 = defaultPS1
 	}
-	home := os.Getenv("HOME")
-	if strings.HasPrefix(dir, home) {
-		dir = "~" + dir[len(home):]
+	return expandPS1(ps1)
+}
+
+func expandPS1(ps1 string) string {
+	fillIdx := strings.Index(ps1, `\f`)
+	if fillIdx >= 0 {
+		left := ps1[:fillIdx]
+		right := ps1[fillIdx+2:]
+		leftExpanded := expandPS1Escapes(left)
+		rightExpanded := expandPS1Escapes(right)
+		termW := getTermWidth()
+		if termW <= 0 {
+			termW = 80
+		}
+		leftW := visibleWidth(leftExpanded)
+		rightW := visibleWidth(rightExpanded)
+		gap := termW - leftW - rightW
+		if gap < 1 {
+			gap = 1
+		}
+		return leftExpanded + strings.Repeat(" ", gap) + rightExpanded
 	}
+	return expandPS1Escapes(ps1)
+}
 
-	symbol := "$"
-	if os.Getuid() == 0 {
-		symbol = "#"
+func expandPS1Escapes(ps1 string) string {
+	var b strings.Builder
+	runes := []rune(ps1)
+	for i := 0; i < len(runes); i++ {
+		if runes[i] != '\\' {
+			b.WriteRune(runes[i])
+			continue
+		}
+		i++
+		if i >= len(runes) {
+			b.WriteByte('\\')
+			break
+		}
+		switch runes[i] {
+		case 'u':
+			b.WriteString(os.Getenv("USER"))
+		case 'h':
+			h, _ := os.Hostname()
+			if idx := strings.Index(h, "."); idx >= 0 {
+				h = h[:idx]
+			}
+			b.WriteString(h)
+		case 'H':
+			h, _ := os.Hostname()
+			b.WriteString(h)
+		case 'w':
+			dir, err := os.Getwd()
+			if err != nil {
+				dir = "?"
+			}
+			home := os.Getenv("HOME")
+			if home != "" && strings.HasPrefix(dir, home) {
+				dir = "~" + dir[len(home):]
+			}
+			b.WriteString(dir)
+		case 'W':
+			dir, err := os.Getwd()
+			if err != nil {
+				dir = "?"
+			}
+			b.WriteString(filepath.Base(dir))
+		case 'n':
+			b.WriteByte('\n')
+		case 'r':
+			b.WriteByte('\r')
+		case 't':
+			b.WriteString(time.Now().Format("15:04:05"))
+		case 'T':
+			b.WriteString(time.Now().Format("15:04:05"))
+		case '@':
+			b.WriteString(time.Now().Format("15:04"))
+		case 'd':
+			b.WriteString(time.Now().Format("Mon Jan 02"))
+		case 'D':
+			if i+2 < len(runes) {
+				fmtStr := strings.ReplaceAll(string(runes[i+1:i+3]), "%", "%%")
+				b.WriteString(time.Now().Format(fmtStr))
+				i += 2
+			} else {
+				b.WriteString(time.Now().Format("Mon Jan 02"))
+			}
+		case '$':
+			if os.Getuid() == 0 {
+				b.WriteByte('#')
+			} else {
+				b.WriteByte('$')
+			}
+		case '\\':
+			b.WriteByte('\\')
+		case 'e':
+			b.WriteByte('\x1b')
+		case 'a':
+			b.WriteByte('\x07')
+		case '[':
+		case ']':
+		case 'g':
+			branch := getGitBranch()
+			if branch != "" {
+				b.WriteString(branch)
+			}
+		case 'x':
+			if lastExitCode >= 1 {
+				b.WriteString(fmt.Sprintf("%s✗%s", colorRed, colorReset))
+			}
+		case '!':
+			b.WriteString(strconv.Itoa(cmdNumber))
+		case '#':
+			b.WriteString(strconv.Itoa(cmdNumber))
+		case '0', '1', '2', '3', '4', '5', '6', '7':
+			if i+2 < len(runes) && runes[i+1] >= '0' && runes[i+1] <= '7' && runes[i+2] >= '0' && runes[i+2] <= '7' {
+				val := int(runes[i]-'0')*64 + int(runes[i+1]-'0')*8 + int(runes[i+2]-'0')
+				if val > 0 && val < 256 {
+					b.WriteByte(byte(val))
+					i += 2
+				} else {
+					b.WriteByte('\\')
+					b.WriteRune(runes[i])
+				}
+			} else {
+				b.WriteByte('\\')
+				b.WriteRune(runes[i])
+			}
+		default:
+			b.WriteByte('\\')
+			b.WriteRune(runes[i])
+		}
 	}
-
-	prompt := fmt.Sprintf("%s%s%s@%s%s %sin %s%s%s",
-		colorBold, colorCyan, user, host, colorReset,
-		colorBold, colorYellow, dir, colorReset)
-
-	branch := getGitBranch()
-	if branch != "" {
-		prompt += fmt.Sprintf(" %son %s%s%s",
-			colorReset, colorBold, branch, colorReset)
-	}
-
-	if lastExitCode >= 1 {
-		prompt += fmt.Sprintf(" %s✗%s", colorRed, colorReset)
-	}
-
-	prompt += fmt.Sprintf("\r\n%s╰%s%s ", colorBold, symbol, colorReset)
-
-	return prompt
+	return b.String()
 }
 
 func reapZombies() {
@@ -160,6 +268,7 @@ func main() {
 		}
 
 		chains := splitChains(line)
+		cmdNumber++
 		for _, chain := range chains {
 			executeChain(chain, cfg)
 		}
