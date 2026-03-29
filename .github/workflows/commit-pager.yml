@@ -27,7 +27,7 @@ jobs:
         id: summarize
         env:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
-          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL != '' && secrets.LLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4' }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL != '' && secrets.LLM_BASE_URL || 'https://open.bigmodel.cn/api/coding/paas/v4' }}
         run: |
           RESPONSE=$(curl -s "$LLM_BASE_URL/chat/completions" \
             -H "Authorization: Bearer $LLM_API_KEY" \
@@ -46,9 +46,6 @@ jobs:
                 }],
                 max_tokens: 300
               }')")
-          echo "Raw API response:"
-          echo "$RESPONSE" | head -c 500
-          echo ""
           echo "$RESPONSE" | jq -r '.choices[0].message.content // "Failed to summarize"' > /tmp/summary.txt
           echo "summary<<GITHUB_DELIM" >> "$GITHUB_OUTPUT"
           cat /tmp/summary.txt >> "$GITHUB_OUTPUT"
