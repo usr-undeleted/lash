@@ -1,0 +1,130 @@
+name: Discord Pager
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, closed]
+  issues:
+    types: [opened, closed]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name == 'push'
+        with:
+          fetch-depth: 2
+
+      - name: Get event info
+        id: event
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            DIFF=$(git diff HEAD~1 HEAD 2>/dev/null || true)
+            COMMIT_MSG=$(git log -1 --pretty=format:"%s%n%b")
+            COMMITTER=$(git log -1 --pretty=format:"%an")
+            SHA=$(git log -1 --pretty=format:"%h")
+            printf '%s' "$DIFF" | head -c 3000 > /tmp/context.txt
+            printf '%s' "$COMMIT_MSG" > /tmp/extra.txt
+            echo "event_type=commit" >> "$GITHUB_OUTPUT"
+            echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+            echo "author=$COMMITTER" >> "$GITHUB_OUTPUT"
+            echo "link=https://github.com/usr-undeleted/lash/commit/$SHA" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR="${{ github.event.pull_request }}"
+            TITLE=$(echo "$PR" | jq -r '.title')
+            BODY=$(echo "$PR" | jq -r '.body // ""')
+            AUTHOR=$(echo "$PR" | jq -r '.user.login')
+            NUMBER=$(echo "$PR" | jq -r '.number')
+            MERGED=$(echo "$PR" | jq -r '.merged')
+            STATE=$(echo "$PR" | jq -r '.state')
+            if [ "$MERGED" = "true" ]; then
+              STATUS="merged"
+            elif [ "$STATE" = "closed" ]; then
+              STATUS="closed without merging"
+            else
+              STATUS="open"
+            fi
+            printf '%s\n\n%s' "$TITLE" "$BODY" > /tmp/context.txt
+            printf '' > /tmp/extra.txt
+            echo "event_type=pull_request" >> "$GITHUB_OUTPUT"
+            echo "sha=#$NUMBER" >> "$GITHUB_OUTPUT"
+            echo "author=$AUTHOR" >> "$GITHUB_OUTPUT"
+            echo "link=${{ github.event.pull_request.html_url }}" >> "$GITHUB_OUTPUT"
+            echo "status=$STATUS" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "issues" ]; then
+            ISSUE="${{ github.event.issue }}"
+            TITLE=$(echo "$ISSUE" | jq -r '.title')
+            BODY=$(echo "$ISSUE" | jq -r '.body // ""')
+            AUTHOR=$(echo "$ISSUE" | jq -r '.user.login')
+            NUMBER=$(echo "$ISSUE" | jq -r '.number')
+            STATE=$(echo "$ISSUE" | jq -r '.state')
+            LABELS=$(echo "$ISSUE" | jq -r '[.labels[].name] | join(", ") // "none"')
+            printf '%s\n\n%s' "$TITLE" "$BODY" > /tmp/context.txt
+            printf '' > /tmp/extra.txt
+            echo "event_type=issue" >> "$GITHUB_OUTPUT"
+            echo "sha=#$NUMBER" >> "$GITHUB_OUTPUT"
+            echo "author=$AUTHOR" >> "$GITHUB_OUTPUT"
+            echo "link=${{ github.event.issue.html_url }}" >> "$GITHUB_OUTPUT"
+            echo "status=$STATE" >> "$GITHUB_OUTPUT"
+            echo "labels=$LABELS" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Summarize with LLM
+        id: summarize
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL != '' && secrets.LLM_BASE_URL || 'https://open.bigmodel.cn/api/coding/paas/v4' }}
+        run: |
+          EVENT_TYPE="${{ steps.event.outputs.event_type }}"
+          if [ "$EVENT_TYPE" = "commit" ]; then
+            PROMPT="Summarize this git commit concisely. What changed and why? Keep it to 2-3 sentences max. Use plain text, no markdown."
+            USER_CONTENT="Commit message:\n$(cat /tmp/extra.txt)\n\nDiff:\n$(cat /tmp/context.txt)"
+          elif [ "$EVENT_TYPE" = "pull_request" ]; then
+            PROMPT="Summarize this pull request concisely. What is it trying to do and why? Keep it to 2-3 sentences max. Use plain text, no markdown."
+            USER_CONTENT=$(cat /tmp/context.txt)
+          elif [ "$EVENT_TYPE" = "issue" ]; then
+            PROMPT="Summarize this GitHub issue concisely. What is being reported or requested? Keep it to 2-3 sentences max. Use plain text, no markdown."
+            USER_CONTENT=$(cat /tmp/context.txt)
+          fi
+          RESPONSE=$(curl -s "$LLM_BASE_URL/chat/completions" \
+            -H "Authorization: Bearer $LLM_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg prompt "$PROMPT" \
+              --arg content "$USER_CONTENT" \
+              '{
+                model: "GLM-4.7-Flash",
+                messages: [
+                  { role: "system", content: $prompt },
+                  { role: "user", content: $content }
+                ],
+                max_tokens: 1500
+              }')")
+          echo "$RESPONSE" | jq -r '.choices[0].message.content // "Failed to summarize"' > /tmp/summary.txt
+
+      - name: Send to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          EVENT_TYPE="${{ steps.event.outputs.event_type }}"
+          AUTHOR="${{ steps.event.outputs.author }}"
+          SHA="${{ steps.event.outputs.sha }}"
+          LINK="${{ steps.event.outputs.link }}"
+          SUMMARY=$(cat /tmp/summary.txt)
+          if [ "$EVENT_TYPE" = "commit" ]; then
+            CONTENT="**New commit by \`$AUTHOR\`**: \`$SHA\` (<$LINK>)\n\n$SUMMARY"
+          elif [ "$EVENT_TYPE" = "pull_request" ]; then
+            STATUS="${{ steps.event.outputs.status }}"
+            CONTENT="**$STATUS pull request by \`$AUTHOR\`**: $SHA (<$LINK>)\n\n$SUMMARY"
+          elif [ "$EVENT_TYPE" = "issue" ]; then
+            STATUS="${{ steps.event.outputs.status }}"
+            LABELS="${{ steps.event.outputs.labels }}"
+            CONTENT="**$STATUS issue by \`$AUTHOR\`**: $SHA (<$LINK>)"
+            if [ "$LABELS" != "none" ]; then
+              CONTENT="$CONTENT — labels: $LABELS"
+            fi
+            CONTENT="$CONTENT\n\n$SUMMARY"
+          fi
+          jq -n --arg content "$CONTENT" '{content: $content}' \
+            | curl -s -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK_URL"
