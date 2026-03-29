@@ -1,6 +1,8 @@
 # lash
 
 ![version](https://img.shields.io/badge/version-v2.8-blue)
+![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go)
+![license](https://img.shields.io/badge/license-MIT-green)
 <p align="left">
   <img src="logo/lash.png" alt="Test" width="450">
 </p>
@@ -14,5 +16,8 @@ whenever this thing is FINALLY finished, we hope to see actualy good go devs mak
 go build -o lash  
 # [roadmap](ROADMAP.md)
 # contributors
-@usr-undeleted  
-@Vaspyyy
+<p align="left">
+  <a href="https://github.com/usr-undeleted/lash/graphs/contributors">
+    <img src="https://contrib.rocks/image?repo=usr-undeleted/lash" />
+  </a>
+</p>
