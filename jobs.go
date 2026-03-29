@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
@@ -38,6 +40,11 @@ var (
 
 func initJobControl() {
 	fgPIDs = make(map[int]bool)
+
+	signal.Ignore(syscall.SIGTTOU)
+
+	syscall.Setpgid(0, 0)
+	tcsetpgrp(int(os.Stdin.Fd()), syscall.Getpgrp())
 }
 
 func addJob(pid, pgid int, state JobState, command string) *Job {
@@ -258,9 +265,8 @@ func handleChildReap(pid int, status syscall.WaitStatus) {
 }
 
 func tcsetpgrp(fd int, pgid int) error {
-	var p [4]byte
-	*(*int32)(unsafe.Pointer(&p[0])) = int32(pgid)
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), syscall.TIOCSPGRP, uintptr(unsafe.Pointer(&p[0])))
+	var p int32 = int32(pgid)
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, uintptr(fd), syscall.TIOCSPGRP, uintptr(unsafe.Pointer(&p)))
 	if errno != 0 {
 		return errno
 	}
@@ -268,11 +274,11 @@ func tcsetpgrp(fd int, pgid int) error {
 }
 
 func giveTerminal(pgid int) {
-	tcsetpgrp(0, pgid)
+	_ = tcsetpgrp(int(os.Stdin.Fd()), pgid)
 }
 
 func takeTerminal() {
-	tcsetpgrp(0, syscall.Getpgrp())
+	_ = tcsetpgrp(int(os.Stdin.Fd()), syscall.Getpgrp())
 }
 
 func waitForeground(pids []int, pgid int, command string) int {
@@ -284,6 +290,10 @@ func waitForeground(pids []int, pgid int, command string) int {
 		remaining[p] = true
 	}
 
+	for _, p := range pids {
+		syscall.Setpgid(p, pgid)
+	}
+	syscall.Setpgid(0, 0)
 	giveTerminal(pgid)
 	defer takeTerminal()
 

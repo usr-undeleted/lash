@@ -150,6 +150,7 @@ func main() {
 	for {
 		reapZombies()
 		drainNotifs()
+		takeTerminal()
 		prompt := getPrompt()
 		line, err := editor.ReadLine(prompt)
 		if err == io.EOF {
