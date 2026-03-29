@@ -113,10 +113,10 @@ jobs:
           LINK="${{ steps.event.outputs.link }}"
           SUMMARY=$(cat /tmp/summary.txt)
           if [ "$EVENT_TYPE" = "commit" ]; then
-            CONTENT="**New commit by \`$AUTHOR\`**: \`$SHA\` (<$LINK>)\n\n$SUMMARY"
+            CONTENT="**New commit by \`$AUTHOR\`**: \`$SHA\` (<$LINK>)"$'\n\n'"$SUMMARY"
           elif [ "$EVENT_TYPE" = "pull_request" ]; then
             STATUS="${{ steps.event.outputs.status }}"
-            CONTENT="**$STATUS pull request by \`$AUTHOR\`**: $SHA (<$LINK>)\n\n$SUMMARY"
+            CONTENT="**$STATUS pull request by \`$AUTHOR\`**: $SHA (<$LINK>)"$'\n\n'"$SUMMARY"
           elif [ "$EVENT_TYPE" = "issue" ]; then
             STATUS="${{ steps.event.outputs.status }}"
             LABELS="${{ steps.event.outputs.labels }}"
@@ -124,7 +124,7 @@ jobs:
             if [ "$LABELS" != "none" ]; then
               CONTENT="$CONTENT — labels: $LABELS"
             fi
-            CONTENT="$CONTENT\n\n$SUMMARY"
+            CONTENT="$CONTENT"$'\n\n'"$SUMMARY"
           fi
           jq -n --arg content "$CONTENT" '{content: $content}' \
             | curl -s -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK_URL"
