@@ -10,6 +10,10 @@
   <img src="https://img.shields.io/badge/license-GPLv3-blue">
 </p>
 
+<p align="center">
+  <img src="logo/demo.gif" alt="lash demo" width="600">
+</p>
+
 # wgat it is
 ai generated golang slop code linux shell made for some thingimajig, only contribute with ai code  
 lash = larp shell  
