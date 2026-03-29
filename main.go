@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -234,6 +235,24 @@ func expandVariables(tokens []string) []string {
 	return expanded
 }
 
+func expandGlobs(tokens []string) []string {
+	var result []string
+	for _, t := range tokens {
+		if strings.ContainsAny(t, "*?[") {
+			matches, err := filepath.Glob(t)
+			if err == nil && len(matches) > 0 {
+				sort.Strings(matches)
+				result = append(result, matches...)
+			} else {
+				result = append(result, t)
+			}
+		} else {
+			result = append(result, t)
+		}
+	}
+	return result
+}
+
 func expandString(s string) string {
 	if len(s) > 0 && s[0] == '~' {
 		if len(s) == 1 || s[1] == '/' {
@@ -311,6 +330,7 @@ func executeChain(chain []chainEntry, cfg *Config) {
 		}
 
 		tokens := expandVariables(entry.args)
+		tokens = expandGlobs(tokens)
 		if len(tokens) == 0 {
 			continue
 		}
@@ -416,6 +436,14 @@ func tokenize(line string) []string {
 		}
 	}
 	flushCurrent()
+	for i, t := range tokens {
+		if len(t) >= 2 {
+			if (t[0] == '\'' && t[len(t)-1] == '\'') ||
+				(t[0] == '"' && t[len(t)-1] == '"') {
+				tokens[i] = t[1 : len(t)-1]
+			}
+		}
+	}
 	return tokens
 }
 

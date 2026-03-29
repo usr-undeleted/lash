@@ -29,7 +29,7 @@
 - [ ] Job control: `jobs`, `fg`, `bg`, `kill` builtins
 - [ ] Suspended processes (Ctrl+Z)
 - [x] More built-ins: `export`, `unset`, `env`, `set`, `echo` with flags (`-n`, `-e`), `type`, `which`, `true`, `false`, `test`/`[`
-
+- [x] Basic wildcard/glob expansion (`*`, `?`)
 ## Phase 3: Variable & Expansion Engine
 
 - [ ] Local variables (`name=value`)
