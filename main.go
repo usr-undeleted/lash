@@ -235,6 +235,14 @@ func expandVariables(tokens []string) []string {
 }
 
 func expandString(s string) string {
+	if len(s) > 0 && s[0] == '~' {
+		if len(s) == 1 || s[1] == '/' {
+			home := os.Getenv("HOME")
+			if home != "" {
+				s = home + s[1:]
+			}
+		}
+	}
 	var result strings.Builder
 	i := 0
 	for i < len(s) {

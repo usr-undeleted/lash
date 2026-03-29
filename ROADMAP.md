@@ -39,7 +39,7 @@
 - [ ] Substring expansion (`${VAR:offset:length}`)
 - [ ] Length expansion (`${#VAR}`)
 - [ ] Variable indirection (`${!ref}`)
-- [ ] Tilde expansion (`~`, `~/`, `~user/`)
+- [x] Tilde expansion (`~`, `~/`, `~user/`)
 - [ ] Command substitution (`$(cmd)`, backtick `` `cmd` ``)
 - [ ] Arithmetic expansion (`$((expr))`)
 - [ ] Process substitution (`<(cmd)`, `>(cmd)`)
