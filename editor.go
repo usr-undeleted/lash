@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"unsafe"
@@ -196,6 +198,9 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 			os.Stdout.Write([]byte("\x1b[2J\x1b[H"))
 			os.Stdout.Write([]byte(prompt))
 			prevW = e.redraw(prompt, 0)
+
+		case 9:
+			prevW = e.handleTabCompletion(prompt, prevW)
 
 		default:
 			if b[0] >= 32 {
@@ -465,4 +470,260 @@ func (e *LineEditor) syntaxHighlight() string {
 		return colorGreen + cmdPart + colorReset + rest
 	}
 	return colorRed + cmdPart + colorReset + rest
+}
+
+func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
+	text := string(e.buf)
+	tokens := tokenize(text)
+	if len(tokens) == 0 {
+		return prevBufW
+	}
+
+	// Figure out which token the cursor is in and whether it's the first
+	tokenIdx := -1
+	inSpace := true
+	for i, r := range e.buf {
+		if i >= e.cursor {
+			break
+		}
+		if r == ' ' || r == '\t' {
+			inSpace = true
+		} else if inSpace {
+			inSpace = false
+			tokenIdx++
+		}
+	}
+
+	isFirstToken := tokenIdx == 0
+
+	if inSpace && tokenIdx >= 0 {
+		candidates := e.completePath("")
+		if len(candidates) > 0 {
+			os.Stdout.Write([]byte("\r\n"))
+			for i, c := range candidates {
+				if i > 0 && i%6 == 0 {
+					os.Stdout.Write([]byte("\r\n"))
+				} else if i > 0 {
+					os.Stdout.Write([]byte("  "))
+				}
+				os.Stdout.Write([]byte(c))
+			}
+			os.Stdout.Write([]byte("\r\n"))
+			os.Stdout.Write([]byte(prompt))
+			return e.redraw(prompt, 0)
+		}
+		return prevBufW
+	}
+
+	var partial string
+	if isFirstToken {
+		partial = tokens[0]
+	} else {
+		partial = ""
+		if tokenIdx >= 0 && tokenIdx < len(tokens) {
+			partial = tokens[tokenIdx]
+		}
+	}
+
+	var candidates []string
+	if isFirstToken {
+		candidates = e.completeCommand(partial)
+	} else {
+		candidates = e.completePath(partial)
+	}
+
+	if len(candidates) == 0 {
+		return prevBufW
+	}
+
+	// Find common prefix (case-insensitive)
+	common := candidates[0]
+	for _, c := range candidates[1:] {
+		for len(common) > 0 && !strings.EqualFold(c[:min(len(common), len(c))], common[:min(len(common), len(c))]) {
+			common = common[:len(common)-1]
+		}
+	}
+
+	if len(candidates) == 1 {
+		completion := candidates[0]
+		if !isFirstToken {
+			info, err := os.Stat(e.resolvePartialPath(completion))
+			if err == nil && info.IsDir() {
+				if !strings.HasSuffix(completion, "/") {
+					completion += "/"
+				}
+			} else {
+				completion += " "
+			}
+		} else {
+			completion += " "
+		}
+		for i := 0; i < len(partial) && e.cursor > 0; i++ {
+			e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
+			e.cursor--
+		}
+		for _, r := range completion {
+			e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
+			e.cursor++
+		}
+		return e.redraw(prompt, prevBufW)
+	}
+
+	// Multiple matches
+	if len(common) != len(partial) {
+		var commonActual string
+		for _, c := range candidates {
+			if strings.HasPrefix(strings.ToLower(c), strings.ToLower(common)) && len(c) >= len(common) {
+				commonActual = c[:len(common)]
+				break
+			}
+		}
+		if commonActual != "" && commonActual != partial {
+			for i := 0; i < len(partial) && e.cursor > 0; i++ {
+				e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
+				e.cursor--
+			}
+			for _, r := range commonActual {
+				e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
+				e.cursor++
+			}
+			return e.redraw(prompt, prevBufW)
+		}
+	}
+
+	// Show all candidates
+	os.Stdout.Write([]byte("\r\n"))
+	for i, c := range candidates {
+		if i > 0 && i%6 == 0 {
+			os.Stdout.Write([]byte("\r\n"))
+		} else if i > 0 {
+			os.Stdout.Write([]byte("  "))
+		}
+		os.Stdout.Write([]byte(c))
+	}
+	os.Stdout.Write([]byte("\r\n"))
+	os.Stdout.Write([]byte(prompt))
+	return e.redraw(prompt, 0)
+}
+
+func (e *LineEditor) completeCommand(partial string) []string {
+	var matches []string
+
+	// Builtins
+	for _, cmd := range []string{"exit", "cd", "pwd", "jobs", "export", "lash"} {
+		if strings.HasPrefix(cmd, partial) {
+			matches = append(matches, cmd)
+		}
+	}
+
+	// PATH executables
+	path := os.Getenv("PATH")
+	if path != "" {
+		seen := make(map[string]bool)
+		for _, dir := range filepath.SplitList(path) {
+			entries, err := os.ReadDir(dir)
+			if err != nil {
+				continue
+			}
+			for _, entry := range entries {
+				name := entry.Name()
+				if !strings.HasPrefix(name, partial) {
+					continue
+				}
+				if seen[name] {
+					continue
+				}
+				seen[name] = true
+				fullPath := filepath.Join(dir, name)
+				info, err := os.Stat(fullPath)
+				if err != nil {
+					continue
+				}
+				if info.Mode()&0111 != 0 && !info.IsDir() {
+					matches = append(matches, name)
+				}
+			}
+		}
+	}
+
+	sort.Strings(matches)
+	return matches
+}
+
+func (e *LineEditor) completePath(partial string) []string {
+	dir := "."
+	prefix := partial
+
+	// Handle tilde
+	if strings.HasPrefix(partial, "~/") {
+		home := os.Getenv("HOME")
+		if home != "" {
+			dir = home
+			prefix = partial[2:]
+		}
+	} else if partial == "~" {
+		home := os.Getenv("HOME")
+		if home != "" {
+			return []string{"~/"}
+		}
+		return nil
+	} else if strings.Contains(partial, "/") {
+		idx := strings.LastIndex(partial, "/")
+		dir = partial[:idx]
+		if dir == "" {
+			dir = "/"
+		}
+		prefix = partial[idx+1:]
+	}
+
+	var matches []string
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.EqualFold(name[:min(len(prefix), len(name))], prefix) || len(name) < len(prefix) {
+			continue
+		}
+		if len(prefix) == 0 && (name[0] == '.' || name[0] == '#') {
+			continue
+		}
+		if len(prefix) > 0 && prefix[0] != '.' && name[0] == '.' {
+			continue
+		}
+
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if info.IsDir() {
+			name += "/"
+		}
+
+		// Reconstruct full match relative to what user typed
+		if strings.Contains(partial, "/") {
+			idx := strings.LastIndex(partial, "/")
+			name = partial[:idx+1] + name
+		} else if strings.HasPrefix(partial, "~/") {
+			name = "~/" + name
+		} else if partial == "~" {
+			name = "~/" + name
+		}
+
+		matches = append(matches, name)
+	}
+
+	sort.Strings(matches)
+	return matches
+}
+
+func (e *LineEditor) resolvePartialPath(s string) string {
+	if strings.HasPrefix(s, "~/") {
+		home := os.Getenv("HOME")
+		if home != "" {
+			return filepath.Join(home, s[2:])
+		}
+	}
+	return s
 }
