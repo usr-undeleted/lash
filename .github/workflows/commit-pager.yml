@@ -1,0 +1,69 @@
+name: Commit Pager
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Get diff
+        id: diff
+        run: |
+          DIFF=$(git diff HEAD~1 HEAD --stat 2>/dev/null || git diff HEAD --stat)
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s%n%b")
+          COMMITTER=$(git log -1 --pretty=format:"%an")
+          SHA=$(git log -1 --pretty=format:"%h")
+          FULL_DIFF=$(git diff HEAD~1 HEAD 2>/dev/null || echo "$DIFF")
+          # Truncate diff to ~3000 chars to fit LLM context
+          TRUNCATED=$(echo "$FULL_DIFF" | head -c 3000)
+          {
+            echo "sha=$SHA"
+            echo "msg<<EOF"
+            echo "$COMMIT_MSG"
+            echo "EOF"
+            echo "committer=$COMMITTER"
+            echo "diff<<EOF"
+            echo "$TRUNCATED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Summarize with LLM
+        id: summarize
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL != '' && secrets.LLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4' }}
+        run: |
+          SUMMARY=$(curl -s "$LLM_BASE_URL/chat/completions" \
+            -H "Authorization: Bearer $LLM_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n \
+              --arg diff "${{ steps.diff.outputs.diff }}" \
+              --arg msg "${{ steps.diff.outputs.msg }}" \
+                            '{
+                model: "GLM-4.7-FlashX",
+                messages: [{
+                  role: "system",
+                  content: "Summarize this git commit concisely. What changed and why? Keep it to 2-3 sentences max. Use plain text, no markdown."
+                }, {
+                  role: "user",
+                  content: "Commit message:\n\($msg)\n\nDiff:\n\($diff)"
+                }],
+                max_tokens: 300
+              }')" | jq -r '.choices[0].message.content // "Failed to summarize"')
+          echo "summary<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$SUMMARY" >> "$GITHUB_OUTPUT"
+          echo "EOF"
+        - name: Send to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          COMMIT_LINK="https://github.com/usr-undeleted/lash/commit/${{ steps.diff.outputs.sha }}"
+          jq -n \
+            --arg content "**New commit by \`${{ steps.diff.outputs.committer }}\`**: \`${{ steps.diff.outputs.sha }}\` (<${COMMIT_LINK}>)\n\n${{ steps.summarize.outputs.summary }}" \
+            '{content: $content}' \
+            | curl -s -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK_URL"
