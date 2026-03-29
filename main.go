@@ -19,7 +19,7 @@ var cmdNumber int = 0
 var pendingNotifs []string
 var notifMu sync.Mutex
 
-const defaultPS1 = `\[\e[1;36m\]\u@\h\[\e[0m\] \[\e[1;33m\]\w\[\e[0m\] on \[\e[1m\]\g\[\e[0m\]\x\r\n\[\e[1m\]╰\$\[\e[0m\] `
+const defaultPS1 = `\[\e[1;36m\]\u@\h\[\e[0m\] \[\e[1;33m\]\w\[\e[0m\] on \[\e[1m\]\g\[\e[0m\]\x\n\[\e[1m\]╰\$\[\e[0m\] `
 
 func getExitCode(err error) int {
 	if err == nil {
@@ -242,6 +242,7 @@ func drainNotifs() {
 
 func main() {
 	initJobControl()
+	os.Setenv("PS1", defaultPS1)
 
 	cfg := LoadConfig()
 	editor := NewLineEditor(cfg)
