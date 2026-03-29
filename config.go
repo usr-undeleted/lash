@@ -11,6 +11,7 @@ import (
 
 type Config struct {
 	SyntaxColor bool
+	LogoSize    string
 }
 
 func configPath() string {
@@ -22,7 +23,7 @@ func configPath() string {
 }
 
 func LoadConfig() *Config {
-	cfg := &Config{}
+	cfg := &Config{LogoSize: "big"}
 	path := configPath()
 	if path == "" {
 		return cfg
@@ -48,6 +49,8 @@ func LoadConfig() *Config {
 		switch key {
 		case "syntax-color":
 			cfg.SyntaxColor = val == "1"
+		case "logosize":
+			cfg.LogoSize = val
 		}
 	}
 	return cfg
@@ -64,6 +67,7 @@ func (c *Config) Save() error {
 	}
 	var lines []string
 	lines = append(lines, fmt.Sprintf("syntax-color = %s", boolToStr(c.SyntaxColor)))
+	lines = append(lines, fmt.Sprintf("logosize = %s", c.LogoSize))
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -80,6 +84,13 @@ func (c *Config) Set(key, val string) bool {
 	case "syntax-color":
 		c.SyntaxColor = val == "1"
 		return true
+	case "logosize":
+		switch val {
+		case "mini", "small", "big":
+			c.LogoSize = val
+			return true
+		}
+		return false
 	}
 	return false
 }

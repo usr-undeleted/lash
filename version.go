@@ -8,7 +8,13 @@ import (
 )
 
 //go:embed logo/lash.txt
-var logo string
+var logoBig string
+
+//go:embed logo/lashsmall.txt
+var logoSmall string
+
+//go:embed logo/minilash.txt
+var logoMini string
 
 //go:embed ROADMAP.md
 var roadmap string
@@ -44,7 +50,18 @@ func getVersion() string {
 	return fmt.Sprintf("v%d.%d", phase, completed)
 }
 
-func printVersion() {
-	fmt.Print(logo)
+func getLogo(size string) string {
+	switch size {
+	case "mini":
+		return logoMini
+	case "small":
+		return logoSmall
+	default:
+		return logoBig
+	}
+}
+
+func printVersion(size string) {
+	fmt.Print(getLogo(size))
 	fmt.Printf("\n              lash %s\n\n", getVersion())
 }

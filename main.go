@@ -516,7 +516,7 @@ func executeBuiltin(args []string, cfg *Config) {
 		}
 	case "lash":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "lash: usage: lash <set-config|version> [args...]")
+			fmt.Fprintln(os.Stderr, "lash: usage: lash <set-config|version|logosize> [args...]")
 			lastExitCode = 1
 			return
 		}
@@ -548,8 +548,29 @@ func executeBuiltin(args []string, cfg *Config) {
 			fmt.Printf("lash: set %s = %s\n", key, val)
 			lastExitCode = 0
 		case "version":
-			printVersion()
+			printVersion(cfg.LogoSize)
 			lastExitCode = 0
+		case "logosize":
+			if len(args) == 2 {
+				fmt.Printf("logosize = %s\n", cfg.LogoSize)
+				lastExitCode = 0
+				return
+			}
+			size := args[2]
+			switch size {
+			case "mini", "small", "big":
+				cfg.LogoSize = size
+				if err := cfg.Save(); err != nil {
+					fmt.Fprintf(os.Stderr, "lash: failed to save config: %s\n", err)
+					lastExitCode = 1
+					return
+				}
+				fmt.Printf("logosize = %s\n", size)
+				lastExitCode = 0
+			default:
+				fmt.Fprintf(os.Stderr, "lash: unknown logosize \"%s\" (choose: mini, small, big)\n", size)
+				lastExitCode = 1
+			}
 		default:
 			fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", args[1])
 			lastExitCode = 1
