@@ -14,23 +14,14 @@ jobs:
       - name: Get diff
         id: diff
         run: |
-          DIFF=$(git diff HEAD~1 HEAD --stat 2>/dev/null || git diff HEAD --stat)
+          DIFF=$(git diff HEAD~1 HEAD 2>/dev/null || true)
           COMMIT_MSG=$(git log -1 --pretty=format:"%s%n%b")
           COMMITTER=$(git log -1 --pretty=format:"%an")
           SHA=$(git log -1 --pretty=format:"%h")
-          FULL_DIFF=$(git diff HEAD~1 HEAD 2>/dev/null || echo "$DIFF")
-          # Truncate diff to ~3000 chars to fit LLM context
-          TRUNCATED=$(echo "$FULL_DIFF" | head -c 3000)
-          {
-            echo "sha=$SHA"
-            echo "msg<<GITHUB_EOF_DELIM"
-            echo "$COMMIT_MSG"
-            echo "GITHUB_EOF_DELIM"
-            echo "committer=$COMMITTER"
-            echo "diff<<GITHUB_EOF_DELIM"
-            echo "$TRUNCATED"
-            echo "GITHUB_EOF_DELIM"
-          } >> "$GITHUB_OUTPUT"
+          printf '%s' "$DIFF" | head -c 3000 > /tmp/commit_diff.txt
+          printf '%s' "$COMMIT_MSG" > /tmp/commit_msg.txt
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "committer=$COMMITTER" >> "$GITHUB_OUTPUT"
 
       - name: Summarize with LLM
         id: summarize
@@ -38,13 +29,13 @@ jobs:
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           LLM_BASE_URL: ${{ secrets.LLM_BASE_URL != '' && secrets.LLM_BASE_URL || 'https://open.bigmodel.cn/api/paas/v4' }}
         run: |
-          SUMMARY=$(curl -s "$LLM_BASE_URL/chat/completions" \
+          curl -s "$LLM_BASE_URL/chat/completions" \
             -H "Authorization: Bearer $LLM_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$(jq -n \
-              --arg diff "${{ steps.diff.outputs.diff }}" \
-              --arg msg "${{ steps.diff.outputs.msg }}" \
-                            '{
+              --rawfile diff /tmp/commit_diff.txt \
+              --rawfile msg /tmp/commit_msg.txt \
+              '{
                 model: "GLM-4.7-FlashX",
                 messages: [{
                   role: "system",
@@ -54,10 +45,10 @@ jobs:
                   content: "Commit message:\n\($msg)\n\nDiff:\n\($diff)"
                 }],
                 max_tokens: 300
-              }')" | jq -r '.choices[0].message.content // "Failed to summarize"')
-          echo "summary<<GITHUB_EOF_DELIM" >> "$GITHUB_OUTPUT"
-          echo "$SUMMARY" >> "$GITHUB_OUTPUT"
-          echo "GITHUB_EOF_DELIM"
+              }')" | jq -r '.choices[0].message.content // "Failed to summarize"' > /tmp/summary.txt
+          echo "summary<<GITHUB_DELIM" >> "$GITHUB_OUTPUT"
+          cat /tmp/summary.txt >> "$GITHUB_OUTPUT"
+          echo "GITHUB_DELIM" >> "$GITHUB_OUTPUT"
 
       - name: Send to Discord
         env:
@@ -65,6 +56,10 @@ jobs:
         run: |
           COMMIT_LINK="https://github.com/usr-undeleted/lash/commit/${{ steps.diff.outputs.sha }}"
           jq -n \
-            --arg content "**New commit by \`${{ steps.diff.outputs.committer }}\`**: \`${{ steps.diff.outputs.sha }}\` (<${COMMIT_LINK}>)\n\n${{ steps.summarize.outputs.summary }}" \
-            '{content: $content}' \
-            | curl -s -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK_URL"
+            --rawfile summary /tmp/summary.txt \
+            --arg committer "${{ steps.diff.outputs.committer }}" \
+            --arg sha "${{ steps.diff.outputs.sha }}" \
+            --arg link "$COMMIT_LINK" \
+            '{
+              content: "**New commit by `\($committer)`**: `\($sha)` (\($link))\n\n\($summary)"
+            }' | curl -s -H "Content-Type: application/json" -d @- "$DISCORD_WEBHOOK_URL"
