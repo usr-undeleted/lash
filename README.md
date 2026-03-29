@@ -1,4 +1,6 @@
 # lash
+
+![version](https://img.shields.io/badge/version-v2.8-blue)
 <p align="left">
   <img src="logo/lash.png" alt="Test" width="450">
 </p>
