@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -107,7 +106,7 @@ func reapZombies() {
 	jobMu.Lock()
 	var bgPids []int
 	for _, j := range jobTable {
-		if j.State == JobRunning && !isForegroundPID(j.PID) {
+		if j.State == JobRunning {
 			bgPids = append(bgPids, j.PID)
 		}
 	}
@@ -136,27 +135,11 @@ func drainNotifs() {
 func main() {
 	initJobControl()
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT)
-	go func() {
-		for range sigCh {
-		}
-	}()
-
-	childCh := make(chan os.Signal, 1)
-	signal.Notify(childCh, syscall.SIGCHLD)
-	go func() {
-		for range childCh {
-			reapZombies()
-		}
-	}()
-
 	cfg := LoadConfig()
 	editor := NewLineEditor(cfg)
 	for {
 		reapZombies()
 		drainNotifs()
-		takeTerminal()
 		prompt := getPrompt()
 		line, err := editor.ReadLine(prompt)
 		if err == io.EOF {
@@ -506,13 +489,13 @@ func executeBuiltin(args []string, cfg *Config) {
 			lastExitCode = 1
 			return
 		}
-		setForegroundPIDs([]int{job.PID})
+		setFgPIDs([]int{job.PID})
 		markJobRunningByPID(job.PID)
 		if job.State == JobStopped {
-			syscall.Kill(-job.PGID, syscall.SIGCONT)
+			syscall.Kill(job.PID, syscall.SIGCONT)
 		}
-		exitCode := waitForeground([]int{job.PID}, job.PGID, job.Command)
-		clearForegroundPIDs()
+		exitCode := waitForeground([]int{job.PID}, job.Command)
+		clearFgPIDs()
 		if exitCode < 0 {
 			lastExitCode = 128 + int(syscall.SIGTSTP)
 		} else {
@@ -542,7 +525,7 @@ func executeBuiltin(args []string, cfg *Config) {
 		}
 		if job.State == JobStopped {
 			markJobRunningByPID(job.PID)
-			syscall.Kill(-job.PGID, syscall.SIGCONT)
+			syscall.Kill(job.PID, syscall.SIGCONT)
 		}
 		fmt.Printf("[%d]+ %s &\n", job.Number, job.Command)
 		lastExitCode = 0
@@ -594,8 +577,8 @@ func executeBuiltin(args []string, cfg *Config) {
 					lastExitCode = 1
 					continue
 				}
-				if err := syscall.Kill(-job.PGID, sig); err != nil {
-					fmt.Fprintf(os.Stderr, "kill: %d: %s\n", job.PGID, err)
+				if err := syscall.Kill(job.PID, sig); err != nil {
+					fmt.Fprintf(os.Stderr, "kill: %d: %s\n", job.PID, err)
 					lastExitCode = 1
 				}
 			} else {
@@ -829,7 +812,6 @@ func executeSimple(args []string, background bool) {
 	}
 
 	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -878,13 +860,13 @@ func executeSimple(args []string, background bool) {
 
 	if background {
 		pid := cmd.Process.Pid
-		job := addJob(pid, pid, JobRunning, commandStr)
+		job := addJob(pid, JobRunning, commandStr)
 		fmt.Printf("[%d] %d\n", job.Number, pid)
 		lastExitCode = 0
 		return
 	}
 
-	exitCode := waitForeground([]int{cmd.Process.Pid}, cmd.Process.Pid, commandStr)
+	exitCode := waitForeground([]int{cmd.Process.Pid}, commandStr)
 	if exitCode < 0 {
 		lastExitCode = 128 + int(syscall.SIGTSTP)
 	} else {
@@ -918,7 +900,6 @@ func executePipeline(segments [][]string, background bool) {
 		}
 
 		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		cmd.Stderr = os.Stderr
 
 		if inFile != "" {
@@ -977,7 +958,6 @@ func executePipeline(segments [][]string, background bool) {
 	for i, cmd := range cmds {
 		pids[i] = cmd.Process.Pid
 	}
-	pgid := pids[0]
 
 	commandStr := strings.Join(segments[0], " ")
 	for _, seg := range segments[1:] {
@@ -985,8 +965,8 @@ func executePipeline(segments [][]string, background bool) {
 	}
 
 	if background {
-		job := addJob(pids[0], pgid, JobRunning, commandStr)
-		fmt.Printf("[%d] %d\n", job.Number, pgid)
+		job := addJob(pids[0], JobRunning, commandStr)
+		fmt.Printf("[%d] %d\n", job.Number, pids[0])
 
 		go func() {
 			for _, pid := range pids {
@@ -1011,7 +991,7 @@ func executePipeline(segments [][]string, background bool) {
 		return
 	}
 
-	exitCode := waitForeground(pids, pgid, commandStr)
+	exitCode := waitForeground(pids, commandStr)
 	if exitCode < 0 {
 		lastExitCode = 128 + int(syscall.SIGTSTP)
 	} else {
