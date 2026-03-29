@@ -23,13 +23,13 @@ jobs:
           TRUNCATED=$(echo "$FULL_DIFF" | head -c 3000)
           {
             echo "sha=$SHA"
-            echo "msg<<EOF"
+            echo "msg<<GITHUB_EOF_DELIM"
             echo "$COMMIT_MSG"
-            echo "EOF"
+            echo "GITHUB_EOF_DELIM"
             echo "committer=$COMMITTER"
-            echo "diff<<EOF"
+            echo "diff<<GITHUB_EOF_DELIM"
             echo "$TRUNCATED"
-            echo "EOF"
+            echo "GITHUB_EOF_DELIM"
           } >> "$GITHUB_OUTPUT"
 
       - name: Summarize with LLM
@@ -55,9 +55,9 @@ jobs:
                 }],
                 max_tokens: 300
               }')" | jq -r '.choices[0].message.content // "Failed to summarize"')
-          echo "summary<<EOF" >> "$GITHUB_OUTPUT"
+          echo "summary<<GITHUB_EOF_DELIM" >> "$GITHUB_OUTPUT"
           echo "$SUMMARY" >> "$GITHUB_OUTPUT"
-          echo "EOF"
+          echo "GITHUB_EOF_DELIM"
 
       - name: Send to Discord
         env:
