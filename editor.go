@@ -613,7 +613,7 @@ func (e *LineEditor) completeCommand(partial string) []string {
 	var matches []string
 
 	// Builtins
-	for _, cmd := range []string{"exit", "cd", "pwd", "jobs", "export", "lash"} {
+	for _, cmd := range []string{"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash"} {
 		if strings.HasPrefix(cmd, partial) {
 			matches = append(matches, cmd)
 		}

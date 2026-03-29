@@ -15,7 +15,6 @@ import (
 )
 
 var lastExitCode int = 0
-var backgroundPids = make(map[int]*exec.Cmd)
 var pendingNotifs []string
 var notifMu sync.Mutex
 
@@ -107,20 +106,14 @@ func getPrompt() string {
 func reapZombies() {
 	for {
 		var status syscall.WaitStatus
-		pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
+		pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG|syscall.WUNTRACED, nil)
 		if pid <= 0 || err != nil {
 			break
 		}
-		if _, ok := backgroundPids[pid]; ok {
-			delete(backgroundPids, pid)
-			exitCode := 0
-			if status.Exited() {
-				exitCode = status.ExitStatus()
-			}
-			notifMu.Lock()
-			pendingNotifs = append(pendingNotifs, fmt.Sprintf("[%d] done (exit %d)\n", pid, exitCode))
-			notifMu.Unlock()
+		if isForegroundPID(pid) {
+			continue
 		}
+		handleChildReap(pid, status)
 	}
 }
 
@@ -135,6 +128,8 @@ func drainNotifs() {
 }
 
 func main() {
+	initJobControl()
+
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT)
 	go func() {
@@ -439,7 +434,7 @@ func tokenize(line string) []string {
 
 func isBuiltin(cmd string) bool {
 	switch cmd {
-	case "exit", "cd", "pwd", "jobs", "export", "lash",
+	case "exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 		"echo", "true", "false", "unset", "env", "type", "which":
 		return true
 	}
@@ -480,14 +475,133 @@ func executeBuiltin(args []string, cfg *Config) {
 			lastExitCode = 0
 		}
 	case "jobs":
-		if len(backgroundPids) == 0 {
+		printJobs()
+		lastExitCode = 0
+	case "fg":
+		jobSpec := ""
+		if len(args) > 1 {
+			jobSpec = args[1]
+		}
+		var job *Job
+		if jobSpec != "" {
+			var err error
+			job, err = parseJobSpec(jobSpec)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "fg: %s\n", err)
+				lastExitCode = 1
+				return
+			}
+		} else {
+			job = getMostRecentJob()
+		}
+		if job == nil {
+			fmt.Fprintln(os.Stderr, "fg: current: no such job")
+			lastExitCode = 1
+			return
+		}
+		markJobRunningByPID(job.PID)
+		if job.State == JobStopped {
+			syscall.Kill(-job.PGID, syscall.SIGCONT)
+		}
+		exitCode := waitForeground([]int{job.PID}, job.PGID, job.Command)
+		if exitCode < 0 {
+			lastExitCode = 128 + int(syscall.SIGTSTP)
+		} else {
+			lastExitCode = exitCode
+		}
+	case "bg":
+		jobSpec := ""
+		if len(args) > 1 {
+			jobSpec = args[1]
+		}
+		var job *Job
+		if jobSpec != "" {
+			var err error
+			job, err = parseJobSpec(jobSpec)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "bg: %s\n", err)
+				lastExitCode = 1
+				return
+			}
+		} else {
+			job = getMostRecentJob()
+		}
+		if job == nil {
+			fmt.Fprintln(os.Stderr, "bg: current: no such job")
+			lastExitCode = 1
+			return
+		}
+		if job.State == JobStopped {
+			markJobRunningByPID(job.PID)
+			syscall.Kill(-job.PGID, syscall.SIGCONT)
+		}
+		fmt.Printf("[%d]+ %s &\n", job.Number, job.Command)
+		lastExitCode = 0
+	case "kill":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "kill: usage: kill [-s signal] pid ...")
+			lastExitCode = 1
+			return
+		}
+		if args[1] == "-l" {
+			for _, sig := range listSignals() {
+				fmt.Printf("%2d) %s\n", sig, strings.TrimPrefix(sig.String(), "SIG"))
+			}
 			lastExitCode = 0
 			return
 		}
-		for pid := range backgroundPids {
-			fmt.Printf("[%d] running\n", pid)
+		sig := syscall.SIGTERM
+		i := 1
+		if strings.HasPrefix(args[1], "-") && len(args[1]) > 1 {
+			sigName := args[1][1:]
+			if len(sigName) > 1 && sigName[0] == 's' {
+				sigName = sigName[1:]
+				if len(sigName) == 0 {
+					fmt.Fprintln(os.Stderr, "kill: -s requires an argument")
+					lastExitCode = 1
+					return
+				}
+			}
+			parsed, err := parseSignal(sigName)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "kill: %s\n", err)
+				lastExitCode = 1
+				return
+			}
+			sig = parsed
+			i = 2
+		}
+		if i >= len(args) {
+			fmt.Fprintln(os.Stderr, "kill: usage: kill [-s signal] pid ...")
+			lastExitCode = 1
+			return
 		}
 		lastExitCode = 0
+		for _, a := range args[i:] {
+			if len(a) >= 2 && a[0] == '%' {
+				job, err := parseJobSpec(a)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "kill: %s\n", err)
+					lastExitCode = 1
+					continue
+				}
+				if err := syscall.Kill(-job.PGID, sig); err != nil {
+					fmt.Fprintf(os.Stderr, "kill: %d: %s\n", job.PGID, err)
+					lastExitCode = 1
+				}
+			} else {
+				pid, err := strconv.Atoi(a)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "kill: %s: invalid pid\n", a)
+					lastExitCode = 1
+					continue
+				}
+				if err := syscall.Kill(pid, sig); err != nil {
+					fmt.Fprintf(os.Stderr, "kill: %d: %s\n", pid, err)
+					lastExitCode = 1
+				}
+			}
+		}
 	case "export":
 		if len(args) < 2 {
 			lastExitCode = 1
@@ -706,6 +820,7 @@ func executeSimple(args []string, background bool) {
 	}
 
 	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -738,25 +853,34 @@ func executeSimple(args []string, background bool) {
 		cmd.Stdout = f
 	}
 
-	if background {
-		if err := cmd.Start(); err != nil {
+	err := cmd.Start()
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", cmdArgs[0])
+			lastExitCode = 127
+		} else {
 			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
 			lastExitCode = 1
-			return
 		}
-		backgroundPids[cmd.Process.Pid] = cmd
-		fmt.Printf("[%d]\n", cmd.Process.Pid)
+		return
+	}
+
+	commandStr := strings.Join(cmdArgs, " ")
+
+	if background {
+		pid := cmd.Process.Pid
+		job := addJob(pid, pid, JobRunning, commandStr)
+		fmt.Printf("[%d] %d\n", job.Number, pid)
 		lastExitCode = 0
 		return
 	}
 
-	err := cmd.Run()
-	if err != nil {
-		if _, ok := err.(*exec.ExitError); !ok {
-			fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", cmdArgs[0])
-		}
+	exitCode := waitForeground([]int{cmd.Process.Pid}, cmd.Process.Pid, commandStr)
+	if exitCode < 0 {
+		lastExitCode = 128 + int(syscall.SIGTSTP)
+	} else {
+		lastExitCode = exitCode
 	}
-	lastExitCode = getExitCode(err)
 }
 
 func executePipeline(segments [][]string, background bool) {
@@ -777,6 +901,7 @@ func executePipeline(segments [][]string, background bool) {
 	}
 
 	var cmds []*exec.Cmd
+	var cmdArgsList [][]string
 	for i, seg := range segments {
 		cmdArgs, inFile, outFile, appendMode := parseRedirection(seg)
 		if len(cmdArgs) == 0 {
@@ -784,6 +909,7 @@ func executePipeline(segments [][]string, background bool) {
 		}
 
 		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		cmd.Stderr = os.Stderr
 
 		if inFile != "" {
@@ -823,22 +949,65 @@ func executePipeline(segments [][]string, background bool) {
 		}
 
 		cmds = append(cmds, cmd)
+		cmdArgsList = append(cmdArgsList, cmdArgs)
 	}
 
 	for _, cmd := range cmds {
-		cmd.Start()
+		if err := cmd.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			lastExitCode = 1
+			return
+		}
 	}
 
 	for _, p := range pipes {
 		p.w.Close()
 	}
 
-	lastExit := 0
-	for _, cmd := range cmds {
-		err := cmd.Wait()
-		lastExit = getExitCode(err)
+	pids := make([]int, len(cmds))
+	for i, cmd := range cmds {
+		pids[i] = cmd.Process.Pid
 	}
-	lastExitCode = lastExit
+	pgid := pids[0]
+
+	commandStr := strings.Join(segments[0], " ")
+	for _, seg := range segments[1:] {
+		commandStr += " | " + strings.Join(seg, " ")
+	}
+
+	if background {
+		job := addJob(pids[0], pgid, JobRunning, commandStr)
+		fmt.Printf("[%d] %d\n", job.Number, pgid)
+
+		go func() {
+			for _, pid := range pids {
+				var status syscall.WaitStatus
+				for {
+					wp, we := syscall.Wait4(pid, &status, 0, nil)
+					if we == syscall.EINTR {
+						continue
+					}
+					if wp == pid {
+						break
+					}
+					break
+				}
+			}
+		}()
+
+		for _, p := range pipes {
+			p.r.Close()
+		}
+		lastExitCode = 0
+		return
+	}
+
+	exitCode := waitForeground(pids, pgid, commandStr)
+	if exitCode < 0 {
+		lastExitCode = 128 + int(syscall.SIGTSTP)
+	} else {
+		lastExitCode = exitCode
+	}
 
 	for _, p := range pipes {
 		p.r.Close()
