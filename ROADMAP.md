@@ -1,6 +1,6 @@
 # lash — Roadmap
 
-## Phase 1: Core Foundations
+## Phase 1: Core Foundation
 
 - [x] REPL loop with dynamic prompt
 - [x] Basic command execution (fork+exec)
