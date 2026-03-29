@@ -58,7 +58,8 @@ jobs:
           echo "summary<<EOF" >> "$GITHUB_OUTPUT"
           echo "$SUMMARY" >> "$GITHUB_OUTPUT"
           echo "EOF"
-        - name: Send to Discord
+
+      - name: Send to Discord
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
