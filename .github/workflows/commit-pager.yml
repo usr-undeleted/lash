@@ -36,7 +36,7 @@ jobs:
               --rawfile diff /tmp/commit_diff.txt \
               --rawfile msg /tmp/commit_msg.txt \
               '{
-                model: "GLM-4.7-FlashX",
+                model: "GLM-4.7",
                 messages: [{
                   role: "system",
                   content: "Summarize this git commit concisely. What changed and why? Keep it to 2-3 sentences max. Use plain text, no markdown."
