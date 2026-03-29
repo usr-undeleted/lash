@@ -104,13 +104,19 @@ func getPrompt() string {
 }
 
 func reapZombies() {
-	for {
-		var status syscall.WaitStatus
-		pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG|syscall.WUNTRACED, nil)
-		if pid <= 0 || err != nil {
-			break
+	jobMu.Lock()
+	var bgPids []int
+	for _, j := range jobTable {
+		if j.State == JobRunning {
+			bgPids = append(bgPids, j.PID)
 		}
-		if isForegroundPID(pid) {
+	}
+	jobMu.Unlock()
+
+	for _, pid := range bgPids {
+		var status syscall.WaitStatus
+		wp, err := syscall.Wait4(pid, &status, syscall.WNOHANG|syscall.WUNTRACED, nil)
+		if wp <= 0 || err != nil {
 			continue
 		}
 		handleChildReap(pid, status)
