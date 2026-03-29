@@ -107,7 +107,7 @@ func reapZombies() {
 	jobMu.Lock()
 	var bgPids []int
 	for _, j := range jobTable {
-		if j.State == JobRunning {
+		if j.State == JobRunning && !isForegroundPID(j.PID) {
 			bgPids = append(bgPids, j.PID)
 		}
 	}
@@ -506,11 +506,13 @@ func executeBuiltin(args []string, cfg *Config) {
 			lastExitCode = 1
 			return
 		}
+		setForegroundPIDs([]int{job.PID})
 		markJobRunningByPID(job.PID)
 		if job.State == JobStopped {
 			syscall.Kill(-job.PGID, syscall.SIGCONT)
 		}
 		exitCode := waitForeground([]int{job.PID}, job.PGID, job.Command)
+		clearForegroundPIDs()
 		if exitCode < 0 {
 			lastExitCode = 128 + int(syscall.SIGTSTP)
 		} else {
