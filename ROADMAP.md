@@ -34,7 +34,7 @@
 
 - [ ] Local variables (`name=value`)
 - [ ] Environment variables (`export name=value`)
-- [ ] Variable expansion (`$VAR`, `${VAR}`)
+- [x] Variable expansion (`$VAR`, `${VAR}`)
 - [ ] Default value expansion (`${VAR:-default}`, `${VAR:=default}`, `${VAR:+alt}`, `${VAR:?err}`)
 - [ ] Substring expansion (`${VAR:offset:length}`)
 - [ ] Length expansion (`${#VAR}`)
@@ -47,7 +47,7 @@
 
 ## Phase 4: Pattern Matching & Globbing
 
-- [ ] Basic globbing (`*`, `?`, `[abc]`, `[!abc]`)
+- [x] Basic globbing (`*`, `?`, `[abc]`, `[!abc]`)
 - [ ] Recursive globbing (`**`)
 - [ ] Extended globbing (`?(pattern)`, `*(pattern)`, `+(pattern)`, `@(pattern)`, `!(pattern)`)
 - [ ] Globbing with dotfiles option
@@ -84,7 +84,7 @@
 
 ## Phase 6: Configuration & Customization
 
-- [ ] Config file loading (`~/.lashrc`, `~/.config/lash/config`)
+- [x] Config file loading (`~/.lashrc`, `~/.config/lash/config`)
 - [ ] Prompt customization with escape sequences (`\u`, `\h`, `\w`, `\n`, colors)
 - [ ] Left and right prompts (PS1/PS2/RPS1)
 - [ ] Prompt themes (predefined themes, user-switchable)
@@ -101,7 +101,7 @@
 
 - [ ] Multi-line command editing (with visual indicator)
 - [ ] Auto-suggestions (fish-style灰色 hints)
-- [ ] Syntax highlighting as you type
+- [x] Syntax highlighting as you type
 - [ ] Tab completion menus (when ambiguous)
 - [ ] Completion descriptions (showing what each option does)
 - [ ] Command-not-found hook (suggest packages to install)
