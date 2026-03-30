@@ -56,11 +56,16 @@ func parseAliasDefinition(name, value string) (*Alias, error) {
 	runes := []rune(value)
 
 	for i < len(runes) {
-		cmdStart := i
+		for i < len(runes) && (runes[i] == ' ' || runes[i] == '\t') {
+			i++
+		}
+		if i >= len(runes) {
+			break
+		}
 
+		cmdStart := i
 		inSingle := false
 		inDouble := false
-		sep := ""
 
 		for i < len(runes) {
 			ch := runes[i]
@@ -79,36 +84,24 @@ func parseAliasDefinition(name, value string) (*Alias, error) {
 					i += 2
 					continue
 				}
-				if i+1 < len(runes) && ch == '&' && runes[i+1] == '&' {
-					sep = "&&"
-					i += 2
-					for i < len(runes) && (runes[i] == ' ' || runes[i] == '\t') {
-						i++
-					}
-					break
-				}
-				if ch == ';' {
-					sep = ";"
-					i++
-					for i < len(runes) && (runes[i] == ' ' || runes[i] == '\t') {
-						i++
-					}
-					break
-				}
-				if ch == '{' {
+				if ch == '{' || ch == ';' || ch == '&' {
 					break
 				}
 			}
 			i++
 		}
 
-		cmd := strings.TrimSpace(string(runes[cmdStart : i-len(sep)]))
+		cmd := strings.TrimSpace(string(runes[cmdStart:i]))
+		cmd = stripQuotes(cmd)
+		if cmd == "" {
+			break
+		}
 
 		if i >= len(runes) {
 			return nil, fmt.Errorf("alias %s: segment %q is missing argument specifier {ALL}, {NULL}, or {1,2,...}", name, cmd)
 		}
 
-		if runes[i] != '{' {
+		if runes[i] == ';' || runes[i] == '&' {
 			return nil, fmt.Errorf("alias %s: segment %q is missing argument specifier {ALL}, {NULL}, or {1,2,...}", name, cmd)
 		}
 
@@ -171,9 +164,18 @@ func parseAliasDefinition(name, value string) (*Alias, error) {
 			return nil, fmt.Errorf("alias %s: empty argument specifier, use {NULL} for no arguments or {ALL} for all", name)
 		}
 
-		cmd = stripQuotes(cmd)
-		if cmd == "" {
-			return nil, fmt.Errorf("alias %s: empty command segment", name)
+		sep := ""
+		for i < len(runes) && (runes[i] == ' ' || runes[i] == '\t') {
+			i++
+		}
+		if i < len(runes) {
+			if runes[i] == ';' {
+				sep = ";"
+				i++
+			} else if i+1 < len(runes) && runes[i] == '&' && runes[i+1] == '&' {
+				sep = "&&"
+				i += 2
+			}
 		}
 
 		segments = append(segments, AliasSegment{
