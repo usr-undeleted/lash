@@ -1,4 +1,0 @@
-export ls=ls --color=auto{ALL}
-export grep=grep --color=auto{ALL}
-export ls=ls --color=auto{ALL}
-export grep=grep --color=auto{ALL}
