@@ -124,6 +124,29 @@ func expandPS1(ps1 string) string {
 		gap := termW - leftLineW - rightLineW
 		return leftExpanded + strings.Repeat(" ", gap) + rightExpanded
 	}
+	fillFIdx := strings.Index(ps1, `\F`)
+	if fillFIdx >= 0 {
+		runes := []rune(ps1[fillFIdx+2:])
+		if len(runes) > 0 {
+			fillChar := runes[0]
+			afterFill := string(runes[1:])
+			left := ps1[:fillFIdx]
+			right := afterFill
+			leftExpanded := expandPS1Escapes(left)
+			rightExpanded := expandPS1Escapes(right)
+			termW := getTermWidth()
+			if termW <= 0 {
+				termW = 80
+			}
+			leftLineW := lastLineWidth(leftExpanded)
+			rightLineW := firstLineWidth(rightExpanded)
+			if leftLineW+rightLineW >= termW {
+				return leftExpanded + " " + rightExpanded
+			}
+			gap := termW - leftLineW - rightLineW
+			return leftExpanded + strings.Repeat(string(fillChar), gap) + rightExpanded
+		}
+	}
 	return expandPS1Escapes(ps1)
 }
 
@@ -212,6 +235,10 @@ func expandPS1Escapes(ps1 string) string {
 				if isGitDirty() {
 					b.WriteRune(runes[i+1])
 				}
+				i++
+			}
+		case 'F':
+			if i+1 < len(runes) {
 				i++
 			}
 		case 'x':
