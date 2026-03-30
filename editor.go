@@ -527,20 +527,23 @@ func (e *LineEditor) redrawSearch(prompt string, prevBufW int, query []rune, mat
 		fmt.Printf("\033[%dA", prevRows-1)
 	}
 
-	fmt.Print("\r")
-	fmt.Printf("\033[%dC", pvis)
-	fmt.Print("\033[J")
-
 	var display string
 	if matched != "" {
 		display = fmt.Sprintf("bck-i-search: %s_%s", string(query), matched)
 	} else {
 		display = fmt.Sprintf("bck-i-search: %s_", string(query))
 	}
-	os.Stdout.Write([]byte(display))
 
-	newW := visibleWidth(display)
-	return newW
+	var buf strings.Builder
+	buf.WriteString("\r")
+	buf.WriteString(fmt.Sprintf("\033[%dC", pvis))
+	buf.WriteString("\033[K")
+	buf.WriteString("\033[?25l")
+	buf.WriteString(display)
+	buf.WriteString("\033[?25h")
+	os.Stdout.WriteString(buf.String())
+
+	return visibleWidth(display)
 }
 
 func (e *LineEditor) moveWordBack(prompt string, prevW *int) {
@@ -603,22 +606,28 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 		fmt.Printf("\033[%dA", prevRows-1)
 	}
 
-	fmt.Print("\r")
-	fmt.Printf("\033[%dC", pvis)
-	fmt.Print("\033[J")
+	var buf strings.Builder
+	buf.WriteString("\r")
+	buf.WriteString(fmt.Sprintf("\033[%dC", pvis))
+	buf.WriteString("\033[K")
 
+	var display string
 	if e.config != nil && e.config.SyntaxColor && len(e.buf) > 0 {
-		os.Stdout.Write([]byte(e.syntaxHighlight()))
+		display = e.syntaxHighlight()
 	} else {
-		os.Stdout.Write([]byte(string(e.buf)))
+		display = string(e.buf)
 	}
+	buf.WriteString("\033[?25l")
+	buf.WriteString(display)
 
 	newW := bufWidth(e.buf)
 	cursorW := bufWidth(e.buf[:e.cursor])
 	back := newW - cursorW
 	if back > 0 {
-		fmt.Printf("\033[%dD", back)
+		buf.WriteString(fmt.Sprintf("\033[%dD", back))
 	}
+	buf.WriteString("\033[?25h")
+	os.Stdout.WriteString(buf.String())
 
 	return newW
 }
