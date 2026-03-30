@@ -22,3 +22,4 @@ END {
 ' ROADMAP.md)
 sed -i "s|version-v[0-9]\+\.[0-9]\+|version-${version}|" README.md
 go build -o lash .
+touch ~/.lashrc
