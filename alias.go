@@ -48,7 +48,7 @@ func stripQuotes(s string) string {
 
 func parseAliasDefinition(name, value string) (*Alias, error) {
 	if !strings.Contains(value, "{") {
-		return nil, fmt.Errorf("alias %s: missing argument specifier {ALL}, {NULL}, or {1 2 ...}", name)
+		return nil, fmt.Errorf("alias %s: missing argument specifier {ALL}, {NULL}, or {1,2,...}", name)
 	}
 
 	var segments []AliasSegment
@@ -99,11 +99,11 @@ func parseAliasDefinition(name, value string) (*Alias, error) {
 		cmd := strings.TrimSpace(string(runes[cmdStart : i-len(sep)]))
 
 		if i >= len(runes) {
-			return nil, fmt.Errorf("alias %s: segment %q is missing argument specifier {ALL}, {NULL}, or {1 2 ...}", name, cmd)
+			return nil, fmt.Errorf("alias %s: segment %q is missing argument specifier {ALL}, {NULL}, or {1,2,...}", name, cmd)
 		}
 
 		if runes[i] != '{' {
-			return nil, fmt.Errorf("alias %s: segment %q is missing argument specifier {ALL}, {NULL}, or {1 2 ...}", name, cmd)
+			return nil, fmt.Errorf("alias %s: segment %q is missing argument specifier {ALL}, {NULL}, or {1,2,...}", name, cmd)
 		}
 
 		braceStart := i
@@ -137,16 +137,20 @@ func parseAliasDefinition(name, value string) (*Alias, error) {
 		}
 
 		var args ArgSpec
-		tokens := strings.Fields(braceContent)
-		for _, t := range tokens {
-			if strings.EqualFold(t, "ALL") {
+		parts := strings.Split(braceContent, ",")
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if strings.EqualFold(p, "ALL") {
 				args.All = true
-			} else if strings.EqualFold(t, "NULL") {
+			} else if strings.EqualFold(p, "NULL") {
 				args.Null = true
 			} else {
-				n, err := parseInt(t)
+				n, err := parseInt(p)
 				if err != nil {
-					return nil, fmt.Errorf("alias %s: invalid argument index %q, expected number, ALL, or NULL", name, t)
+					return nil, fmt.Errorf("alias %s: invalid argument index %q, expected number, ALL, or NULL", name, p)
 				}
 				if n < 1 {
 					return nil, fmt.Errorf("alias %s: argument index must be >= 1, got %d", name, n)

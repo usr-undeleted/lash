@@ -263,6 +263,11 @@ func sourceLashrc(cfg *Config) {
 		if line == "" {
 			continue
 		}
+		tokens := tokenize(line)
+		if len(tokens) > 0 && (tokens[0] == "alias" || tokens[0] == "unalias") {
+			executeBuiltin(tokens, cfg)
+			continue
+		}
 		chains := splitChains(line)
 		for _, chain := range chains {
 			executeChain(chain, cfg)
@@ -301,6 +306,12 @@ func main() {
 		}
 		line = expandAliasLine(line)
 		if line == "" {
+			continue
+		}
+
+		tokens := tokenize(line)
+		if len(tokens) > 0 && (tokens[0] == "alias" || tokens[0] == "unalias") {
+			executeBuiltin(tokens, cfg)
 			continue
 		}
 
@@ -887,32 +898,32 @@ func executeBuiltin(args []string, cfg *Config) {
 			lastExitCode = 0
 			return
 		}
-		for _, a := range args[1:] {
-			eqIdx := strings.Index(a, "=")
-			if eqIdx < 1 {
-				fmt.Fprintf(os.Stderr, "alias: usage: alias name=\"value\"\n")
-				lastExitCode = 1
-				continue
-			}
-			name := strings.TrimSpace(a[:eqIdx])
-			value := a[eqIdx+1:]
-			if len(value) >= 2 {
-				if (value[0] == '\'' && value[len(value)-1] == '\'') ||
-					(value[0] == '"' && value[len(value)-1] == '"') {
-					value = value[1 : len(value)-1]
-				}
-			}
-			alias, err := parseAliasDefinition(name, value)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "alias: %s\n", err)
-				lastExitCode = 1
-				continue
-			}
-			aliasMu.Lock()
-			aliasTable[name] = alias
-			aliasMu.Unlock()
-			lastExitCode = 0
+		rest := strings.Join(args[1:], " ")
+		eqIdx := strings.Index(rest, "=")
+		if eqIdx < 1 {
+			fmt.Fprintf(os.Stderr, "alias: usage: alias name=\"value\"\n")
+			lastExitCode = 1
+			return
 		}
+		name := strings.TrimSpace(rest[:eqIdx])
+		value := rest[eqIdx+1:]
+		value = strings.TrimSpace(value)
+		if len(value) >= 2 {
+			if (value[0] == '\'' && value[len(value)-1] == '\'') ||
+				(value[0] == '"' && value[len(value)-1] == '"') {
+				value = value[1 : len(value)-1]
+			}
+		}
+		alias, err := parseAliasDefinition(name, value)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "alias: %s\n", err)
+			lastExitCode = 1
+			return
+		}
+		aliasMu.Lock()
+		aliasTable[name] = alias
+		aliasMu.Unlock()
+		lastExitCode = 0
 	case "unalias":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "unalias: usage: unalias name [name...]")
