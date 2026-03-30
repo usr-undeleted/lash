@@ -21,7 +21,7 @@ var cmdNumber int = 0
 var pendingNotifs []string
 var notifMu sync.Mutex
 
-const defaultPS1 = `\[\e[1;36m\]\u@\h\[\e[0m\] \[\e[1;33m\]\w\[\e[0m\] on \[\e[1m\]\g\[\e[0m\]\x\n\[\e[1m\]╰\$\[\e[0m\] `
+const defaultPS1 = `\[\e[1;36m\]\u@\h\[\e[0m\] \[\e[1;33m\]\w\[\e[0m\] on \[\e[1m\]\g\G◇\[\e[0m\]\x\n\[\e[1m\]╰\$\[\e[0m\] `
 
 func getExitCode(err error) int {
 	if err == nil {
@@ -70,6 +70,31 @@ func getGitBranch() string {
 		dir = parent
 	}
 	return ""
+}
+
+func isGitDirty() bool {
+	dir, err := os.Getwd()
+	if err != nil {
+		return false
+	}
+	for {
+		gitDir := filepath.Join(dir, ".git")
+		if _, err := os.Stat(gitDir); err == nil {
+			cmd := exec.Command("git", "status", "--porcelain")
+			cmd.Dir = dir
+			out, err := cmd.Output()
+			if err != nil {
+				return false
+			}
+			return len(out) > 0
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	return false
 }
 
 func getPrompt() string {
@@ -181,6 +206,13 @@ func expandPS1Escapes(ps1 string) string {
 			branch := getGitBranch()
 			if branch != "" {
 				b.WriteString(branch)
+			}
+		case 'G':
+			if i+1 < len(runes) {
+				if isGitDirty() {
+					b.WriteRune(runes[i+1])
+				}
+				i++
 			}
 		case 'x':
 			if lastExitCode >= 1 {
