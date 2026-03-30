@@ -20,34 +20,49 @@ var logoMini string
 var roadmap string
 
 func getVersion() string {
-	var phase int
-	var completed int
+	type phaseData struct {
+		number    int
+		completed int
+		total     int
+	}
+
+	var phases []phaseData
+	currentIdx := -1
 	scanner := bufio.NewScanner(strings.NewReader(roadmap))
-	foundCurrent := false
+
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, "## Phase ") && !foundCurrent {
+		if strings.HasPrefix(line, "## Phase ") {
 			var p int
-			n, err := fmt.Sscanf(line, "## Phase %d", &p)
-			if err == nil && n == 1 {
-				phase = p
-			}
+			fmt.Sscanf(line, "## Phase %d", &p)
 			if strings.Contains(line, "(current)") {
-				foundCurrent = true
+				currentIdx = len(phases)
 			}
+			phases = append(phases, phaseData{number: p})
 			continue
 		}
-		if foundCurrent {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "- [x]") {
-				completed++
-			}
-			if strings.HasPrefix(line, "## Phase ") {
-				break
-			}
+		if len(phases) == 0 {
+			continue
+		}
+		last := &phases[len(phases)-1]
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "- [x]") {
+			last.completed++
+			last.total++
+		} else if strings.HasPrefix(trimmed, "- [ ]") {
+			last.total++
 		}
 	}
-	return fmt.Sprintf("v%d.%d", phase, completed)
+
+	idx := currentIdx
+	for idx < len(phases) && phases[idx].total > 0 && phases[idx].completed == phases[idx].total {
+		idx++
+	}
+	if idx >= len(phases) {
+		idx = len(phases) - 1
+	}
+
+	return fmt.Sprintf("v%d.%d", phases[idx].number, phases[idx].completed)
 }
 
 func getLogo(size string) string {

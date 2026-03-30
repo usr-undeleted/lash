@@ -1,6 +1,24 @@
 #!/bin/sh
-phase=$(grep -m1 '(current)' ROADMAP.md | grep -oP 'Phase \K[0-9]+')
-completed=$(awk "/## Phase.*\(current\)/{found=1; next} found && /- \[x\]/{count++} found && /## Phase/{exit} END{print count+0}" ROADMAP.md)
-version="v${phase}.${completed}"
+version=$(awk '
+/## Phase / {
+    match($0, /Phase ([0-9]+)/, m)
+    n = ++nphases
+    phase_num[n] = m[1]
+    phase_done[n] = 0
+    phase_total[n] = 0
+    if (/\(current\)/) current_idx = n
+    next
+}
+/- \[x\]/ { phase_done[nphases]++; phase_total[nphases]++ }
+/- \[ \]/ { phase_total[nphases]++ }
+END {
+    idx = current_idx
+    while (idx <= nphases && phase_total[idx] > 0 && phase_done[idx] == phase_total[idx]) {
+        idx++
+    }
+    if (idx > nphases) idx = nphases
+    print "v" phase_num[idx] "." phase_done[idx]
+}
+' ROADMAP.md)
 sed -i "s|version-v[0-9]\+\.[0-9]\+|version-${version}|" README.md
 go build -o lash .

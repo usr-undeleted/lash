@@ -15,7 +15,7 @@
 - [x] Signal handling for background jobs (`SIGCHLD`)
 - [x] Proper zombie reaping for background processes
 
-## Phase 2: Essential Interactive Features (current)
+## Phase 2: Essential Interactive Features
 
 - [x] Command history (up/down arrows)
 - [x] Line editing (left/right arrows, backspace, delete, Home/End)
@@ -30,7 +30,7 @@
 - [x] Suspended processes (Ctrl+Z)
 - [x] More built-ins: `export`, `unset`, `env`, `set`, `echo` with flags (`-n`, `-e`), `type`, `which`, `true`, `false`, `test`/`[`
 - [x] Basic wildcard/glob expansion (`*`, `?`)
-## Phase 3: Variable & Expansion Engine
+## Phase 3: Variable & Expansion Engine (current)
 
 - [ ] Local variables (`name=value`)
 - [ ] Environment variables (`export name=value`)
