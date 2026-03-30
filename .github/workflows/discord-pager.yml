@@ -87,7 +87,7 @@ jobs:
             PROMPT="Summarize this GitHub issue concisely. What is being reported or requested? Keep it to 2-3 sentences max. Use plain text, no markdown."
             USER_CONTENT=$(cat /tmp/context.txt)
           fi
-          RESPONSE=$(curl -s --max-time 120 "$LLM_BASE_URL/chat/completions" \
+          RESPONSE=$(curl -s --max-time 120 -w '\n%{http_code}' "$LLM_BASE_URL/chat/completions" \
             -H "Authorization: Bearer $LLM_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$(jq -n \
@@ -101,8 +101,11 @@ jobs:
                 ],
                 max_tokens: 1500
               }')")
-          echo "$RESPONSE" | jq -r '.choices[0].message.content // "Failed to summarize"' > /tmp/summary.txt
-          echo "$RESPONSE" >> "$GITHUB_STEP_SUMMARY"
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+          echo "HTTP status: $HTTP_CODE" >> "$GITHUB_STEP_SUMMARY"
+          echo "API response: $BODY" >> "$GITHUB_STEP_SUMMARY"
+          echo "$BODY" | jq -r '.choices[0].message.content // "Failed to summarize"' > /tmp/summary.txt
 
       - name: Send to Discord
         env:
