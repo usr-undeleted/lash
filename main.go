@@ -92,10 +92,10 @@ func expandPS1(ps1 string) string {
 		}
 		leftW := visibleWidth(leftExpanded)
 		rightW := visibleWidth(rightExpanded)
-		gap := termW - leftW - rightW
-		if gap < 1 {
-			gap = 1
+		if leftW+rightW >= termW {
+			return leftExpanded + " " + rightExpanded
 		}
+		gap := termW - leftW - rightW
 		return leftExpanded + strings.Repeat(" ", gap) + rightExpanded
 	}
 	return expandPS1Escapes(ps1)
