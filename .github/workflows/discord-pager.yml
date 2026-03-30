@@ -87,7 +87,7 @@ jobs:
             PROMPT="Summarize this GitHub issue concisely. What is being reported or requested? Keep it to 2-3 sentences max. Use plain text, no markdown."
             USER_CONTENT=$(cat /tmp/context.txt)
           fi
-          RESPONSE=$(curl -s "$LLM_BASE_URL/chat/completions" \
+          RESPONSE=$(curl -s --max-time 120 "$LLM_BASE_URL/chat/completions" \
             -H "Authorization: Bearer $LLM_API_KEY" \
             -H "Content-Type: application/json" \
             -d "$(jq -n \
