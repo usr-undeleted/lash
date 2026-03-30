@@ -20,7 +20,7 @@
 - [x] Command history (up/down arrows)
 - [x] Line editing (left/right arrows, backspace, delete, Home/End)
 - [x] Tab completion (commands, file paths)
-- [ ] Reverse search (Ctrl+R)
+- [x] Reverse search (Ctrl+R)
 - [x] Ctrl+L to clear screen
 - [x] Ctrl+D to exit on empty line
 - [x] Ctrl+A / Ctrl+E (beginning/end of line)

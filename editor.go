@@ -15,12 +15,13 @@ import (
 )
 
 type LineEditor struct {
-	buf     []rune
-	cursor  int
-	history []string
-	histIdx int
-	config  *Config
-	reader  *bufio.Reader
+	buf      []rune
+	cursor   int
+	history  []string
+	histIdx  int
+	config   *Config
+	reader   *bufio.Reader
+	accepted bool
 }
 
 func NewLineEditor(cfg *Config) *LineEditor {
@@ -207,6 +208,17 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 		case 9:
 			prevW = e.handleTabCompletion(prompt, prevW)
 
+		case 18:
+			prevW = e.handleReverseSearch(prompt, prevW)
+			if e.accepted {
+				e.accepted = false
+				if e.buf == nil {
+					return "\x03", nil
+				}
+				line := string(e.buf)
+				return line, nil
+			}
+
 		default:
 			if b[0] >= 32 {
 				e.buf = append(e.buf[:e.cursor], append([]rune{rune(b[0])}, e.buf[e.cursor:]...)...)
@@ -360,6 +372,159 @@ func (e *LineEditor) handleSS3(prompt string, prevW *int) {
 		e.cursor = len(e.buf)
 		*prevW = e.redraw(prompt, *prevW)
 	}
+}
+
+func (e *LineEditor) handleReverseSearch(prompt string, prevBufW int) int {
+	savedBuf := make([]rune, len(e.buf))
+	copy(savedBuf, e.buf)
+	savedCursor := e.cursor
+
+	var query []rune
+	matchPos := -1
+
+	prevBufW = e.redrawSearch(prompt, prevBufW, query, "")
+
+	for {
+		b := e.readByte()
+		if b == 0 {
+			e.buf = savedBuf
+			e.cursor = savedCursor
+			return e.redraw(prompt, prevBufW)
+		}
+
+		if b == '\x1b' {
+			b2 := e.readByte()
+			if b2 == '[' {
+				final := e.readByte()
+				for {
+					if final < 'A' || final > 'Z' {
+						if final != '~' {
+							break
+						}
+						e.readByte()
+					}
+					break
+				}
+			}
+			e.buf = savedBuf
+			e.cursor = savedCursor
+			return e.redraw(prompt, prevBufW)
+		}
+
+		switch b {
+		case '\r', '\n':
+			if matchPos >= 0 {
+				e.buf = []rune(e.history[matchPos])
+				e.cursor = len(e.buf)
+			} else {
+				e.buf = savedBuf
+				e.cursor = savedCursor
+			}
+			os.Stdout.Write([]byte("\r\n"))
+			line := string(e.buf)
+			if strings.TrimSpace(line) != "" {
+				e.history = append(e.history, line)
+			}
+			e.accepted = true
+			return bufWidth(e.buf)
+
+		case 127, 8:
+			if len(query) > 0 {
+				query = query[:len(query)-1]
+				matchPos = -1
+				if len(query) > 0 {
+					matchPos = e.findHistoryMatch(string(query), -1)
+				}
+				var matched string
+				if matchPos >= 0 {
+					matched = e.history[matchPos]
+				}
+				prevBufW = e.redrawSearch(prompt, prevBufW, query, matched)
+			} else {
+				e.buf = savedBuf
+				e.cursor = savedCursor
+				return e.redraw(prompt, prevBufW)
+			}
+
+		case 3:
+			os.Stdout.Write([]byte("^C\r\n"))
+			e.buf = nil
+			e.cursor = 0
+			e.accepted = true
+			return 0
+
+		case 7:
+			e.buf = savedBuf
+			e.cursor = savedCursor
+			return e.redraw(prompt, prevBufW)
+
+		case 18:
+			if len(query) > 0 {
+				newPos := e.findHistoryMatch(string(query), matchPos)
+				if newPos >= 0 {
+					matchPos = newPos
+				}
+				var matched string
+				if matchPos >= 0 {
+					matched = e.history[matchPos]
+				}
+				prevBufW = e.redrawSearch(prompt, prevBufW, query, matched)
+			}
+
+		default:
+			if b >= 32 && b < 127 {
+				query = append(query, rune(b))
+				matchPos = e.findHistoryMatch(string(query), -1)
+				var matched string
+				if matchPos >= 0 {
+					matched = e.history[matchPos]
+				}
+				prevBufW = e.redrawSearch(prompt, prevBufW, query, matched)
+			}
+		}
+	}
+}
+
+func (e *LineEditor) findHistoryMatch(query string, startPos int) int {
+	lowerQ := strings.ToLower(query)
+	start := len(e.history) - 1
+	if startPos >= 0 {
+		start = startPos - 1
+	}
+	for i := start; i >= 0; i-- {
+		if strings.Contains(strings.ToLower(e.history[i]), lowerQ) {
+			return i
+		}
+	}
+	return -1
+}
+
+func (e *LineEditor) redrawSearch(prompt string, prevBufW int, query []rune, matched string) int {
+	pvis := visibleWidth(prompt)
+	termW := getTermWidth()
+	if termW <= 0 {
+		termW = 80
+	}
+
+	prevRows := (pvis + prevBufW + termW - 1) / termW
+	if prevRows > 1 {
+		fmt.Printf("\033[%dA", prevRows-1)
+	}
+
+	fmt.Print("\r")
+	fmt.Printf("\033[%dC", pvis)
+	fmt.Print("\033[J")
+
+	var display string
+	if matched != "" {
+		display = fmt.Sprintf("bck-i-search: %s_%s", string(query), matched)
+	} else {
+		display = fmt.Sprintf("bck-i-search: %s_", string(query))
+	}
+	os.Stdout.Write([]byte(display))
+
+	newW := visibleWidth(display)
+	return newW
 }
 
 func (e *LineEditor) moveWordBack(prompt string, prevW *int) {
