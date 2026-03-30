@@ -1,0 +1,63 @@
+# lash — AI Context File
+
+## Project Overview
+lash (larp shell) is a Linux shell written in Go. It aims to be a feature-rich interactive shell with scripting support. The project is currently in Phase 3 of 12 (Variable & Expansion Engine). Version is dynamically derived from ROADMAP.md progress (currently v3.2).
+
+## Tech Stack
+- **Language:** Go 1.26
+- **Dependencies:** `golang.org/x/sys`, `golang.org/x/term` (only external deps)
+- **Build:** `./build.sh` (runs `go build -o lash .`, also updates version in README.md)
+- **No tests, no linter, no CI** — just build and run
+
+## Project Structure
+All source is in the root directory, single `package main`:
+- `main.go` — REPL loop, tokenizer, command execution, pipelines, redirections, builtins, variable expansion, glob expansion, PS1/prompt handling
+- `editor.go` — Raw terminal line editor with history, keybindings (emacs-style), tab completion (commands + paths), reverse search (Ctrl+R), syntax highlighting
+- `jobs.go` — Job control (background `&`, `fg`, `bg`, `jobs`, `kill`, Ctrl+Z suspension, terminal ownership via `tcsetpgrp`)
+- `config.go` — Config file loading/saving (`~/.config/lash/config`), settings: `syntax-color`, `logosize`
+- `version.go` — Version derived from ROADMAP.md checkbox progress, embeds logo text files and ROADMAP.md via `//go:embed`
+- `build.sh` — Build script, computes version from ROADMAP.md, builds binary to `./lash`
+- `.lashrc` — Shell rc file (currently empty)
+
+## Code Conventions
+- No comments in code
+- Standard Go formatting (tabs, no trailing whitespace)
+- Error messages go to stderr, prefixed with `"lash: "` for shell errors or `"builtinname: "` for builtin errors
+- Exit codes: 0 success, 1 general error, 127 command not found, 128+signal for signals, 130 for Ctrl+C
+- Uses `lastExitCode` global for `$?` tracking
+- Uses package-level globals for state (job table, foreground PIDs, config, etc.)
+- `sync.Mutex` for concurrent access to job table and notification queue
+
+## Supported Features (implemented)
+- REPL with custom PS1 prompt (supports `\u`, `\h`, `\H`, `\w`, `\W`, `\n`, `\t`, `\d`, `$`, `\g` for git branch, `\x` for exit status indicator, `\f` for fill alignment, ANSI colors, octal)
+- Command execution via fork+exec (`syscall`)
+- Builtins: `exit`, `cd`, `pwd`, `jobs`, `fg`, `bg`, `kill` (with signals), `export`, `unset`, `env`, `echo` (`-n`, `-e`), `type`, `which`, `true`, `false`, `lash` (meta-command for config/version)
+- Pipes (`|`), I/O redirection (`>`, `>>`, `<`)
+- Background processes (`&`), job control with `fg`/`bg`/`jobs`
+- Ctrl+Z (suspend), Ctrl+C (interrupt), proper signal forwarding
+- Command chaining (`&&`, `||`, `;`)
+- Quoting (single and double quotes)
+- Variable expansion (`$VAR`, `${VAR}`, `$?`, `$$`)
+- Tilde expansion (`~`, `~/`)
+- Basic globbing (`*`, `?`, `[abc]`)
+- Line editing: arrow keys, Home/End, Ctrl+A/E/K/U/W, backspace/delete
+- History (up/down arrows), reverse search (Ctrl+R)
+- Tab completion (commands from PATH + builtins, file paths)
+- Syntax highlighting as you type (green for valid commands, red for invalid)
+- Config system (`lash set-config <key> <value>`)
+- `lash version` with embedded ASCII art logo (mini/small/big sizes)
+- Zombie reaping for background processes
+- Notification on background job completion
+
+## Current Phase (Phase 3 — Variable & Expansion Engine)
+Remaining work: local variables, default value expansion, substring/length expansion, variable indirection, command substitution, arithmetic expansion, process substitution, brace expansion.
+
+## Agent Behavior
+- Always commit and push changes when confident they are correct. Don't wait to be asked.
+
+## Key Architecture Notes
+- No parser/AST — commands are tokenized as flat string slices and executed directly
+- Pipelines are built manually with `os.Pipe()` + `exec.Command`
+- Job control uses process groups (`Setpgid: true`) and terminal ownership via ioctl
+- Line editor operates in raw terminal mode, handles all escape sequences manually
+- Config stored at `~/.config/lash/config` in `key = value` format
