@@ -21,7 +21,7 @@ var cmdNumber int = 0
 var pendingNotifs []string
 var notifMu sync.Mutex
 
-const defaultPS1 = `\[\e[1;36m\]\u@\h\[\e[0m\] \[\e[1;33m\]\w\[\e[0m\] on \[\e[1m\]\g\G◇\[\e[0m\]\x\n\[\e[1m\]╰\$\[\e[0m\] `
+const defaultPS1 = `\[\e[1;36m\]\u@\h\[\e[0m\] \[\e[1;33m\]\w\[\e[0m\] on \[\e[1m\]\g\G◇\[\e[0m\]\x✗\X \n\[\e[1m\]╰\$\[\e[0m\] `
 
 func getExitCode(err error) int {
 	if err == nil {
@@ -242,8 +242,15 @@ func expandPS1Escapes(ps1 string) string {
 				i++
 			}
 		case 'x':
+			if i+1 < len(runes) {
+				if lastExitCode >= 1 {
+					b.WriteRune(runes[i+1])
+				}
+				i++
+			}
+		case 'X':
 			if lastExitCode >= 1 {
-				b.WriteString(fmt.Sprintf("%s✗%s", colorRed, colorReset))
+				b.WriteString(fmt.Sprintf("%s%d%s", colorRed, lastExitCode, colorReset))
 			}
 		case '!':
 			b.WriteString(strconv.Itoa(cmdNumber))
