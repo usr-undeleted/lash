@@ -1113,4 +1113,3 @@ func executePipeline(segments [][]string, background bool) {
 		p.r.Close()
 	}
 }
-// ci test
