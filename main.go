@@ -274,19 +274,20 @@ func drainNotifs() {
 	}
 }
 
-func sourceLashrc(cfg *Config) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return
-	}
-	path := filepath.Join(home, ".lashrc")
+func sourceFile(path string, cfg *Config) int {
 	f, err := os.Open(path)
 	if err != nil {
-		return
+		if os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "lash: source: %s: No such file or directory\n", path)
+		} else {
+			fmt.Fprintf(os.Stderr, "lash: source: %s: %s\n", path, err)
+		}
+		return 1
 	}
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
+	code := 0
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -299,13 +300,30 @@ func sourceLashrc(cfg *Config) {
 		tokens := tokenize(line)
 		if len(tokens) > 0 && (tokens[0] == "alias" || tokens[0] == "unalias") {
 			executeBuiltin(tokens, cfg)
+			code = lastExitCode
 			continue
 		}
 		chains := splitChains(line)
 		for _, chain := range chains {
 			executeChain(chain, cfg)
 		}
+		code = lastExitCode
 	}
+	return code
+}
+
+func sourceLashrc(cfg *Config) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	path := filepath.Join(home, ".lashrc")
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	f.Close()
+	sourceFile(path, cfg)
 }
 
 func main() {
@@ -630,7 +648,8 @@ func tokenize(line string) []string {
 func isBuiltin(cmd string) bool {
 	switch cmd {
 	case "exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
-		"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias":
+		"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
+		"source", ".":
 		return true
 	}
 	return false
@@ -985,6 +1004,13 @@ func executeBuiltin(args []string, cfg *Config) {
 				continue
 			}
 		}
+	case "source", ".":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "lash: source: filename argument required")
+			lastExitCode = 1
+			return
+		}
+		lastExitCode = sourceFile(args[1], cfg)
 	}
 }
 

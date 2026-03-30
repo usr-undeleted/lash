@@ -71,7 +71,7 @@
 - [ ] Functions (`func() { ... }`)
 - [ ] Function arguments and local variables (`local`)
 - [ ] Return values from functions (`return`)
-- [ ] `source` / `.` (dot) command for including scripts
+- [x] `source` / `.` (dot) command for including scripts
 - [ ] Positional parameters (`$0`, `$1`..`$9`, `$@`, `$*`, `$#`)
 - [ ] `shift` builtin
 - [ ] `read` builtin (with flags for prompts, delimiters, etc.)

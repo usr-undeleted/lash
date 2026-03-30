@@ -22,4 +22,17 @@ END {
 ' ROADMAP.md)
 sed -i "s|version-v[0-9]\+\.[0-9]\+|version-${version}|" README.md
 go build -o lash .
-touch ~/.lashrc
+[ -f ~/.lashrc ] || cat > ~/.lashrc << 'EOF'
+# lash startup configuration
+# Lines starting with # are comments
+
+# Environment variables
+# export EDITOR="vim"
+# export PATH="$PATH:/custom/path"
+
+# Source other rc files
+# source ~/.lash_aliases
+
+# Aliases
+# alias ll {ALL} { ls -la $@ ; }
+EOF
