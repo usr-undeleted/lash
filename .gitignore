@@ -60,3 +60,6 @@ dkms.conf
 # Go module
 !go.mod
 !go.sum
+
+# AI context files
+AGENTS.md
