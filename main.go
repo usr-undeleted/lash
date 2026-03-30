@@ -90,12 +90,12 @@ func expandPS1(ps1 string) string {
 		if termW <= 0 {
 			termW = 80
 		}
-		leftW := visibleWidth(leftExpanded)
-		rightW := visibleWidth(rightExpanded)
-		if leftW+rightW >= termW {
+		leftLineW := lastLineWidth(leftExpanded)
+		rightLineW := firstLineWidth(rightExpanded)
+		if leftLineW+rightLineW >= termW {
 			return leftExpanded + " " + rightExpanded
 		}
-		gap := termW - leftW - rightW
+		gap := termW - leftLineW - rightLineW
 		return leftExpanded + strings.Repeat(" ", gap) + rightExpanded
 	}
 	return expandPS1Escapes(ps1)

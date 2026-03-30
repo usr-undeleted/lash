@@ -92,6 +92,22 @@ func visibleWidth(s string) int {
 	return w
 }
 
+func lastLineWidth(s string) int {
+	lastNl := strings.LastIndex(s, "\n")
+	if lastNl >= 0 {
+		s = s[lastNl+1:]
+	}
+	return visibleWidth(s)
+}
+
+func firstLineWidth(s string) int {
+	nlIdx := strings.Index(s, "\n")
+	if nlIdx >= 0 {
+		s = s[:nlIdx]
+	}
+	return visibleWidth(s)
+}
+
 func runeWidth(r rune) int {
 	if r >= 0x1100 && (r <= 0x115f || r == 0x2329 || r == 0x232a ||
 		(r >= 0x2e80 && r <= 0xa4cf && r != 0x303f) ||
