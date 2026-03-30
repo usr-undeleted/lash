@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -240,11 +241,42 @@ func drainNotifs() {
 	}
 }
 
+func sourceLashrc(cfg *Config) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	path := filepath.Join(home, ".lashrc")
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		line = expandAliasLine(line)
+		if line == "" {
+			continue
+		}
+		chains := splitChains(line)
+		for _, chain := range chains {
+			executeChain(chain, cfg)
+		}
+	}
+}
+
 func main() {
 	initJobControl()
+	initAliases()
 	os.Setenv("PS1", defaultPS1)
 
 	cfg := LoadConfig()
+	sourceLashrc(cfg)
 	editor := NewLineEditor(cfg)
 	for {
 		reapZombies()
@@ -264,6 +296,10 @@ func main() {
 			continue
 		}
 		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		line = expandAliasLine(line)
 		if line == "" {
 			continue
 		}
@@ -535,7 +571,7 @@ func tokenize(line string) []string {
 func isBuiltin(cmd string) bool {
 	switch cmd {
 	case "exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
-		"echo", "true", "false", "unset", "env", "type", "which":
+		"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias":
 		return true
 	}
 	return false
@@ -845,6 +881,51 @@ func executeBuiltin(args []string, cfg *Config) {
 			fmt.Println(path)
 		}
 		lastExitCode = 0
+	case "alias":
+		if len(args) == 1 {
+			printAliases()
+			lastExitCode = 0
+			return
+		}
+		for _, a := range args[1:] {
+			eqIdx := strings.Index(a, "=")
+			if eqIdx < 1 {
+				fmt.Fprintf(os.Stderr, "alias: usage: alias name=\"value\"\n")
+				lastExitCode = 1
+				continue
+			}
+			name := strings.TrimSpace(a[:eqIdx])
+			value := a[eqIdx+1:]
+			if len(value) >= 2 {
+				if (value[0] == '\'' && value[len(value)-1] == '\'') ||
+					(value[0] == '"' && value[len(value)-1] == '"') {
+					value = value[1 : len(value)-1]
+				}
+			}
+			alias, err := parseAliasDefinition(name, value)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "alias: %s\n", err)
+				lastExitCode = 1
+				continue
+			}
+			aliasMu.Lock()
+			aliasTable[name] = alias
+			aliasMu.Unlock()
+			lastExitCode = 0
+		}
+	case "unalias":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "unalias: usage: unalias name [name...]")
+			lastExitCode = 1
+			return
+		}
+		for _, a := range args[1:] {
+			if !removeAlias(a) {
+				fmt.Fprintf(os.Stderr, "unalias: %s: not found\n", a)
+				lastExitCode = 1
+				continue
+			}
+		}
 	}
 }
 
