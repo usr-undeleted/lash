@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+	"unicode/utf8"
 	"unsafe"
 
 	"golang.org/x/term"
@@ -237,7 +238,8 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 
 		default:
 			if b[0] >= 32 {
-				e.buf = append(e.buf[:e.cursor], append([]rune{rune(b[0])}, e.buf[e.cursor:]...)...)
+				r, _ := e.readRune(b[0])
+				e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
 				e.cursor++
 				prevW = e.redraw(prompt, prevW)
 			}
@@ -252,6 +254,33 @@ func (e *LineEditor) readByte() byte {
 		return 0
 	}
 	return b[0]
+}
+
+func (e *LineEditor) readRune(first byte) (rune, bool) {
+	var need int
+	switch {
+	case first < 0x80:
+		return rune(first), false
+	case first < 0xC0:
+		return utf8.RuneError, true
+	case first < 0xE0:
+		need = 2
+	case first < 0xF0:
+		need = 3
+	default:
+		need = 4
+	}
+	buf := make([]byte, need)
+	buf[0] = first
+	for i := 1; i < need; i++ {
+		b := e.readByte()
+		if b == 0 {
+			return utf8.RuneError, false
+		}
+		buf[i] = b
+	}
+	r, _ := utf8.DecodeRune(buf)
+	return r, r == utf8.RuneError
 }
 
 func (e *LineEditor) handleEscape(prompt string, prevW *int) {
