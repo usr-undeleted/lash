@@ -102,6 +102,7 @@ jobs:
                 max_tokens: 1500
               }')")
           echo "$RESPONSE" | jq -r '.choices[0].message.content // "Failed to summarize"' > /tmp/summary.txt
+          echo "$RESPONSE" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Send to Discord
         env:
