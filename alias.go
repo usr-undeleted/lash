@@ -82,11 +82,17 @@ func parseAliasDefinition(name, value string) (*Alias, error) {
 				if i+1 < len(runes) && ch == '&' && runes[i+1] == '&' {
 					sep = "&&"
 					i += 2
+					for i < len(runes) && (runes[i] == ' ' || runes[i] == '\t') {
+						i++
+					}
 					break
 				}
 				if ch == ';' {
 					sep = ";"
 					i++
+					for i < len(runes) && (runes[i] == ' ' || runes[i] == '\t') {
+						i++
+					}
 					break
 				}
 				if ch == '{' {
@@ -130,10 +136,6 @@ func parseAliasDefinition(name, value string) (*Alias, error) {
 
 		if braceContent == "" {
 			return nil, fmt.Errorf("alias %s: empty {} is not valid, use {NULL} for no arguments or {ALL} for all", name)
-		}
-
-		if strings.Contains(braceContent, ",") {
-			return nil, fmt.Errorf("alias %s: commas are not allowed in argument specifiers, use spaces to separate indices: {1 2 3}", name)
 		}
 
 		var args ArgSpec
