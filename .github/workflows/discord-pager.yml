@@ -94,7 +94,7 @@ jobs:
               --arg prompt "$PROMPT" \
               --arg content "$USER_CONTENT" \
               '{
-                model: "GLM-4.7-Flash",
+                model: "GLM-4.7",
                 messages: [
                   { role: "system", content: $prompt },
                   { role: "user", content: $content }
