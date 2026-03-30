@@ -7,7 +7,8 @@ lash (larp shell) is a Linux shell written in Go. It aims to be a feature-rich i
 - **Language:** Go 1.26
 - **Dependencies:** `golang.org/x/sys`, `golang.org/x/term` (only external deps)
 - **Build:** `./build.sh` (runs `go build -o lash .`, also updates version in README.md)
-- **No tests, no linter, no CI** — just build and run
+- **No tests, no linter** — just build and run
+- **CI:** GitHub Actions workflow (`.github/workflows/discord-pager.yml`) posts AI-summarized commit/PR/issue notifications to Discord. Uses GLM-4.7-Flash for summaries. Triggered on push to main, PR open/close, and issue open/close. Secrets: `DISCORD_WEBHOOK_URL`, `LLM_API_KEY`, `LLM_BASE_URL`
 
 ## Project Structure
 All source is in the root directory, single `package main`:
@@ -51,6 +52,17 @@ All source is in the root directory, single `package main`:
 
 ## Current Phase (Phase 3 — Variable & Expansion Engine)
 Remaining work: local variables, default value expansion, substring/length expansion, variable indirection, command substitution, arithmetic expansion, process substitution, brace expansion.
+
+## Testing Locally
+- Build: `./build.sh` (outputs `./lash` binary)
+- Run interactively: `./lash`
+- Test specific features non-interactively: `echo '<command>' | ./lash`
+- Examples:
+  - Variable expansion: `echo 'echo $HOME' | ./lash`
+  - Pipes: `echo 'echo hello | cat' | ./lash`
+  - Chaining: `echo 'true && echo yes || echo no' | ./lash`
+  - Background: `echo 'sleep 1 & jobs' | ./lash`
+  - PS1: `echo 'lash set-config syntax-color false' | ./lash`
 
 ## Agent Behavior
 - Always commit and push changes when confident they are correct. Don't wait to be asked.

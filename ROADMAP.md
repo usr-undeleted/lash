@@ -56,6 +56,11 @@
 
 ## Phase 5: Scripting & Control Flow
 
+### Phase 4→5 Refactor (prerequisite)
+- [ ] Split `main.go` — extract `tokenizer.go`, `builtins.go`, `executor.go`; keep REPL loop in main.go
+- [ ] Implement minimal AST (`ast.go`) with node types: `Command`, `Pipeline`, `IfStatement`, `WhileStatement`, `ForStatement`, `CaseStatement`
+- [ ] Replace flat token-slice execution with AST-based execution for new control flow constructs
+
 - [ ] `if` / `then` / `elif` / `else` / `fi`
 - [ ] `while` / `do` / `done`
 - [ ] `until` / `do` / `done`
