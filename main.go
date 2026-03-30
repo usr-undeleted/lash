@@ -16,6 +16,7 @@ import (
 )
 
 var lastExitCode int = 0
+var expandError bool
 var cmdNumber int = 0
 var pendingNotifs []string
 var notifMu sync.Mutex
@@ -405,6 +406,11 @@ func executeChain(chain []chainEntry, cfg *Config) {
 		}
 
 		tokens := expandVariables(entry.args)
+		if expandError {
+			expandError = false
+			lastExitCode = 2
+			continue
+		}
 		tokens = expandGlobs(tokens)
 		if len(tokens) == 0 {
 			continue

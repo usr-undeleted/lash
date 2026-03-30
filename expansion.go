@@ -65,6 +65,7 @@ func expandString(s string) string {
 			end, err := findMatchingBacktick(s, i)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				expandError = true
 				result.WriteByte(ch)
 				i++
 				continue
@@ -114,6 +115,7 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 		end, err := findMatchingParen(s, pos+1)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			expandError = true
 			return "", 0
 		}
 		cmd := s[pos+2 : end]
