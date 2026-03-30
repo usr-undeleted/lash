@@ -395,63 +395,6 @@ func expandGlobs(tokens []string) []string {
 	return result
 }
 
-func expandString(s string) string {
-	if len(s) > 0 && s[0] == '~' {
-		if len(s) == 1 || s[1] == '/' {
-			home := os.Getenv("HOME")
-			if home != "" {
-				s = home + s[1:]
-			}
-		}
-	}
-	var result strings.Builder
-	i := 0
-	for i < len(s) {
-		if s[i] == '$' && i+1 < len(s) {
-			if s[i+1] == '?' {
-				result.WriteString(strconv.Itoa(lastExitCode))
-				i += 2
-				continue
-			}
-			if s[i+1] == '{' {
-				end := strings.Index(s[i:], "}")
-				if end >= 0 {
-					varName := s[i+2 : i+end]
-					result.WriteString(os.Getenv(varName))
-					i += end + 1
-					continue
-				}
-			}
-			if s[i+1] == '$' {
-				result.WriteString(strconv.Itoa(os.Getpid()))
-				i += 2
-				continue
-			}
-			if isAlphaOrUnderscore(s[i+1]) {
-				j := i + 1
-				for j < len(s) && isAlnumOrUnderscore(s[j]) {
-					j++
-				}
-				varName := s[i+1 : j]
-				result.WriteString(os.Getenv(varName))
-				i = j
-				continue
-			}
-		}
-		result.WriteByte(s[i])
-		i++
-	}
-	return result.String()
-}
-
-func isAlphaOrUnderscore(c byte) bool {
-	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'
-}
-
-func isAlnumOrUnderscore(c byte) bool {
-	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
-}
-
 func executeChain(chain []chainEntry, cfg *Config) {
 	for _, entry := range chain {
 		if entry.operator == "&&" && lastExitCode != 0 {
@@ -506,6 +449,9 @@ func splitPipes(tokens []string) [][]string {
 func tokenize(line string) []string {
 	inSingle := false
 	inDouble := false
+	substDepth := 0
+	substInSingle := false
+	substInDouble := false
 	var current strings.Builder
 	var tokens []string
 	bytes := []byte(line)
@@ -519,6 +465,44 @@ func tokenize(line string) []string {
 
 	for i := 0; i < len(bytes); i++ {
 		ch := rune(bytes[i])
+
+		if substDepth > 0 {
+			if substInSingle {
+				if bytes[i] == '\'' {
+					substInSingle = false
+				}
+				current.WriteByte(bytes[i])
+				continue
+			}
+			if bytes[i] == '\'' && !substInDouble {
+				substInSingle = true
+				current.WriteByte(bytes[i])
+				continue
+			}
+			if bytes[i] == '"' && !substInSingle {
+				substInDouble = !substInDouble
+				current.WriteByte(bytes[i])
+				continue
+			}
+			if bytes[i] == '\\' && substInDouble && i+1 < len(bytes) {
+				current.WriteByte(bytes[i])
+				i++
+				current.WriteByte(bytes[i])
+				continue
+			}
+			if bytes[i] == '(' && !substInSingle && !substInDouble {
+				substDepth++
+			}
+			if bytes[i] == ')' && !substInSingle && !substInDouble {
+				substDepth--
+				if substDepth == 0 {
+					current.WriteByte(bytes[i])
+					continue
+				}
+			}
+			current.WriteByte(bytes[i])
+			continue
+		}
 
 		if ch == '\'' && !inDouble {
 			inSingle = !inSingle
@@ -563,19 +547,45 @@ func tokenize(line string) []string {
 				flushCurrent()
 				tokens = append(tokens, ">")
 			}
+		case '$':
+			if i+1 < len(bytes) && bytes[i+1] == '(' {
+				if i+2 < len(bytes) && bytes[i+2] == '(' {
+					substDepth = 1
+					current.WriteByte(bytes[i])
+					i++
+					current.WriteByte(bytes[i])
+					i++
+					current.WriteByte(bytes[i])
+					continue
+				}
+				substDepth = 1
+				current.WriteByte(bytes[i])
+				i++
+				current.WriteByte(bytes[i])
+				continue
+			}
+			current.WriteRune(ch)
+		case '`':
+			inBacktick := true
+			current.WriteByte(bytes[i])
+			for i++; i < len(bytes) && inBacktick; i++ {
+				if bytes[i] == '\\' && i+1 < len(bytes) {
+					current.WriteByte(bytes[i])
+					i++
+					current.WriteByte(bytes[i])
+					continue
+				}
+				if bytes[i] == '`' {
+					inBacktick = false
+				}
+				current.WriteByte(bytes[i])
+			}
+			i--
 		default:
 			current.WriteRune(ch)
 		}
 	}
 	flushCurrent()
-	for i, t := range tokens {
-		if len(t) >= 2 {
-			if (t[0] == '\'' && t[len(t)-1] == '\'') ||
-				(t[0] == '"' && t[len(t)-1] == '"') {
-				tokens[i] = t[1 : len(t)-1]
-			}
-		}
-	}
 	return tokens
 }
 

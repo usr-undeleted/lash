@@ -40,7 +40,7 @@
 - [ ] Length expansion (`${#VAR}`)
 - [ ] Variable indirection (`${!ref}`)
 - [x] Tilde expansion (`~`, `~/`, `~user/`)
-- [ ] Command substitution (`$(cmd)`, backtick `` `cmd` ``)
+- [x] Command substitution (`$(cmd)`, backtick `` `cmd` ``)
 - [ ] Arithmetic expansion (`$((expr))`)
 - [ ] Process substitution (`<(cmd)`, `>(cmd)`)
 - [ ] Brace expansion (`{a,b,c}`, `{1..10}`)
