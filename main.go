@@ -176,6 +176,8 @@ func getPrompt() string {
 }
 
 func expandPS1(ps1 string) string {
+	var result string
+
 	fillIdx := strings.Index(ps1, `\f`)
 	if fillIdx >= 0 {
 		left := ps1[:fillIdx]
@@ -189,35 +191,50 @@ func expandPS1(ps1 string) string {
 		leftLineW := lastLineWidth(leftExpanded)
 		rightLineW := firstLineWidth(rightExpanded)
 		if leftLineW+rightLineW >= termW {
-			return leftExpanded + " " + rightExpanded
-		}
-		gap := termW - leftLineW - rightLineW
-		return leftExpanded + strings.Repeat(" ", gap) + rightExpanded
-	}
-	fillFIdx := strings.Index(ps1, `\F`)
-	if fillFIdx >= 0 {
-		runes := []rune(ps1[fillFIdx+2:])
-		if len(runes) > 0 {
-			fillChar := runes[0]
-			afterFill := string(runes[1:])
-			left := ps1[:fillFIdx]
-			right := afterFill
-			leftExpanded := expandPS1Escapes(left)
-			rightExpanded := expandPS1Escapes(right)
-			termW := getTermWidth()
-			if termW <= 0 {
-				termW = 80
-			}
-			leftLineW := lastLineWidth(leftExpanded)
-			rightLineW := firstLineWidth(rightExpanded)
-			if leftLineW+rightLineW >= termW {
-				return leftExpanded + " " + rightExpanded
-			}
+			result = leftExpanded + " " + rightExpanded
+		} else {
 			gap := termW - leftLineW - rightLineW
-			return leftExpanded + strings.Repeat(string(fillChar), gap) + rightExpanded
+			result = leftExpanded + strings.Repeat(" ", gap) + rightExpanded
+		}
+	} else {
+		fillFIdx := strings.Index(ps1, `\F`)
+		if fillFIdx >= 0 {
+			runes := []rune(ps1[fillFIdx+2:])
+			if len(runes) > 0 {
+				fillChar := runes[0]
+				afterFill := string(runes[1:])
+				left := ps1[:fillFIdx]
+				right := afterFill
+				leftExpanded := expandPS1Escapes(left)
+				rightExpanded := expandPS1Escapes(right)
+				termW := getTermWidth()
+				if termW <= 0 {
+					termW = 80
+				}
+				leftLineW := lastLineWidth(leftExpanded)
+				rightLineW := firstLineWidth(rightExpanded)
+				if leftLineW+rightLineW >= termW {
+					result = leftExpanded + " " + rightExpanded
+				} else {
+					gap := termW - leftLineW - rightLineW
+					result = leftExpanded + strings.Repeat(string(fillChar), gap) + rightExpanded
+				}
+			} else {
+				result = expandPS1Escapes(ps1)
+			}
+		} else {
+			result = expandPS1Escapes(ps1)
 		}
 	}
-	return expandPS1Escapes(ps1)
+
+	termW := getTermWidth()
+	if termW <= 0 {
+		termW = 80
+	}
+	if lastLineWidth(result) == termW {
+		result += "\r\n"
+	}
+	return result
 }
 
 func expandPS1Escapes(ps1 string) string {

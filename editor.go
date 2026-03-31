@@ -740,7 +740,9 @@ func (e *LineEditor) redrawSearch(prompt string, prevBufW int, query []rune, mat
 		termW = 80
 	}
 
-	prevRows := (pvis + prevBufW + termW - 1) / termW
+	typingCol := pvis % termW
+
+	prevRows := (typingCol + prevBufW + termW - 1) / termW
 	if prevRows < 1 {
 		prevRows = 1
 	}
@@ -759,7 +761,9 @@ func (e *LineEditor) redrawSearch(prompt string, prevBufW int, query []rune, mat
 	}
 
 	buf.WriteString("\r")
-	buf.WriteString(fmt.Sprintf("\033[%dC", pvis))
+	if typingCol > 0 {
+		buf.WriteString(fmt.Sprintf("\033[%dC", typingCol))
+	}
 	buf.WriteString("\033[K")
 
 	for i := 1; i < prevRows; i++ {
@@ -771,7 +775,9 @@ func (e *LineEditor) redrawSearch(prompt string, prevBufW int, query []rune, mat
 	}
 
 	buf.WriteString("\r")
-	buf.WriteString(fmt.Sprintf("\033[%dC", pvis))
+	if typingCol > 0 {
+		buf.WriteString(fmt.Sprintf("\033[%dC", typingCol))
+	}
 	buf.WriteString("\033[?25l")
 	buf.WriteString(display)
 	buf.WriteString("\033[?25h")
@@ -851,7 +857,9 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 		termW = 80
 	}
 
-	prevRows := (pvis + prevBufW + termW - 1) / termW
+	typingCol := pvis % termW
+
+	prevRows := (typingCol + prevBufW + termW - 1) / termW
 	if prevRows < 1 {
 		prevRows = 1
 	}
@@ -863,7 +871,9 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	}
 
 	buf.WriteString("\r")
-	buf.WriteString(fmt.Sprintf("\033[%dC", pvis))
+	if typingCol > 0 {
+		buf.WriteString(fmt.Sprintf("\033[%dC", typingCol))
+	}
 	buf.WriteString("\033[K")
 
 	for i := 1; i < prevRows; i++ {
@@ -875,7 +885,9 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	}
 
 	buf.WriteString("\r")
-	buf.WriteString(fmt.Sprintf("\033[%dC", pvis))
+	if typingCol > 0 {
+		buf.WriteString(fmt.Sprintf("\033[%dC", typingCol))
+	}
 
 	var display string
 	if e.config != nil && e.config.SyntaxColor && len(e.buf) > 0 {
@@ -889,14 +901,14 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	newW := bufWidth(e.buf)
 	cursorW := bufWidth(e.buf[:e.cursor])
 
-	targetPos := pvis + cursorW
+	targetPos := typingCol + cursorW
 	if targetPos > 0 && targetPos%termW == 0 {
 		e.screenRow = targetPos/termW - 1
 	} else {
 		e.screenRow = targetPos / termW
 	}
 
-	endPos := pvis + newW
+	endPos := typingCol + newW
 	var endRow int
 	if endPos > 0 && endPos%termW == 0 {
 		endRow = endPos/termW - 1
