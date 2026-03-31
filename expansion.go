@@ -466,8 +466,8 @@ func preprocessArithExpr(expr string) string {
 					end++
 				}
 				if end < len(runes) {
-					name := string(runes[i+2 : end])
-					result.WriteString(getVar(name))
+					expanded := expandString(string(runes[i : end+1]))
+					result.WriteString(expanded)
 					i = end + 1
 					continue
 				}
