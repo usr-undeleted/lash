@@ -19,6 +19,9 @@ var logoMini string
 //go:embed ROADMAP.md
 var roadmap string
 
+//go:embed README.md
+var readme string
+
 func getVersion() string {
 	type phaseData struct {
 		number    int
@@ -62,7 +65,31 @@ func getVersion() string {
 		idx = len(phases) - 1
 	}
 
-	return fmt.Sprintf("v%d.%d", phases[idx].number, phases[idx].completed)
+	return fmt.Sprintf("v%d.%d%s", phases[idx].number, phases[idx].completed, getPatchVersion())
+}
+
+func getPatchVersion() string {
+	scanner := bufio.NewScanner(strings.NewReader(readme))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if idx := strings.Index(line, "version-v"); idx >= 0 {
+			ver := line[idx+8:]
+			end := len(ver)
+			for i, c := range ver {
+				if c == '-' {
+					end = i
+					break
+				}
+			}
+			ver = ver[:end]
+			parts := strings.Split(ver, ".")
+			if len(parts) >= 3 {
+				return "." + parts[2]
+			}
+			break
+		}
+	}
+	return ""
 }
 
 func getLogo(size string) string {
