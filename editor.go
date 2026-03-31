@@ -783,12 +783,17 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 		endRow = endPos / termW
 	}
 
-	rowsUp := endRow - e.screenRow
-	if rowsUp > 0 {
-		buf.WriteString(fmt.Sprintf("\033[%dA", rowsUp))
+	rowsDiff := endRow - e.screenRow
+	if rowsDiff > 0 {
+		buf.WriteString(fmt.Sprintf("\033[%dA", rowsDiff))
+	} else if rowsDiff < 0 {
+		buf.WriteString(fmt.Sprintf("\033[%dB", -rowsDiff))
 	}
 	buf.WriteString("\r")
 	targetCol := targetPos % termW
+	if targetPos > 0 && targetCol == 0 {
+		targetCol = termW - 1
+	}
 	if targetCol > 0 {
 		buf.WriteString(fmt.Sprintf("\033[%dC", targetCol))
 	}
