@@ -237,6 +237,18 @@ func expandPS1(ps1 string) string {
 	return result
 }
 
+func tryParseBrace(runes []rune, pos int) (content string, consumed int, ok bool) {
+	if pos >= len(runes) || runes[pos] != '{' {
+		return "", 0, false
+	}
+	for j := pos + 1; j < len(runes); j++ {
+		if runes[j] == '}' {
+			return string(runes[pos+1 : j]), j - pos + 1, true
+		}
+	}
+	return "", 0, false
+}
+
 func expandPS1Escapes(ps1 string) string {
 	var b strings.Builder
 	runes := []rune(ps1)
@@ -313,12 +325,24 @@ func expandPS1Escapes(ps1 string) string {
 		case '[':
 		case ']':
 		case 'g':
-			branch := getGitBranch()
-			if branch != "" {
-				b.WriteString(branch)
+			if content, consumed, ok := tryParseBrace(runes, i+1); ok {
+				if getGitBranch() != "" {
+					b.WriteString(expandPS1Escapes(content))
+				}
+				i += consumed
+			} else {
+				branch := getGitBranch()
+				if branch != "" {
+					b.WriteString(branch)
+				}
 			}
 		case 'G':
-			if i+1 < len(runes) {
+			if content, consumed, ok := tryParseBrace(runes, i+1); ok {
+				if isGitDirty() {
+					b.WriteString(expandPS1Escapes(content))
+				}
+				i += consumed
+			} else if i+1 < len(runes) {
 				if isGitDirty() {
 					b.WriteRune(runes[i+1])
 				}
@@ -329,14 +353,24 @@ func expandPS1Escapes(ps1 string) string {
 				i++
 			}
 		case 'x':
-			if i+1 < len(runes) {
+			if content, consumed, ok := tryParseBrace(runes, i+1); ok {
+				if lastExitCode >= 1 {
+					b.WriteString(expandPS1Escapes(content))
+				}
+				i += consumed
+			} else if i+1 < len(runes) {
 				if lastExitCode >= 1 {
 					b.WriteRune(runes[i+1])
 				}
 				i++
 			}
 		case 'X':
-			if lastExitCode >= 1 {
+			if content, consumed, ok := tryParseBrace(runes, i+1); ok {
+				if lastExitCode >= 1 {
+					b.WriteString(expandPS1Escapes(content))
+				}
+				i += consumed
+			} else if lastExitCode >= 1 {
 				b.WriteString(fmt.Sprintf("%s%d%s", colorRed, lastExitCode, colorReset))
 			}
 		case '!':
