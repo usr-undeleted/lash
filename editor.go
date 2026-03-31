@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
+	"time"
 	"unicode/utf8"
 	"unsafe"
 
@@ -35,6 +37,7 @@ const (
 func NewLineEditor(cfg *Config) *LineEditor {
 	e := &LineEditor{config: cfg}
 	e.initKeySequences()
+	e.loadHistory()
 	return e
 }
 
@@ -62,6 +65,108 @@ func (e *LineEditor) initKeySequences() {
 	// xterm-style CSI sequences for Ctrl+Backspace
 	e.keySeqs["\x1b[3;5~"] = actionDeleteWordBack
 	e.keySeqs["\x1b[3^"] = actionDeleteWordBack // rxvt
+}
+
+func historyPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".lash_history")
+}
+
+func (e *LineEditor) loadHistory() {
+	path := historyPath()
+	if path == "" {
+		return
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	var entries []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#") {
+			parts := strings.SplitN(line, " ", 2)
+			if len(parts) == 2 {
+				_, err := strconv.ParseInt(parts[0][1:], 10, 64)
+				if err == nil {
+					cmd := parts[1]
+					if cmd != "" {
+						entries = append(entries, cmd)
+					}
+					continue
+				}
+			}
+			continue
+		}
+		if strings.TrimSpace(line) != "" {
+			entries = append(entries, strings.TrimSpace(line))
+		}
+	}
+
+	limit := e.config.HistorySize
+	if len(entries) > limit {
+		entries = entries[len(entries)-limit:]
+	}
+	e.history = entries
+}
+
+func (e *LineEditor) saveHistory(command string) {
+	path := historyPath()
+	if path == "" {
+		return
+	}
+
+	dir := filepath.Dir(path)
+	os.MkdirAll(dir, 0755)
+
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	fmt.Fprintf(f, "#%d %s\n", time.Now().Unix(), command)
+	f.Close()
+
+	if len(e.history) > e.config.HistorySize {
+		e.trimHistoryFile()
+	}
+}
+
+func (e *LineEditor) trimHistoryFile() {
+	path := historyPath()
+	if path == "" {
+		return
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	var lines []string
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	f.Close()
+
+	limit := e.config.HistorySize
+	if len(lines) <= limit {
+		return
+	}
+	lines = lines[len(lines)-limit:]
+
+	f, err = os.Create(path)
+	if err != nil {
+		return
+	}
+	for _, l := range lines {
+		fmt.Fprintln(f, l)
+	}
+	f.Close()
 }
 
 func isTerminal() bool {
@@ -205,7 +310,10 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 			os.Stdout.Write([]byte("\r\n"))
 			line := string(e.buf)
 			if strings.TrimSpace(line) != "" {
-				e.history = append(e.history, line)
+				if len(e.history) == 0 || e.history[len(e.history)-1] != line {
+					e.history = append(e.history, line)
+					e.saveHistory(line)
+				}
 			}
 			return line, nil
 
@@ -535,7 +643,10 @@ func (e *LineEditor) handleReverseSearch(prompt string, prevBufW int) int {
 			os.Stdout.Write([]byte("\r\n"))
 			line := string(e.buf)
 			if strings.TrimSpace(line) != "" {
-				e.history = append(e.history, line)
+				if len(e.history) == 0 || e.history[len(e.history)-1] != line {
+					e.history = append(e.history, line)
+					e.saveHistory(line)
+				}
 			}
 			e.accepted = true
 			return bufWidth(e.buf)

@@ -6,12 +6,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
 type Config struct {
 	SyntaxColor bool
 	LogoSize    string
+	HistorySize int
 }
 
 func configPath() string {
@@ -23,7 +25,7 @@ func configPath() string {
 }
 
 func LoadConfig() *Config {
-	cfg := &Config{LogoSize: "big"}
+	cfg := &Config{LogoSize: "big", HistorySize: 1000}
 	path := configPath()
 	if path == "" {
 		return cfg
@@ -51,6 +53,10 @@ func LoadConfig() *Config {
 			cfg.SyntaxColor = val == "1"
 		case "logosize":
 			cfg.LogoSize = val
+		case "history-size":
+			if n, err := strconv.Atoi(val); err == nil && n > 0 {
+				cfg.HistorySize = n
+			}
 		}
 	}
 	return cfg
@@ -68,6 +74,7 @@ func (c *Config) Save() error {
 	var lines []string
 	lines = append(lines, fmt.Sprintf("syntax-color = %s", boolToStr(c.SyntaxColor)))
 	lines = append(lines, fmt.Sprintf("logosize = %s", c.LogoSize))
+	lines = append(lines, fmt.Sprintf("history-size = %d", c.HistorySize))
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -88,6 +95,12 @@ func (c *Config) Set(key, val string) bool {
 		switch val {
 		case "mini", "small", "big":
 			c.LogoSize = val
+			return true
+		}
+		return false
+	case "history-size":
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			c.HistorySize = n
 			return true
 		}
 		return false
