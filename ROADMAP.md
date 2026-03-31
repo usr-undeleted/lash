@@ -37,7 +37,7 @@
 - [x] Variable expansion (`$VAR`, `${VAR}`)
 - [ ] Default value expansion (`${VAR:-default}`, `${VAR:=default}`, `${VAR:+alt}`, `${VAR:?err}`)
 - [ ] Substring expansion (`${VAR:offset:length}`)
-- [ ] Length expansion (`${#VAR}`)
+- [x] Length expansion (`${#VAR}`)
 - [ ] Variable indirection (`${!ref}`)
 - [x] Tilde expansion (`~`, `~/`, `~user/`)
 - [x] Command substitution (`$(cmd)`, backtick `` `cmd` ``)

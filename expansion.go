@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"unicode/utf8"
 )
 
 func expandString(s string) string {
@@ -104,8 +105,12 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 		if end < 0 {
 			return "", 0
 		}
-		varName := s[pos+2 : pos+end]
-		return getVar(varName), end + 1
+		inner := s[pos+2 : pos+end]
+		if len(inner) > 0 && inner[0] == '#' {
+			val := getVar(inner[1:])
+			return strconv.Itoa(utf8.RuneCountInString(val)), end + 1
+		}
+		return getVar(inner), end + 1
 
 	case next == '(':
 		if pos+2 < len(s) && s[pos+2] == '(' {
