@@ -101,16 +101,59 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 		return strconv.Itoa(os.Getpid()), 2
 
 	case next == '{':
-		end := strings.Index(s[pos:], "}")
-		if end < 0 {
+		end, err := findMatchingBrace(s, pos+1)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			expandError = true
 			return "", 0
 		}
-		inner := s[pos+2 : pos+end]
+		inner := s[pos+2 : end]
+
+		// ${#VAR} — length expansion
 		if len(inner) > 0 && inner[0] == '#' {
 			val := getVar(inner[1:])
-			return strconv.Itoa(utf8.RuneCountInString(val)), end + 1
+			return strconv.Itoa(utf8.RuneCountInString(val)), end - pos + 1
 		}
-		return getVar(inner), end + 1
+
+		// ${VAR:-default}, ${VAR:=default}, ${VAR:+alt}, ${VAR:?err}
+		varName, operand, op := parseBraceExpansion(inner)
+		if op != "" {
+			val := getVar(varName)
+			switch op {
+			case ":-":
+				if val == "" {
+					return expandString(operand), end - pos + 1
+				}
+				return val, end - pos + 1
+			case ":=":
+				if val == "" {
+					expanded := expandString(operand)
+					// Preserve exported status if variable was previously exported
+					_, isExported := exportedVars[varName]
+					setVar(varName, expanded, isExported)
+					return expanded, end - pos + 1
+				}
+				return val, end - pos + 1
+			case ":+":
+				if val != "" {
+					return expandString(operand), end - pos + 1
+				}
+				return "", end - pos + 1
+			case ":?":
+				if val == "" {
+					errMsg := operand
+					if errMsg == "" {
+						errMsg = "parameter null or not set"
+					}
+					fmt.Fprintf(os.Stderr, "lash: %s: %s\n", varName, errMsg)
+					expandError = true
+					return "", end - pos + 1
+				}
+				return val, end - pos + 1
+			}
+		}
+
+		return getVar(inner), end - pos + 1
 
 	case next == '(':
 		if pos+2 < len(s) && s[pos+2] == '(' {
@@ -239,6 +282,85 @@ func findMatchingBacktick(s string, openPos int) (int, error) {
 	}
 
 	return -1, fmt.Errorf("unmatched `")
+}
+
+func findMatchingBrace(s string, openPos int) (int, error) {
+	depth := 1
+	inSingle := false
+	inDouble := false
+	i := openPos + 1
+
+	for i < len(s) {
+		ch := s[i]
+
+		if inSingle {
+			if ch == '\'' {
+				inSingle = false
+			}
+			i++
+			continue
+		}
+
+		if ch == '\'' && !inDouble {
+			inSingle = true
+			i++
+			continue
+		}
+
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			i++
+			continue
+		}
+
+		if ch == '\\' && inDouble && i+1 < len(s) {
+			i += 2
+			continue
+		}
+
+		if !inSingle && !inDouble {
+			if ch == '$' && i+1 < len(s) && s[i+1] == '{' {
+				depth++
+				i += 2
+				continue
+			}
+			if ch == '}' {
+				depth--
+				if depth == 0 {
+					return i, nil
+				}
+			}
+		}
+
+		i++
+	}
+
+	return -1, fmt.Errorf("unmatched ${")
+}
+
+func parseBraceExpansion(inner string) (varName, operand, op string) {
+	if len(inner) == 0 {
+		return "", "", ""
+	}
+	j := 0
+	if isAlphaOrUnderscore(inner[0]) {
+		j = 1
+		for j < len(inner) && isAlnumOrUnderscore(inner[j]) {
+			j++
+		}
+	}
+	varName = inner[:j]
+
+	if j+1 < len(inner) && inner[j] == ':' {
+		switch inner[j+1] {
+		case '-', '=', '+', '?':
+			op = inner[j : j+2]
+			operand = inner[j+2:]
+			return varName, operand, op
+		}
+	}
+
+	return varName, "", ""
 }
 
 func runCommandSubstitution(cmd string) (string, int) {
