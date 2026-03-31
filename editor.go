@@ -23,11 +23,8 @@ type LineEditor struct {
 	config    *Config
 	reader    *bufio.Reader
 	accepted  bool
-<<<<<<< HEAD
 	keySeqs   map[string]string // terminfo extended key sequences: sequence -> action name
-=======
 	screenRow int
->>>>>>> 016a014 (fix: multi-line editor cursor positioning and row clearing)
 }
 
 // action constants for key sequence dispatch
