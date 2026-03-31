@@ -974,13 +974,11 @@ func (p *arithParser) parseAssignment() (int64, bool, error) {
 	for p.pos < len(p.expr) && isAlnumOrUnderscore(byte(p.expr[p.pos])) {
 		p.pos++
 	}
-	if p.pos > start && p.pos < len(p.expr) {
-		savePos := p.pos
+	if p.pos > start {
+		nameEnd := p.pos
 		p.skipSpaces()
-		if p.peek() == '=' && !p.peekToken("==") && !p.peekToken("!=") {
-			p.pos = savePos
-			name := string(p.expr[start:savePos])
-			p.skipSpaces()
+		if p.pos < len(p.expr) && p.expr[p.pos] == '=' && !p.peekToken("==") && !p.peekToken("!=") {
+			name := string(p.expr[start:nameEnd])
 			p.pos++
 			val, _, err := p.parseAssignment()
 			if err != nil {
