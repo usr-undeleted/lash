@@ -20,7 +20,14 @@ END {
     print "v" phase_num[idx] "." phase_done[idx]
 }
 ' ROADMAP.md)
-sed -i "s|version-v[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?|version-${version}|" README.md
+current_patch=$(grep -oP 'version-v[0-9]+\.[0-9]+\.\K[0-9]+' README.md || true)
+current_mm=$(grep -oP 'version-v\K[0-9]+\.[0-9]+' README.md)
+new_mm=$(echo "$version" | sed 's/^v//')
+if [ "$current_mm" = "$new_mm" ] && [ -n "$current_patch" ]; then
+    sed -i "s|version-v[0-9]\+\.[0-9]\+\.[0-9]\+|version-${version}.${current_patch}|" README.md
+else
+    sed -i "s|version-v[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?|version-${version}|" README.md
+fi
 go build -o lash .
 [ -f ~/.lashrc ] || cat > ~/.lashrc << 'EOF'
 # lash startup configuration
