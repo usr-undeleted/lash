@@ -105,7 +105,7 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 			return "", 0
 		}
 		varName := s[pos+2 : pos+end]
-		return os.Getenv(varName), end + 1
+		return getVar(varName), end + 1
 
 	case next == '(':
 		if pos+2 < len(s) && s[pos+2] == '(' {
@@ -129,7 +129,7 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 			j++
 		}
 		varName := s[pos+1 : j]
-		return os.Getenv(varName), j - pos
+		return getVar(varName), j - pos
 	}
 
 	return "", 0

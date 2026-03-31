@@ -32,8 +32,8 @@
 - [x] Basic wildcard/glob expansion (`*`, `?`)
 ## Phase 3: Variable & Expansion Engine (current)
 
-- [ ] Local variables (`name=value`)
-- [ ] Environment variables (`export name=value`)
+- [x] Local variables (`name=value`)
+- [x] Environment variables (`export name=value`)
 - [x] Variable expansion (`$VAR`, `${VAR}`)
 - [ ] Default value expansion (`${VAR:-default}`, `${VAR:=default}`, `${VAR:+alt}`, `${VAR:?err}`)
 - [ ] Substring expansion (`${VAR:offset:length}`)

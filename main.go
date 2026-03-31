@@ -21,7 +21,77 @@ var cmdNumber int = 0
 var pendingNotifs []string
 var notifMu sync.Mutex
 
+var varTable map[string]string
+var exportedVars map[string]bool
+var varMu sync.Mutex
+
 const defaultPS1 = `\[\e[1;36m\]\u@\h\[\e[0m\] \[\e[1;33m\]\w\[\e[0m\] on \[\e[1m\]\g\G◇\[\e[0m\]\x✗\X \n\[\e[1m\]╰\$\[\e[0m\] `
+
+func initVarTable() {
+	varTable = make(map[string]string)
+	exportedVars = make(map[string]bool)
+	for _, env := range os.Environ() {
+		if idx := strings.Index(env, "="); idx >= 0 {
+			key := env[:idx]
+			val := env[idx+1:]
+			varTable[key] = val
+			exportedVars[key] = true
+		}
+	}
+}
+
+func getVar(name string) string {
+	varMu.Lock()
+	defer varMu.Unlock()
+	if val, ok := varTable[name]; ok {
+		return val
+	}
+	return os.Getenv(name)
+}
+
+func setVar(name, value string, exported bool) {
+	varMu.Lock()
+	defer varMu.Unlock()
+	varTable[name] = value
+	if exported {
+		exportedVars[name] = true
+		os.Setenv(name, value)
+	}
+	if !exported {
+		if exportedVars[name] {
+			os.Setenv(name, value)
+		}
+	}
+}
+
+func unsetVar(name string) {
+	varMu.Lock()
+	defer varMu.Unlock()
+	delete(varTable, name)
+	delete(exportedVars, name)
+	os.Unsetenv(name)
+}
+
+func isExported(name string) bool {
+	varMu.Lock()
+	defer varMu.Unlock()
+	return exportedVars[name]
+}
+
+func isValidVarName(name string) bool {
+	if len(name) == 0 {
+		return false
+	}
+	if !isAlphaOrUnderscore(name[0]) {
+		return false
+	}
+	for i := 1; i < len(name); i++ {
+		if !isAlnumOrUnderscore(name[i]) {
+			return false
+		}
+	}
+	return true
+}
 
 func getExitCode(err error) int {
 	if err == nil {
@@ -363,7 +433,9 @@ func sourceLashrc(cfg *Config) {
 func main() {
 	initJobControl()
 	initAliases()
+	initVarTable()
 	os.Setenv("PS1", defaultPS1)
+	setVar("PS1", defaultPS1, true)
 
 	cfg := LoadConfig()
 	sourceLashrc(cfg)
@@ -504,6 +576,61 @@ func executeChain(chain []chainEntry, cfg *Config) {
 		if tokens[len(tokens)-1] == "&" {
 			background = true
 			tokens = tokens[:len(tokens)-1]
+		}
+
+		assignEnd := 0
+		for _, t := range tokens {
+			eqIdx := strings.Index(t, "=")
+			if eqIdx < 1 {
+				break
+			}
+			name := t[:eqIdx]
+			if !isValidVarName(name) {
+				break
+			}
+			assignEnd++
+		}
+
+		if assignEnd > 0 {
+			assignments := tokens[:assignEnd]
+			rest := tokens[assignEnd:]
+
+			if len(rest) == 0 {
+				for _, a := range assignments {
+					eqIdx := strings.Index(a, "=")
+					name := a[:eqIdx]
+					val := a[eqIdx+1:]
+					setVar(name, val, false)
+				}
+				lastExitCode = 0
+				continue
+			}
+
+			prefixEnv := make(map[string]string)
+			for _, a := range assignments {
+				eqIdx := strings.Index(a, "=")
+				name := a[:eqIdx]
+				val := a[eqIdx+1:]
+				prefixEnv[name] = val
+			}
+
+			segments := splitPipes(rest)
+			if len(segments) == 1 {
+				if isBuiltin(segments[0][0]) {
+					for name, val := range prefixEnv {
+						setVar(name, val, false)
+					}
+					executeBuiltin(segments[0], cfg)
+					for name := range prefixEnv {
+						unsetVar(name)
+					}
+				} else {
+					executeSimpleWithEnv(segments[0], background, prefixEnv)
+				}
+			} else {
+				executePipelineWithEnv(segments, background, prefixEnv)
+			}
+			continue
 		}
 
 		segments := splitPipes(tokens)
@@ -856,8 +983,18 @@ func executeBuiltin(args []string, cfg *Config) {
 		}
 		for _, a := range args[1:] {
 			eqIdx := strings.Index(a, "=")
-			if eqIdx < 1 {
-				lastExitCode = 1
+			if eqIdx < 0 {
+				if isValidVarName(a) {
+					varMu.Lock()
+					exportedVars[a] = true
+					varMu.Unlock()
+					if val, ok := varTable[a]; ok {
+						os.Setenv(a, val)
+					}
+					lastExitCode = 0
+				} else {
+					lastExitCode = 1
+				}
 				continue
 			}
 			key := a[:eqIdx]
@@ -865,7 +1002,7 @@ func executeBuiltin(args []string, cfg *Config) {
 			if len(val) >= 2 && ((val[0] == '\'' && val[len(val)-1] == '\'') || (val[0] == '"' && val[len(val)-1] == '"')) {
 				val = val[1 : len(val)-1]
 			}
-			os.Setenv(key, val)
+			setVar(key, val, true)
 			lastExitCode = 0
 		}
 	case "lash":
@@ -949,11 +1086,20 @@ func executeBuiltin(args []string, cfg *Config) {
 			return
 		}
 		for _, a := range args[1:] {
-			os.Unsetenv(a)
+			unsetVar(a)
 		}
 		lastExitCode = 0
 	case "env":
-		for _, e := range os.Environ() {
+		varMu.Lock()
+		var envVars []string
+		for key := range exportedVars {
+			if val, ok := varTable[key]; ok {
+				envVars = append(envVars, key+"="+val)
+			}
+		}
+		varMu.Unlock()
+		sort.Strings(envVars)
+		for _, e := range envVars {
 			fmt.Println(e)
 		}
 		lastExitCode = 0
@@ -1209,6 +1355,230 @@ func executePipeline(segments [][]string, background bool) {
 
 		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Stderr = os.Stderr
+
+		if inFile != "" {
+			f, err := os.Open(inFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				lastExitCode = 1
+				return
+			}
+			defer f.Close()
+			cmd.Stdin = f
+		} else if i == 0 {
+			cmd.Stdin = os.Stdin
+		} else {
+			cmd.Stdin = pipes[i-1].r
+		}
+
+		if outFile != "" {
+			flag := os.O_CREATE | os.O_WRONLY
+			if appendMode {
+				flag |= os.O_APPEND
+			} else {
+				flag |= os.O_TRUNC
+			}
+			f, err := os.OpenFile(outFile, flag, 0644)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				lastExitCode = 1
+				return
+			}
+			defer f.Close()
+			cmd.Stdout = f
+		} else if i == len(segments)-1 {
+			cmd.Stdout = os.Stdout
+		} else {
+			cmd.Stdout = pipes[i].w
+		}
+
+		cmds = append(cmds, cmd)
+		cmdArgsList = append(cmdArgsList, cmdArgs)
+	}
+
+	for _, cmd := range cmds {
+		if err := cmd.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			lastExitCode = 1
+			return
+		}
+	}
+
+	for _, p := range pipes {
+		p.w.Close()
+	}
+
+	pids := make([]int, len(cmds))
+	for i, cmd := range cmds {
+		pids[i] = cmd.Process.Pid
+	}
+
+	pgid := pids[0]
+
+	commandStr := strings.Join(segments[0], " ")
+	for _, seg := range segments[1:] {
+		commandStr += " | " + strings.Join(seg, " ")
+	}
+
+	if background {
+		job := addJob(pids[0], pgid, JobRunning, commandStr)
+		fmt.Printf("[%d] %d\n", job.Number, pids[0])
+
+		go func() {
+			for _, pid := range pids {
+				var status syscall.WaitStatus
+				for {
+					wp, we := syscall.Wait4(pid, &status, 0, nil)
+					if we == syscall.EINTR {
+						continue
+					}
+					if wp == pid {
+						break
+					}
+					break
+				}
+			}
+		}()
+
+		for _, p := range pipes {
+			p.r.Close()
+		}
+		lastExitCode = 0
+		return
+	}
+
+	exitCode := waitForeground(pids, pgid, commandStr)
+	if exitCode < 0 {
+		lastExitCode = 128 + int(syscall.SIGTSTP)
+	} else {
+		lastExitCode = exitCode
+	}
+
+	for _, p := range pipes {
+		p.r.Close()
+	}
+}
+
+func buildEnvWithPrefix(prefix map[string]string) []string {
+	varMu.Lock()
+	var env []string
+	seen := make(map[string]bool)
+	for k, v := range prefix {
+		env = append(env, k+"="+v)
+		seen[k] = true
+	}
+	for key := range exportedVars {
+		if !seen[key] {
+			if val, ok := varTable[key]; ok {
+				env = append(env, key+"="+val)
+			}
+		}
+	}
+	varMu.Unlock()
+	return env
+}
+
+func executeSimpleWithEnv(args []string, background bool, prefixEnv map[string]string) {
+	cmdArgs, inFile, outFile, appendMode := parseRedirection(args)
+	if len(cmdArgs) == 0 {
+		return
+	}
+
+	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Env = buildEnvWithPrefix(prefixEnv)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if inFile != "" {
+		f, err := os.Open(inFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			lastExitCode = 1
+			return
+		}
+		defer f.Close()
+		cmd.Stdin = f
+	}
+
+	if outFile != "" {
+		flag := os.O_CREATE | os.O_WRONLY
+		if appendMode {
+			flag |= os.O_APPEND
+		} else {
+			flag |= os.O_TRUNC
+		}
+		f, err := os.OpenFile(outFile, flag, 0644)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			lastExitCode = 1
+			return
+		}
+		defer f.Close()
+		cmd.Stdout = f
+	}
+
+	err := cmd.Start()
+	if err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", cmdArgs[0])
+			lastExitCode = 127
+		} else {
+			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			lastExitCode = 1
+		}
+		return
+	}
+
+	commandStr := strings.Join(cmdArgs, " ")
+
+	if background {
+		pid := cmd.Process.Pid
+		job := addJob(pid, pid, JobRunning, commandStr)
+		fmt.Printf("[%d] %d\n", job.Number, pid)
+		lastExitCode = 0
+		return
+	}
+
+	exitCode := waitForeground([]int{cmd.Process.Pid}, cmd.Process.Pid, commandStr)
+	if exitCode < 0 {
+		lastExitCode = 128 + int(syscall.SIGTSTP)
+	} else {
+		lastExitCode = exitCode
+	}
+}
+
+func executePipelineWithEnv(segments [][]string, background bool, prefixEnv map[string]string) {
+	type pipePair struct {
+		r *os.File
+		w *os.File
+	}
+
+	pipes := make([]pipePair, len(segments)-1)
+	for i := range pipes {
+		r, w, err := os.Pipe()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			lastExitCode = 1
+			return
+		}
+		pipes[i] = pipePair{r, w}
+	}
+
+	childEnv := buildEnvWithPrefix(prefixEnv)
+	var cmds []*exec.Cmd
+	var cmdArgsList [][]string
+	for i, seg := range segments {
+		cmdArgs, inFile, outFile, appendMode := parseRedirection(seg)
+		if len(cmdArgs) == 0 {
+			return
+		}
+
+		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Env = childEnv
 		cmd.Stderr = os.Stderr
 
 		if inFile != "" {
