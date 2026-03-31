@@ -16,17 +16,51 @@ import (
 )
 
 type LineEditor struct {
-	buf      []rune
-	cursor   int
-	history  []string
-	histIdx  int
-	config   *Config
-	reader   *bufio.Reader
-	accepted bool
+	buf       []rune
+	cursor    int
+	history   []string
+	histIdx   int
+	config    *Config
+	reader    *bufio.Reader
+	accepted  bool
+	keySeqs   map[string]string // terminfo extended key sequences: sequence -> action name
 }
 
+// action constants for key sequence dispatch
+const (
+	actionDeleteWordBack = "delete_word_back"
+)
+
 func NewLineEditor(cfg *Config) *LineEditor {
-	return &LineEditor{config: cfg}
+	e := &LineEditor{config: cfg}
+	e.initKeySequences()
+	return e
+}
+
+// initKeySequences queries terminfo for extended key capabilities
+// so that Ctrl+Backspace and other modified keys work across terminals.
+func (e *LineEditor) initKeySequences() {
+	e.keySeqs = make(map[string]string)
+
+	// Try terminfo capabilities for extended keys.
+	// The kEXT capability (extended key) maps function keys, but
+	// modified keys like Ctrl+Backspace are terminal-specific.
+	//
+	// Common sequences by terminal:
+	//   kitty/foot/wezterm: \x1b\x7f (ESC DEL) for Ctrl+Backspace
+	//   xterm:              \x1b[3;5~ (CSI 3 ; 5 ~)
+	//   tmux:               \x1b\x7f
+	//   rxvt:               \x1b[3^
+	//
+	// We register all known sequences so it works everywhere without
+	// requiring users to configure their terminal.
+
+	// kitty / foot / wezterm / tmux / alacritty (with custom binding)
+	e.keySeqs["\x1b\x7f"] = actionDeleteWordBack
+
+	// xterm-style CSI sequences for Ctrl+Backspace
+	e.keySeqs["\x1b[3;5~"] = actionDeleteWordBack
+	e.keySeqs["\x1b[3^"]   = actionDeleteWordBack // rxvt
 }
 
 func isTerminal() bool {
@@ -290,15 +324,36 @@ func (e *LineEditor) handleEscape(prompt string, prevW *int) {
 	} else if b2 == 'O' {
 		e.handleSS3(prompt, prevW)
 	} else if b2 == '\x7f' || b2 == 8 {
-		e.deleteWordBack(prompt, prevW)
+		// ESC + DEL/BS = Ctrl+Backspace on many terminals
+		e.deleteWhitespaceWordBack(prompt, prevW)
 	}
+}
+
+// lookupKeyAction checks if a given byte sequence matches a known
+// terminfo-based key binding and executes the corresponding action.
+// Returns true if the sequence was handled.
+func (e *LineEditor) lookupKeyAction(prompt string, prevW *int, seq string) bool {
+	action, ok := e.keySeqs[seq]
+	if !ok {
+		return false
+	}
+	switch action {
+	case actionDeleteWordBack:
+		e.deleteWhitespaceWordBack(prompt, prevW)
+	default:
+		return false
+	}
+	return true
 }
 
 func (e *LineEditor) handleCSI(prompt string, prevW *int) {
 	var params []int
 	var current int
+	var seqBuf strings.Builder
+	seqBuf.WriteByte('[')
 	for {
 		b := e.readByte()
+		seqBuf.WriteByte(b)
 		if b >= '0' && b <= '9' {
 			current = current*10 + int(b-'0')
 		} else {
@@ -364,7 +419,9 @@ func (e *LineEditor) handleCSI(prompt string, prevW *int) {
 						e.cursor = 0
 						*prevW = e.redraw(prompt, *prevW)
 					case 3:
-						if e.cursor < len(e.buf) {
+						if len(params) >= 2 && params[1] == 5 {
+							e.deleteWhitespaceWordBack(prompt, prevW)
+						} else if e.cursor < len(e.buf) {
 							e.buf = append(e.buf[:e.cursor], e.buf[e.cursor+1:]...)
 							*prevW = e.redraw(prompt, *prevW)
 						}
@@ -372,6 +429,11 @@ func (e *LineEditor) handleCSI(prompt string, prevW *int) {
 						e.cursor = len(e.buf)
 						*prevW = e.redraw(prompt, *prevW)
 					}
+				}
+			default:
+				// Check terminfo key sequences for unrecognized CSI keys
+				if e.lookupKeyAction(prompt, prevW, "\x1b"+seqBuf.String()) {
+					return
 				}
 			}
 			return
@@ -615,6 +677,22 @@ func (e *LineEditor) deleteWordBack(prompt string, prevW *int) {
 		pos--
 	}
 	for pos > 0 && e.buf[pos-1] != ' ' {
+		pos--
+	}
+	e.buf = append(e.buf[:pos], e.buf[e.cursor:]...)
+	e.cursor = pos
+	*prevW = e.redraw(prompt, *prevW)
+}
+
+func (e *LineEditor) deleteWhitespaceWordBack(prompt string, prevW *int) {
+	if e.cursor == 0 {
+		return
+	}
+	pos := e.cursor
+	for pos > 0 && (e.buf[pos-1] == ' ' || e.buf[pos-1] == '\t') {
+		pos--
+	}
+	for pos > 0 && e.buf[pos-1] != ' ' && e.buf[pos-1] != '\t' {
 		pos--
 	}
 	e.buf = append(e.buf[:pos], e.buf[e.cursor:]...)
