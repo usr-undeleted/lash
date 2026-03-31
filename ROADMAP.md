@@ -90,10 +90,10 @@
 ## Phase 6: Configuration & Customization
 
 - [x] Config file loading (`~/.lashrc`, `~/.config/lash/config`)
-- [ ] Prompt customization with escape sequences (`\u`, `\h`, `\w`, `\n`, colors)
+- [x] Prompt customization with escape sequences (`\u`, `\h`, `\w`, `\n`, colors)
 - [ ] Left and right prompts (PS1/PS2/RPS1)
 - [ ] Prompt themes (predefined themes, user-switchable)
-- [ ] Aliases (`alias ll='ls -la'`)
+- [x] Aliases (`alias ll='ls -la'`)
 - [ ] Key binding configuration
 - [ ] Shell options system (`setopt`, `shopt` style)
 - [ ] Login shell vs non-login shell vs interactive detection

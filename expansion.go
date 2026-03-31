@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/user"
 	"strconv"
 	"strings"
 	"syscall"
@@ -18,6 +19,15 @@ func expandString(s string) string {
 			home := os.Getenv("HOME")
 			if home != "" {
 				s = home + s[1:]
+			}
+		} else {
+			end := 1
+			for end < len(s) && s[end] != '/' {
+				end++
+			}
+			username := s[1:end]
+			if u, err := user.Lookup(username); err == nil && u.HomeDir != "" {
+				s = u.HomeDir + s[end:]
 			}
 		}
 	}
