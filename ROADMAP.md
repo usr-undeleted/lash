@@ -35,7 +35,7 @@
 - [x] Local variables (`name=value`)
 - [x] Environment variables (`export name=value`)
 - [x] Variable expansion (`$VAR`, `${VAR}`)
-- [ ] Default value expansion (`${VAR:-default}`, `${VAR:=default}`, `${VAR:+alt}`, `${VAR:?err}`)
+- [x] Default value expansion (`${VAR:-default}`, `${VAR:=default}`, `${VAR:+alt}`, `${VAR:?err}`)
 - [ ] Substring expansion (`${VAR:offset:length}`)
 - [x] Length expansion (`${#VAR}`)
 - [ ] Variable indirection (`${!ref}`)
