@@ -495,12 +495,10 @@ func evalArithmetic(expr string) string {
 	p := &arithParser{expr: runes}
 	val, _, err := p.parseTernary()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ARITH: err=%v\n", err)
 		fmt.Fprintf(os.Stderr, "lash: %s\n", err)
 		expandError = true
 		return "0"
 	}
-	fmt.Fprintf(os.Stderr, "ARITH: val=%d, pos=%d, len=%d\n", val, p.pos, len(p.expr))
 	p.skipSpaces()
 	if p.pos < len(p.expr) {
 		fmt.Fprintf(os.Stderr, "lash: unexpected token in arithmetic: %q\n", string(p.expr[p.pos]))
