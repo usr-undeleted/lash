@@ -115,6 +115,13 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 			return strconv.Itoa(utf8.RuneCountInString(val)), end - pos + 1
 		}
 
+		// ${!ref} — variable indirection
+		if len(inner) > 0 && inner[0] == '!' {
+			refName := inner[1:]
+			target := getVar(refName)
+			return getVar(target), end - pos + 1
+		}
+
 		// ${VAR:-default}, ${VAR:=default}, ${VAR:+alt}, ${VAR:?err}
 		varName, operand, op := parseBraceExpansion(inner)
 		if op != "" {
