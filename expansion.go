@@ -369,7 +369,7 @@ func parseBraceExpansion(inner string) (varName, operand, op string) {
 }
 
 func expandSubstring(varName, value, operand string) string {
-	operand = strings.TrimSpace(operand)
+	operand = expandString(strings.TrimSpace(operand))
 	colon := strings.Index(operand, ":")
 	var offsetStr, lengthStr string
 	if colon >= 0 {
