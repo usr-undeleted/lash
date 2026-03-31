@@ -150,6 +150,8 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 					return "", end - pos + 1
 				}
 				return val, end - pos + 1
+			case ":substr":
+				return expandSubstring(val, operand), end - pos + 1
 			}
 		}
 
@@ -358,9 +360,61 @@ func parseBraceExpansion(inner string) (varName, operand, op string) {
 			operand = inner[j+2:]
 			return varName, operand, op
 		}
+		op = ":substr"
+		operand = inner[j+1:]
+		return varName, operand, op
 	}
 
 	return varName, "", ""
+}
+
+func expandSubstring(value, operand string) string {
+	operand = strings.TrimSpace(operand)
+	colon := strings.Index(operand, ":")
+	var offsetStr, lengthStr string
+	if colon >= 0 {
+		offsetStr = operand[:colon]
+		lengthStr = operand[colon+1:]
+	} else {
+		offsetStr = operand
+	}
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil {
+		return value
+	}
+
+	runes := []rune(value)
+	length := len(runes)
+
+	if offset < 0 {
+		offset = length + offset
+		if offset < 0 {
+			offset = 0
+		}
+	} else if offset > length {
+		return ""
+	}
+
+	if lengthStr != "" {
+		l, err := strconv.Atoi(lengthStr)
+		if err != nil {
+			return string(runes[offset:])
+		}
+		if l < 0 {
+			end := length + l
+			if end <= offset {
+				return ""
+			}
+			return string(runes[offset:end])
+		}
+		if offset+l > length {
+			return string(runes[offset:])
+		}
+		return string(runes[offset : offset+l])
+	}
+
+	return string(runes[offset:])
 }
 
 func runCommandSubstitution(cmd string) (string, int) {
