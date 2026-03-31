@@ -176,7 +176,7 @@
 - [ ] Spell-checking for commands (did you mean?)
 - [ ] Directory stack (`pushd`, `popd`, `dirs`)
 - [ ] Shared command history across sessions
-- [ ] Session restore (reopen shell with history)
+- [x] ~~Session restore (reopen shell with history)~~
 - [ ] Terminal title setting
 - [ ] 256-color and truecolor support in prompts
 - [ ] Unicode / emoji aware string handling
