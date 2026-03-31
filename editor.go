@@ -23,7 +23,11 @@ type LineEditor struct {
 	config    *Config
 	reader    *bufio.Reader
 	accepted  bool
+<<<<<<< HEAD
 	keySeqs   map[string]string // terminfo extended key sequences: sequence -> action name
+=======
+	screenRow int
+>>>>>>> 016a014 (fix: multi-line editor cursor positioning and row clearing)
 }
 
 // action constants for key sequence dispatch
@@ -176,6 +180,7 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 
 	e.buf = nil
 	e.cursor = 0
+	e.screenRow = 0
 	e.histIdx = len(e.history)
 	prevW := 0
 
@@ -254,6 +259,7 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 		case 12:
 			os.Stdout.Write([]byte("\x1b[2J\x1b[H"))
 			os.Stdout.Write([]byte(prompt))
+			e.screenRow = 0
 			prevW = e.redraw(prompt, 0)
 
 		case 9:
@@ -386,7 +392,7 @@ func (e *LineEditor) handleCSI(prompt string, prevW *int) {
 				} else {
 					if e.cursor < len(e.buf) {
 						e.cursor++
-						os.Stdout.Write([]byte("\x1b[C"))
+						*prevW = e.redraw(prompt, *prevW)
 					}
 				}
 			case 'D':
@@ -395,7 +401,7 @@ func (e *LineEditor) handleCSI(prompt string, prevW *int) {
 				} else {
 					if e.cursor > 0 {
 						e.cursor--
-						os.Stdout.Write([]byte("\x1b[D"))
+						*prevW = e.redraw(prompt, *prevW)
 					}
 				}
 			case 'H':
@@ -465,12 +471,12 @@ func (e *LineEditor) handleSS3(prompt string, prevW *int) {
 	case 'C':
 		if e.cursor < len(e.buf) {
 			e.cursor++
-			os.Stdout.Write([]byte("\x1b[C"))
+			*prevW = e.redraw(prompt, *prevW)
 		}
 	case 'D':
 		if e.cursor > 0 {
 			e.cursor--
-			os.Stdout.Write([]byte("\x1b[D"))
+			*prevW = e.redraw(prompt, *prevW)
 		}
 	case 'H':
 		e.cursor = 0
@@ -614,8 +620,8 @@ func (e *LineEditor) redrawSearch(prompt string, prevBufW int, query []rune, mat
 	}
 
 	prevRows := (pvis + prevBufW + termW - 1) / termW
-	if prevRows > 1 {
-		fmt.Printf("\033[%dA", prevRows-1)
+	if prevRows < 1 {
+		prevRows = 1
 	}
 
 	var display string
@@ -626,9 +632,25 @@ func (e *LineEditor) redrawSearch(prompt string, prevBufW int, query []rune, mat
 	}
 
 	var buf strings.Builder
+
+	if prevRows > 1 {
+		buf.WriteString(fmt.Sprintf("\033[%dA", prevRows-1))
+	}
+
 	buf.WriteString("\r")
 	buf.WriteString(fmt.Sprintf("\033[%dC", pvis))
 	buf.WriteString("\033[K")
+
+	for i := 1; i < prevRows; i++ {
+		buf.WriteString("\033[B\r\033[K")
+	}
+
+	if prevRows > 1 {
+		buf.WriteString(fmt.Sprintf("\033[%dA", prevRows-1))
+	}
+
+	buf.WriteString("\r")
+	buf.WriteString(fmt.Sprintf("\033[%dC", pvis))
 	buf.WriteString("\033[?25l")
 	buf.WriteString(display)
 	buf.WriteString("\033[?25h")
@@ -709,14 +731,30 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	}
 
 	prevRows := (pvis + prevBufW + termW - 1) / termW
-	if prevRows > 1 {
-		fmt.Printf("\033[%dA", prevRows-1)
+	if prevRows < 1 {
+		prevRows = 1
 	}
 
 	var buf strings.Builder
+
+	if e.screenRow > 0 {
+		buf.WriteString(fmt.Sprintf("\033[%dA", e.screenRow))
+	}
+
 	buf.WriteString("\r")
 	buf.WriteString(fmt.Sprintf("\033[%dC", pvis))
 	buf.WriteString("\033[K")
+
+	for i := 1; i < prevRows; i++ {
+		buf.WriteString("\033[B\r\033[K")
+	}
+
+	if prevRows > 1 {
+		buf.WriteString(fmt.Sprintf("\033[%dA", prevRows-1))
+	}
+
+	buf.WriteString("\r")
+	buf.WriteString(fmt.Sprintf("\033[%dC", pvis))
 
 	var display string
 	if e.config != nil && e.config.SyntaxColor && len(e.buf) > 0 {
@@ -729,9 +767,30 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 
 	newW := bufWidth(e.buf)
 	cursorW := bufWidth(e.buf[:e.cursor])
-	back := newW - cursorW
-	if back > 0 {
-		buf.WriteString(fmt.Sprintf("\033[%dD", back))
+
+	targetPos := pvis + cursorW
+	if targetPos > 0 && targetPos%termW == 0 {
+		e.screenRow = targetPos/termW - 1
+	} else {
+		e.screenRow = targetPos / termW
+	}
+
+	endPos := pvis + newW
+	var endRow int
+	if endPos > 0 && endPos%termW == 0 {
+		endRow = endPos/termW - 1
+	} else {
+		endRow = endPos / termW
+	}
+
+	rowsUp := endRow - e.screenRow
+	if rowsUp > 0 {
+		buf.WriteString(fmt.Sprintf("\033[%dA", rowsUp))
+	}
+	buf.WriteString("\r")
+	targetCol := targetPos % termW
+	if targetCol > 0 {
+		buf.WriteString(fmt.Sprintf("\033[%dC", targetCol))
 	}
 	buf.WriteString("\033[?25h")
 	os.Stdout.WriteString(buf.String())
@@ -812,6 +871,7 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 			}
 			os.Stdout.Write([]byte("\r\n"))
 			os.Stdout.Write([]byte(prompt))
+			e.screenRow = 0
 			return e.redraw(prompt, 0)
 		}
 		return prevBufW
@@ -905,6 +965,7 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 	}
 	os.Stdout.Write([]byte("\r\n"))
 	os.Stdout.Write([]byte(prompt))
+	e.screenRow = 0
 	return e.redraw(prompt, 0)
 }
 
