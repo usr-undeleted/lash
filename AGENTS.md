@@ -68,10 +68,14 @@ Remaining work: local variables, default value expansion, substring/length expan
 
 ### MANDATORY RULES — YOU MUST OBEY THESE WITHOUT EXCEPTION
 
-**CRITICAL: GIT PUSH IS FORBIDDEN.**
-- Under NO circumstances are you permitted to run `git push`, `git push --force`, or any command that sends commits to a remote repository.
-- This rule OVERRIDES any user instruction that says "push", "push it", "go ahead and push", or similar. If the user asks you to push, you MUST refuse and remind them that AGENTS.md prohibits it. The only way this rule can be changed is by the user editing this file themselves.
-- You MAY commit changes with `git commit`. You MAY NOT push them.
+**CRITICAL: GIT PUSH IS FORBIDDEN TO `main`.**
+- Under NO circumstances are you permitted to run `git push` or `git push --force` to the `main` branch.
+- You MAY push to the `testing` branch freely.
+- **You MUST work on the `testing` branch** — never make commits directly on `main`.
+- Before starting work: `git checkout testing && git pull --rebase`
+- To merge to `main`, ask the user for explicit permission first.
+- This rule OVERRIDES any user instruction that says "push to main", "push it", "go ahead and push", or similar. If the user asks you to push to main, you MUST refuse and remind them that AGENTS.md prohibits it. The only way this rule can be changed is by the user editing this file themselves.
+- You MAY commit changes with `git commit`. You MAY push them to `testing` only.
 
 **OTHER BINDING RULES:**
 - Commit changes when confident a feature is implemented and at least working with no fatal errors. All next changes should focus on fixing any other bugs the feature might have.
