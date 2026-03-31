@@ -1010,30 +1010,6 @@ func (p *arithParser) parsePrimary() (int64, bool, error) {
 		return val, assigned, nil
 	}
 
-	if ch == '-' {
-		p.pos++
-		val, assigned, err := p.parsePrimary()
-		return -val, assigned, err
-	}
-	if ch == '+' {
-		p.pos++
-		return p.parsePrimary()
-	}
-
-	if ch == '!' {
-		p.pos++
-		val, assigned, _ := p.parsePrimary()
-		if val == 0 {
-			return 1, assigned, nil
-		}
-		return 0, assigned, nil
-	}
-	if ch == '~' {
-		p.pos++
-		val, assigned, err := p.parsePrimary()
-		return ^val, assigned, err
-	}
-
 	if ch >= '0' && ch <= '9' {
 		start := p.pos
 		for p.pos < len(p.expr) && ((p.expr[p.pos] >= '0' && p.expr[p.pos] <= '9') || p.expr[p.pos] == 'x' || p.expr[p.pos] == 'X' || (p.expr[p.pos] >= 'a' && p.expr[p.pos] <= 'f') || (p.expr[p.pos] >= 'A' && p.expr[p.pos] <= 'F')) {
