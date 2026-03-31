@@ -493,7 +493,7 @@ func evalArithmetic(expr string) string {
 	expr = preprocessArithExpr(expr)
 	runes := []rune(expr)
 	p := &arithParser{expr: runes}
-	val, _, err := p.parseTernary()
+	val, _, err := p.parseComma()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "lash: %s\n", err)
 		expandError = true
@@ -558,6 +558,23 @@ func (p *arithParser) peekToken(s string) bool {
 		}
 	}
 	return true
+}
+
+func (p *arithParser) parseComma() (int64, bool, error) {
+	val, assigned, err := p.parseTernary()
+	if err != nil {
+		return 0, assigned, err
+	}
+	var a bool
+	for p.peek() == ',' {
+		p.pos++
+		val, a, err = p.parseTernary()
+		if err != nil {
+			return 0, assigned || a, err
+		}
+		assigned = assigned || a
+	}
+	return val, assigned, nil
 }
 
 func (p *arithParser) parseTernary() (int64, bool, error) {
@@ -940,6 +957,36 @@ func (p *arithParser) parseExponentiation() (int64, bool, error) {
 
 func (p *arithParser) parseUnary() (int64, bool, error) {
 	ch := p.peek()
+	if p.peekToken("++") {
+		p.pos += 2
+		p.skipSpaces()
+		start := p.pos
+		for p.pos < len(p.expr) && isAlnumOrUnderscore(byte(p.expr[p.pos])) {
+			p.pos++
+		}
+		if p.pos == start {
+			return 0, false, fmt.Errorf("expected identifier after '++'")
+		}
+		name := string(p.expr[start:p.pos])
+		val := parseArithVar(name) + 1
+		setVar(name, strconv.FormatInt(val, 10), false)
+		return val, true, nil
+	}
+	if p.peekToken("--") {
+		p.pos += 2
+		p.skipSpaces()
+		start := p.pos
+		for p.pos < len(p.expr) && isAlnumOrUnderscore(byte(p.expr[p.pos])) {
+			p.pos++
+		}
+		if p.pos == start {
+			return 0, false, fmt.Errorf("expected identifier after '--'")
+		}
+		name := string(p.expr[start:p.pos])
+		val := parseArithVar(name) - 1
+		setVar(name, strconv.FormatInt(val, 10), false)
+		return val, true, nil
+	}
 	if ch == '-' {
 		p.pos++
 		val, assigned, err := p.parseUnary()
@@ -971,10 +1018,11 @@ func (p *arithParser) parseUnary() (int64, bool, error) {
 func (p *arithParser) parseAssignment() (int64, bool, error) {
 	p.skipSpaces()
 	start := p.pos
-	for p.pos < len(p.expr) && isAlnumOrUnderscore(byte(p.expr[p.pos])) {
+	if p.pos < len(p.expr) && isAlphaOrUnderscore(byte(p.expr[p.pos])) {
 		p.pos++
-	}
-	if p.pos > start {
+		for p.pos < len(p.expr) && isAlnumOrUnderscore(byte(p.expr[p.pos])) {
+			p.pos++
+		}
 		nameEnd := p.pos
 		p.skipSpaces()
 		if p.pos < len(p.expr) && p.expr[p.pos] == '=' && !p.peekToken("==") && !p.peekToken("!=") {
@@ -989,6 +1037,47 @@ func (p *arithParser) parseAssignment() (int64, bool, error) {
 		}
 	}
 	p.pos = start
+	return p.parsePostfix()
+}
+
+func parseArithVar(name string) int64 {
+	valStr := getVar(name)
+	if valStr == "" {
+		return 0
+	}
+	val, err := strconv.ParseInt(valStr, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return val
+}
+
+func (p *arithParser) parsePostfix() (int64, bool, error) {
+	p.skipSpaces()
+	start := p.pos
+	if p.pos < len(p.expr) && isAlphaOrUnderscore(byte(p.expr[p.pos])) {
+		p.pos++
+		for p.pos < len(p.expr) && isAlnumOrUnderscore(byte(p.expr[p.pos])) {
+			p.pos++
+		}
+		name := string(p.expr[start:p.pos])
+		savePos := p.pos
+		p.skipSpaces()
+		if p.peekToken("++") {
+			p.pos += 2
+			orig := parseArithVar(name)
+			setVar(name, strconv.FormatInt(orig+1, 10), false)
+			return orig, true, nil
+		}
+		if p.peekToken("--") {
+			p.pos += 2
+			orig := parseArithVar(name)
+			setVar(name, strconv.FormatInt(orig-1, 10), false)
+			return orig, true, nil
+		}
+		p.pos = savePos
+		return parseArithVar(name), false, nil
+	}
 	return p.parsePrimary()
 }
 
