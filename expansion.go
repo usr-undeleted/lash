@@ -166,8 +166,15 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 
 	case next == '(':
 		if pos+2 < len(s) && s[pos+2] == '(' {
-			fmt.Fprintln(os.Stderr, "lash: arithmetic expansion not yet implemented")
-			return "", 0
+			end, err := findMatchingDoubleParen(s, pos+2)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				expandError = true
+				return "", 0
+			}
+			expr := s[pos+3 : end]
+			result := evalArithmetic(expr)
+			return result, end + 2 - pos
 		}
 		end, err := findMatchingParen(s, pos+1)
 		if err != nil {
@@ -373,6 +380,696 @@ func parseBraceExpansion(inner string) (varName, operand, op string) {
 	}
 
 	return varName, "", ""
+}
+
+type arithParser struct {
+	expr []rune
+	pos  int
+}
+
+func findMatchingDoubleParen(s string, openPos int) (int, error) {
+	depth := 1
+	inSingle := false
+	inDouble := false
+	i := openPos + 1
+
+	for i < len(s) {
+		ch := s[i]
+		if inSingle {
+			if ch == '\'' {
+				inSingle = false
+			}
+			i++
+			continue
+		}
+		if ch == '\'' && !inDouble {
+			inSingle = true
+			i++
+			continue
+		}
+		if ch == '"' && !inSingle {
+			inDouble = !inDouble
+			i++
+			continue
+		}
+		if ch == '\\' && inDouble && i+1 < len(s) {
+			i += 2
+			continue
+		}
+		if !inSingle && !inDouble {
+			if ch == '(' {
+				depth++
+			} else if ch == ')' {
+				depth--
+				if depth == 0 {
+					if i+1 < len(s) && s[i+1] == ')' {
+						return i, nil
+					}
+				}
+			}
+		}
+		i++
+	}
+
+	return -1, fmt.Errorf("unmatched $((")
+}
+
+func preprocessArithExpr(expr string) string {
+	var result strings.Builder
+	runes := []rune(expr)
+	i := 0
+	for i < len(runes) {
+		if runes[i] == '$' && i+1 < len(runes) {
+			if i+2 < len(runes) && runes[i+1] == '(' && runes[i+2] == '(' {
+				end := i + 3
+				depth := 1
+				for end < len(runes) && depth > 0 {
+					if end+1 < len(runes) && runes[end] == ')' && runes[end+1] == ')' {
+						depth--
+						if depth == 0 {
+							end++
+							break
+						}
+					} else if runes[end] == '(' {
+						depth++
+					}
+					end++
+				}
+				inner := preprocessArithExpr(string(runes[i+3 : end-1]))
+				result.WriteString(evalArithmetic(inner))
+				i = end + 1
+				continue
+			}
+			if runes[i+1] == '{' {
+				end := i + 2
+				for end < len(runes) && runes[end] != '}' {
+					end++
+				}
+				if end < len(runes) {
+					name := string(runes[i+2 : end])
+					result.WriteString(getVar(name))
+					i = end + 1
+					continue
+				}
+			}
+			if isAlphaOrUnderscore(byte(runes[i+1])) {
+				j := i + 1
+				for j < len(runes) && isAlnumOrUnderscore(byte(runes[j])) {
+					j++
+				}
+				name := string(runes[i+1 : j])
+				result.WriteString(getVar(name))
+				i = j
+				continue
+			}
+		}
+		result.WriteRune(runes[i])
+		i++
+	}
+	return result.String()
+}
+
+func evalArithmetic(expr string) string {
+	expr = preprocessArithExpr(expr)
+	runes := []rune(expr)
+	p := &arithParser{expr: runes}
+	val, _, err := p.parseTernary()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ARITH: err=%v\n", err)
+		fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+		expandError = true
+		return "0"
+	}
+	fmt.Fprintf(os.Stderr, "ARITH: val=%d, pos=%d, len=%d\n", val, p.pos, len(p.expr))
+	p.skipSpaces()
+	if p.pos < len(p.expr) {
+		fmt.Fprintf(os.Stderr, "lash: unexpected token in arithmetic: %q\n", string(p.expr[p.pos]))
+		expandError = true
+		return "0"
+	}
+	return strconv.FormatInt(val, 10)
+}
+
+func (p *arithParser) peek() rune {
+	p.skipSpaces()
+	if p.pos >= len(p.expr) {
+		return 0
+	}
+	return p.expr[p.pos]
+}
+
+func (p *arithParser) next() rune {
+	if p.pos >= len(p.expr) {
+		return 0
+	}
+	r := p.expr[p.pos]
+	p.pos++
+	return r
+}
+
+func (p *arithParser) skipSpaces() {
+	for p.pos < len(p.expr) && p.expr[p.pos] == ' ' {
+		p.pos++
+	}
+}
+
+func (p *arithParser) matchToken(s string) bool {
+	p.skipSpaces()
+	runes := []rune(s)
+	if p.pos+len(runes) > len(p.expr) {
+		return false
+	}
+	for i, r := range runes {
+		if p.expr[p.pos+i] != r {
+			return false
+		}
+	}
+	p.pos += len(runes)
+	return true
+}
+
+func (p *arithParser) peekToken(s string) bool {
+	p.skipSpaces()
+	runes := []rune(s)
+	if p.pos+len(runes) > len(p.expr) {
+		return false
+	}
+	for i, r := range runes {
+		if p.expr[p.pos+i] != r {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *arithParser) parseTernary() (int64, bool, error) {
+	cond, assigned, err := p.parseLogicalOr()
+	if err != nil {
+		return 0, assigned, err
+	}
+	p.skipSpaces()
+	if p.pos < len(p.expr) && p.expr[p.pos] == '?' {
+		p.pos++
+		ifTrue, a, err := p.parseTernary()
+		if err != nil {
+			return 0, assigned || a, err
+		}
+		if !p.matchToken(":") {
+			return 0, assigned || a, fmt.Errorf("expected ':' in ternary expression")
+		}
+		ifFalse, a, err := p.parseTernary()
+		if err != nil {
+			return 0, assigned || a, err
+		}
+		if cond != 0 {
+			return ifTrue, assigned || a, nil
+		}
+		return ifFalse, assigned || a, nil
+	}
+	return cond, assigned, nil
+}
+
+func (p *arithParser) parseLogicalOr() (int64, bool, error) {
+	left, assigned, err := p.parseLogicalAnd()
+	if err != nil {
+		return 0, assigned, err
+	}
+	for p.peekToken("||") {
+		p.pos += 2
+		right, a, err := p.parseLogicalAnd()
+		if err != nil {
+			return 0, assigned || a, err
+		}
+		assigned = assigned || a
+		if left != 0 || right != 0 {
+			left = 1
+		} else {
+			left = 0
+		}
+	}
+	return left, assigned, nil
+}
+
+func (p *arithParser) parseLogicalAnd() (int64, bool, error) {
+	left, assigned, err := p.parseBitwiseOr()
+	if err != nil {
+		return 0, assigned, err
+	}
+	for p.peekToken("&&") {
+		p.pos += 2
+		right, a, err := p.parseBitwiseOr()
+		if err != nil {
+			return 0, assigned || a, err
+		}
+		assigned = assigned || a
+		if left != 0 && right != 0 {
+			left = 1
+		} else {
+			left = 0
+		}
+	}
+	return left, assigned, nil
+}
+
+func (p *arithParser) parseBitwiseOr() (int64, bool, error) {
+	left, assigned, err := p.parseBitwiseXor()
+	if err != nil {
+		return 0, assigned, err
+	}
+	for {
+		ch := p.peek()
+		if ch == '|' && !p.peekToken("||") {
+			p.pos++
+			right, a, err := p.parseBitwiseXor()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			left |= right
+		} else {
+			break
+		}
+	}
+	return left, assigned, nil
+}
+
+func (p *arithParser) parseBitwiseXor() (int64, bool, error) {
+	left, assigned, err := p.parseBitwiseAnd()
+	if err != nil {
+		return 0, assigned, err
+	}
+	for {
+		if p.peek() == '^' {
+			p.pos++
+			right, a, err := p.parseBitwiseAnd()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			left ^= right
+		} else {
+			break
+		}
+	}
+	return left, assigned, nil
+}
+
+func (p *arithParser) parseBitwiseAnd() (int64, bool, error) {
+	left, assigned, err := p.parseEquality()
+	if err != nil {
+		return 0, assigned, err
+	}
+	for {
+		ch := p.peek()
+		if ch == '&' && !p.peekToken("&&") {
+			p.pos++
+			right, a, err := p.parseEquality()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			left &= right
+		} else {
+			break
+		}
+	}
+	return left, assigned, nil
+}
+
+func (p *arithParser) parseEquality() (int64, bool, error) {
+	left, assigned, err := p.parseComparison()
+	if err != nil {
+		return 0, assigned, err
+	}
+	for {
+		if p.peekToken("==") {
+			p.pos += 2
+			right, a, err := p.parseComparison()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			if left == right {
+				left = 1
+			} else {
+				left = 0
+			}
+		} else if p.peekToken("!=") {
+			p.pos += 2
+			right, a, err := p.parseComparison()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			if left != right {
+				left = 1
+			} else {
+				left = 0
+			}
+		} else {
+			break
+		}
+	}
+	return left, assigned, nil
+}
+
+func (p *arithParser) parseComparison() (int64, bool, error) {
+	left, assigned, err := p.parseShift()
+	if err != nil {
+		return 0, assigned, err
+	}
+	for {
+		if p.peekToken("<=") {
+			p.pos += 2
+			right, a, err := p.parseShift()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			if left <= right {
+				left = 1
+			} else {
+				left = 0
+			}
+		} else if p.peekToken(">=") {
+			p.pos += 2
+			right, a, err := p.parseShift()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			if left >= right {
+				left = 1
+			} else {
+				left = 0
+			}
+		} else if p.peek() == '<' && !p.peekToken("<<") {
+			p.pos++
+			right, a, err := p.parseShift()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			if left < right {
+				left = 1
+			} else {
+				left = 0
+			}
+		} else if p.peek() == '>' && !p.peekToken(">>") {
+			p.pos++
+			right, a, err := p.parseShift()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			if left > right {
+				left = 1
+			} else {
+				left = 0
+			}
+		} else {
+			break
+		}
+	}
+	return left, assigned, nil
+}
+
+func (p *arithParser) parseShift() (int64, bool, error) {
+	left, assigned, err := p.parseAddition()
+	if err != nil {
+		return 0, assigned, err
+	}
+	for {
+		if p.peekToken("<<") {
+			p.pos += 2
+			right, a, err := p.parseAddition()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			left <<= right
+		} else if p.peekToken(">>") {
+			p.pos += 2
+			right, a, err := p.parseAddition()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			left >>= right
+		} else {
+			break
+		}
+	}
+	return left, assigned, nil
+}
+
+func (p *arithParser) parseAddition() (int64, bool, error) {
+	left, assigned, err := p.parseMultiplication()
+	if err != nil {
+		return 0, assigned, err
+	}
+	for {
+		ch := p.peek()
+		if ch == '+' && !p.peekToken("++") {
+			p.pos++
+			right, a, err := p.parseMultiplication()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			left += right
+		} else if ch == '-' && !p.peekToken("--") {
+			p.pos++
+			right, a, err := p.parseMultiplication()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			left -= right
+		} else {
+			break
+		}
+	}
+	return left, assigned, nil
+}
+
+func (p *arithParser) parseMultiplication() (int64, bool, error) {
+	left, assigned, err := p.parseExponentiation()
+	if err != nil {
+		return 0, assigned, err
+	}
+	for {
+		ch := p.peek()
+		if ch == '*' && !p.peekToken("**") {
+			p.pos++
+			right, a, err := p.parseExponentiation()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			left *= right
+		} else if ch == '/' {
+			p.pos++
+			right, a, err := p.parseExponentiation()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			if right == 0 {
+				fmt.Fprintln(os.Stderr, "lash: division by zero")
+				expandError = true
+				left = 0
+			} else {
+				left /= right
+			}
+		} else if ch == '%' {
+			p.pos++
+			right, a, err := p.parseExponentiation()
+			if err != nil {
+				return 0, assigned || a, err
+			}
+			assigned = assigned || a
+			if right == 0 {
+				fmt.Fprintln(os.Stderr, "lash: division by zero")
+				expandError = true
+				left = 0
+			} else {
+				left %= right
+			}
+		} else {
+			break
+		}
+	}
+	return left, assigned, nil
+}
+
+func (p *arithParser) parseExponentiation() (int64, bool, error) {
+	base, assigned, err := p.parseUnary()
+	if err != nil {
+		return 0, assigned, err
+	}
+	if p.peekToken("**") {
+		p.pos += 2
+		exp, a, err := p.parseExponentiation()
+		if err != nil {
+			return 0, assigned || a, err
+		}
+		assigned = assigned || a
+		if exp < 0 {
+			if base == 1 {
+				return 1, assigned, nil
+			}
+			if base == -1 {
+				if exp%2 == 0 {
+					return 1, assigned, nil
+				}
+				return -1, assigned, nil
+			}
+			return 0, assigned, nil
+		}
+		var result int64 = 1
+		for i := int64(0); i < exp; i++ {
+			if result != 0 && base > (1<<62)/result {
+				result = 1 << 62
+				break
+			}
+			result *= base
+		}
+		return result, assigned, nil
+	}
+	return base, assigned, nil
+}
+
+func (p *arithParser) parseUnary() (int64, bool, error) {
+	ch := p.peek()
+	if ch == '-' {
+		p.pos++
+		val, assigned, err := p.parseUnary()
+		return -val, assigned, err
+	}
+	if ch == '+' {
+		p.pos++
+		return p.parseUnary()
+	}
+	if ch == '!' {
+		p.pos++
+		val, assigned, err := p.parseUnary()
+		if err != nil {
+			return 0, assigned, err
+		}
+		if val == 0 {
+			return 1, assigned, nil
+		}
+		return 0, assigned, nil
+	}
+	if ch == '~' {
+		p.pos++
+		val, assigned, err := p.parseUnary()
+		return ^val, assigned, err
+	}
+	return p.parseAssignment()
+}
+
+func (p *arithParser) parseAssignment() (int64, bool, error) {
+	p.skipSpaces()
+	start := p.pos
+	for p.pos < len(p.expr) && isAlnumOrUnderscore(byte(p.expr[p.pos])) {
+		p.pos++
+	}
+	if p.pos > start && p.pos < len(p.expr) {
+		savePos := p.pos
+		p.skipSpaces()
+		if p.peek() == '=' && !p.peekToken("==") && !p.peekToken("!=") {
+			p.pos = savePos
+			name := string(p.expr[start:savePos])
+			p.skipSpaces()
+			p.pos++
+			val, _, err := p.parseAssignment()
+			if err != nil {
+				return 0, true, err
+			}
+			setVar(name, strconv.FormatInt(val, 10), false)
+			return val, true, nil
+		}
+	}
+	p.pos = start
+	return p.parsePrimary()
+}
+
+func (p *arithParser) parsePrimary() (int64, bool, error) {
+	ch := p.peek()
+
+	if ch == '(' {
+		p.pos++
+		val, assigned, err := p.parseTernary()
+		if err != nil {
+			return 0, assigned, err
+		}
+		if p.peek() != ')' {
+			return 0, assigned, fmt.Errorf("expected ')' in arithmetic expression")
+		}
+		p.pos++
+		return val, assigned, nil
+	}
+
+	if ch == '-' {
+		p.pos++
+		val, assigned, err := p.parsePrimary()
+		return -val, assigned, err
+	}
+	if ch == '+' {
+		p.pos++
+		return p.parsePrimary()
+	}
+
+	if ch == '!' {
+		p.pos++
+		val, assigned, _ := p.parsePrimary()
+		if val == 0 {
+			return 1, assigned, nil
+		}
+		return 0, assigned, nil
+	}
+	if ch == '~' {
+		p.pos++
+		val, assigned, err := p.parsePrimary()
+		return ^val, assigned, err
+	}
+
+	if ch >= '0' && ch <= '9' {
+		start := p.pos
+		for p.pos < len(p.expr) && ((p.expr[p.pos] >= '0' && p.expr[p.pos] <= '9') || p.expr[p.pos] == 'x' || p.expr[p.pos] == 'X' || (p.expr[p.pos] >= 'a' && p.expr[p.pos] <= 'f') || (p.expr[p.pos] >= 'A' && p.expr[p.pos] <= 'F')) {
+			p.pos++
+		}
+		numStr := string(p.expr[start:p.pos])
+		val, err := strconv.ParseInt(numStr, 0, 64)
+		if err != nil {
+			return 0, false, fmt.Errorf("invalid number: %s", numStr)
+		}
+		return val, false, nil
+	}
+
+	if isAlphaOrUnderscore(byte(ch)) {
+		start := p.pos
+		for p.pos < len(p.expr) && isAlnumOrUnderscore(byte(p.expr[p.pos])) {
+			p.pos++
+		}
+		name := string(p.expr[start:p.pos])
+		valStr := getVar(name)
+		if valStr == "" {
+			return 0, false, nil
+		}
+		val, err := strconv.ParseInt(valStr, 10, 64)
+		if err != nil {
+			return 0, false, nil
+		}
+		return val, false, nil
+	}
+
+	if ch == 0 {
+		return 0, false, fmt.Errorf("unexpected end of arithmetic expression")
+	}
+	return 0, false, fmt.Errorf("unexpected token in arithmetic: %q", string(ch))
 }
 
 func expandSubstring(varName, value, operand string) string {
