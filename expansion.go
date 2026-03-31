@@ -1099,8 +1099,14 @@ func (p *arithParser) parsePrimary() (int64, bool, error) {
 
 	if ch >= '0' && ch <= '9' {
 		start := p.pos
-		for p.pos < len(p.expr) && ((p.expr[p.pos] >= '0' && p.expr[p.pos] <= '9') || p.expr[p.pos] == 'x' || p.expr[p.pos] == 'X' || (p.expr[p.pos] >= 'a' && p.expr[p.pos] <= 'f') || (p.expr[p.pos] >= 'A' && p.expr[p.pos] <= 'F')) {
+		for p.pos < len(p.expr) && p.expr[p.pos] >= '0' && p.expr[p.pos] <= '9' {
 			p.pos++
+		}
+		if p.expr[start] == '0' && p.pos+1 <= len(p.expr) && p.pos < len(p.expr) && (p.expr[p.pos] == 'x' || p.expr[p.pos] == 'X') {
+			p.pos++
+			for p.pos < len(p.expr) && ((p.expr[p.pos] >= '0' && p.expr[p.pos] <= '9') || (p.expr[p.pos] >= 'a' && p.expr[p.pos] <= 'f') || (p.expr[p.pos] >= 'A' && p.expr[p.pos] <= 'F')) {
+				p.pos++
+			}
 		}
 		numStr := string(p.expr[start:p.pos])
 		val, err := strconv.ParseInt(numStr, 0, 64)
