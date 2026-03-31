@@ -144,116 +144,19 @@ func firstLineWidth(s string) int {
 }
 
 func runeWidth(r rune) int {
-	switch {
-	case r < 0x20:
+	if r < 0x20 || r == 0x7f {
 		return 0
-	case r <= 0x7e:
-		return 1
-	case r == 0x7f:
-		return 0
-	case r < 0xa1:
-		return 1
-	case r <= 0xac:
-		return 2
-	case r <= 0xaf:
-		return 1
-	case r <= 0xb4:
-		return 2
-	case r <= 0xb5:
-		return 1
-	case r <= 0xb7:
-		return 2
-	case r == 0xb8:
-		return 1
-	case r <= 0xba:
-		return 2
-	case r <= 0xbb:
-		return 1
-	case r <= 0xbf:
-		return 2
-	case r <= 0xd7:
-		return 1
-	case r <= 0xff:
-		return 2
-	case r < 0x100:
-		return 1
-	case r <= 0x17f:
-		return 2
-	case r <= 0x180:
-		return 1
-	case r <= 0x24f:
-		return 2
-	case r < 0x2190:
-		return 1
-	case r <= 0x21ff:
-		return 2
-	case r < 0x2200:
-		return 1
-	case r <= 0x22ff:
-		return 2
-	case r < 0x2300:
-		return 1
-	case r <= 0x23ff:
-		return 2
-	case r < 0x2500:
-		return 1
-	case r <= 0x257f:
-		return 2
-	case r < 0x2580:
-		return 1
-	case r <= 0x259f:
-		return 2
-	case r < 0x25a0:
-		return 1
-	case r <= 0x25ff:
-		return 2
-	case r < 0x2600:
-		return 1
-	case r <= 0x26ff:
-		return 2
-	case r < 0x2700:
-		return 1
-	case r <= 0x27bf:
-		return 2
-	case r < 0x2e80:
-		return 1
-	case r <= 0x303e:
-		return 2
-	case r == 0x303f:
-		return 1
-	case r <= 0xa4cf:
-		return 2
-	case r < 0xac00:
-		return 1
-	case r <= 0xd7a3:
-		return 2
-	case r < 0xf900:
-		return 1
-	case r <= 0xfaff:
-		return 2
-	case r < 0xfe10:
-		return 1
-	case r <= 0xfe19:
-		return 2
-	case r < 0xfe30:
-		return 1
-	case r <= 0xfe6f:
-		return 2
-	case r < 0xff01:
-		return 1
-	case r <= 0xff60:
-		return 2
-	case r < 0xffe0:
-		return 1
-	case r <= 0xffe6:
-		return 2
-	case r < 0x20000:
-		return 1
-	case r <= 0x2fffd:
-		return 2
-	case r < 0x30000:
-		return 1
-	case r <= 0x3fffd:
+	}
+	if r >= 0x1100 && (r <= 0x115f || r == 0x2329 || r == 0x232a ||
+		(r >= 0x2e80 && r <= 0xa4cf && r != 0x303f) ||
+		(r >= 0xac00 && r <= 0xd7a3) ||
+		(r >= 0xf900 && r <= 0xfaff) ||
+		(r >= 0xfe10 && r <= 0xfe19) ||
+		(r >= 0xfe30 && r <= 0xfe6f) ||
+		(r >= 0xff01 && r <= 0xff60) ||
+		(r >= 0xffe0 && r <= 0xffe6) ||
+		(r >= 0x20000 && r <= 0x2fffd) ||
+		(r >= 0x30000 && r <= 0x3fffd)) {
 		return 2
 	}
 	return 1
