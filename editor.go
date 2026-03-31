@@ -61,7 +61,7 @@ func (e *LineEditor) initKeySequences() {
 
 	// xterm-style CSI sequences for Ctrl+Backspace
 	e.keySeqs["\x1b[3;5~"] = actionDeleteWordBack
-	e.keySeqs["\x1b[3^"]   = actionDeleteWordBack // rxvt
+	e.keySeqs["\x1b[3^"] = actionDeleteWordBack // rxvt
 }
 
 func isTerminal() bool {
@@ -104,16 +104,15 @@ func getTermWidth() int {
 
 func visibleWidth(s string) int {
 	w := 0
-	esc := false
 	runes := []rune(s)
 	for i := 0; i < len(runes); i++ {
-		if runes[i] == '\x1b' {
-			esc = true
-			continue
-		}
-		if esc {
-			if runes[i] == 'm' {
-				esc = false
+		if runes[i] == '\x1b' && i+1 < len(runes) && runes[i+1] == '[' {
+			i += 2
+			for i < len(runes) {
+				if runes[i] >= 0x40 && runes[i] <= 0x7e {
+					break
+				}
+				i++
 			}
 			continue
 		}
@@ -145,16 +144,116 @@ func firstLineWidth(s string) int {
 }
 
 func runeWidth(r rune) int {
-	if r >= 0x1100 && (r <= 0x115f || r == 0x2329 || r == 0x232a ||
-		(r >= 0x2e80 && r <= 0xa4cf && r != 0x303f) ||
-		(r >= 0xac00 && r <= 0xd7a3) ||
-		(r >= 0xf900 && r <= 0xfaff) ||
-		(r >= 0xfe10 && r <= 0xfe19) ||
-		(r >= 0xfe30 && r <= 0xfe6f) ||
-		(r >= 0xff01 && r <= 0xff60) ||
-		(r >= 0xffe0 && r <= 0xffe6) ||
-		(r >= 0x20000 && r <= 0x2fffd) ||
-		(r >= 0x30000 && r <= 0x3fffd)) {
+	switch {
+	case r < 0x20:
+		return 0
+	case r <= 0x7e:
+		return 1
+	case r == 0x7f:
+		return 0
+	case r < 0xa1:
+		return 1
+	case r <= 0xac:
+		return 2
+	case r <= 0xaf:
+		return 1
+	case r <= 0xb4:
+		return 2
+	case r <= 0xb5:
+		return 1
+	case r <= 0xb7:
+		return 2
+	case r == 0xb8:
+		return 1
+	case r <= 0xba:
+		return 2
+	case r <= 0xbb:
+		return 1
+	case r <= 0xbf:
+		return 2
+	case r <= 0xd7:
+		return 1
+	case r <= 0xff:
+		return 2
+	case r < 0x100:
+		return 1
+	case r <= 0x17f:
+		return 2
+	case r <= 0x180:
+		return 1
+	case r <= 0x24f:
+		return 2
+	case r < 0x2190:
+		return 1
+	case r <= 0x21ff:
+		return 2
+	case r < 0x2200:
+		return 1
+	case r <= 0x22ff:
+		return 2
+	case r < 0x2300:
+		return 1
+	case r <= 0x23ff:
+		return 2
+	case r < 0x2500:
+		return 1
+	case r <= 0x257f:
+		return 2
+	case r < 0x2580:
+		return 1
+	case r <= 0x259f:
+		return 2
+	case r < 0x25a0:
+		return 1
+	case r <= 0x25ff:
+		return 2
+	case r < 0x2600:
+		return 1
+	case r <= 0x26ff:
+		return 2
+	case r < 0x2700:
+		return 1
+	case r <= 0x27bf:
+		return 2
+	case r < 0x2e80:
+		return 1
+	case r <= 0x303e:
+		return 2
+	case r == 0x303f:
+		return 1
+	case r <= 0xa4cf:
+		return 2
+	case r < 0xac00:
+		return 1
+	case r <= 0xd7a3:
+		return 2
+	case r < 0xf900:
+		return 1
+	case r <= 0xfaff:
+		return 2
+	case r < 0xfe10:
+		return 1
+	case r <= 0xfe19:
+		return 2
+	case r < 0xfe30:
+		return 1
+	case r <= 0xfe6f:
+		return 2
+	case r < 0xff01:
+		return 1
+	case r <= 0xff60:
+		return 2
+	case r < 0xffe0:
+		return 1
+	case r <= 0xffe6:
+		return 2
+	case r < 0x20000:
+		return 1
+	case r <= 0x2fffd:
+		return 2
+	case r < 0x30000:
+		return 1
+	case r <= 0x3fffd:
 		return 2
 	}
 	return 1
@@ -590,6 +689,17 @@ func (e *LineEditor) handleReverseSearch(prompt string, prevBufW int) int {
 					matched = e.history[matchPos]
 				}
 				prevBufW = e.redrawSearch(prompt, prevBufW, query, matched)
+			} else if b >= 0x80 {
+				r, _ := e.readRune(b)
+				if r != utf8.RuneError {
+					query = append(query, r)
+					matchPos = e.findHistoryMatch(string(query), -1)
+					var matched string
+					if matchPos >= 0 {
+						matched = e.history[matchPos]
+					}
+					prevBufW = e.redrawSearch(prompt, prevBufW, query, matched)
+				}
 			}
 		}
 	}
@@ -903,9 +1013,12 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 	// Find common prefix (case-insensitive)
 	common := candidates[0]
 	for _, c := range candidates[1:] {
-		for len(common) > 0 && !strings.EqualFold(c[:min(len(common), len(c))], common[:min(len(common), len(c))]) {
-			common = common[:len(common)-1]
+		cRunes := []rune(c)
+		commonRunes := []rune(common)
+		for len(commonRunes) > 0 && !strings.EqualFold(string(cRunes[:min(len(commonRunes), len(cRunes))]), string(commonRunes[:min(len(commonRunes), len(cRunes))])) {
+			commonRunes = commonRunes[:len(commonRunes)-1]
 		}
+		common = string(commonRunes)
 	}
 
 	if len(candidates) == 1 {
@@ -922,7 +1035,8 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 		} else {
 			completion += " "
 		}
-		for i := 0; i < len(partial) && e.cursor > 0; i++ {
+		partialRunes := utf8.RuneCountInString(partial)
+		for i := 0; i < partialRunes && e.cursor > 0; i++ {
 			e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
 			e.cursor--
 		}
@@ -934,16 +1048,19 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 	}
 
 	// Multiple matches
-	if len(common) != len(partial) {
+	if common != partial {
 		var commonActual string
+		commonRunes := []rune(common)
 		for _, c := range candidates {
-			if strings.HasPrefix(strings.ToLower(c), strings.ToLower(common)) && len(c) >= len(common) {
-				commonActual = c[:len(common)]
+			cRunes := []rune(c)
+			if len(cRunes) >= len(commonRunes) && strings.EqualFold(string(cRunes[:len(commonRunes)]), common) {
+				commonActual = string(cRunes[:len(commonRunes)])
 				break
 			}
 		}
 		if commonActual != "" && commonActual != partial {
-			for i := 0; i < len(partial) && e.cursor > 0; i++ {
+			partialRunes := utf8.RuneCountInString(partial)
+			for i := 0; i < partialRunes && e.cursor > 0; i++ {
 				e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
 				e.cursor--
 			}

@@ -723,17 +723,17 @@ func tokenize(line string) []string {
 
 		if ch == '\'' && !inDouble {
 			inSingle = !inSingle
-			current.WriteRune(ch)
+			current.WriteByte(bytes[i])
 			continue
 		}
 		if ch == '"' && !inSingle {
 			inDouble = !inDouble
-			current.WriteRune(ch)
+			current.WriteByte(bytes[i])
 			continue
 		}
 
 		if inSingle || inDouble {
-			current.WriteRune(ch)
+			current.WriteByte(bytes[i])
 			continue
 		}
 
@@ -781,7 +781,7 @@ func tokenize(line string) []string {
 				current.WriteByte(bytes[i])
 				continue
 			}
-			current.WriteRune(ch)
+			current.WriteByte(bytes[i])
 		case '`':
 			inBacktick := true
 			current.WriteByte(bytes[i])
@@ -799,7 +799,7 @@ func tokenize(line string) []string {
 			}
 			i--
 		default:
-			current.WriteRune(ch)
+			current.WriteByte(bytes[i])
 		}
 	}
 	flushCurrent()
