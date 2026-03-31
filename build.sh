@@ -20,7 +20,7 @@ END {
     print "v" phase_num[idx] "." phase_done[idx]
 }
 ' ROADMAP.md)
-sed -i "s|version-v[0-9]\+\.[0-9]\+|version-${version}|" README.md
+sed -i "s|version-v[0-9]\+\.[0-9]\+\(\.[0-9]\+\)\?|version-${version}|" README.md
 go build -o lash .
 [ -f ~/.lashrc ] || cat > ~/.lashrc << 'EOF'
 # lash startup configuration
