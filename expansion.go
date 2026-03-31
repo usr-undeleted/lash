@@ -151,7 +151,7 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 				}
 				return val, end - pos + 1
 			case ":substr":
-				return expandSubstring(val, operand), end - pos + 1
+				return expandSubstring(varName, val, operand), end - pos + 1
 			}
 		}
 
@@ -368,7 +368,7 @@ func parseBraceExpansion(inner string) (varName, operand, op string) {
 	return varName, "", ""
 }
 
-func expandSubstring(value, operand string) string {
+func expandSubstring(varName, value, operand string) string {
 	operand = strings.TrimSpace(operand)
 	colon := strings.Index(operand, ":")
 	var offsetStr, lengthStr string
@@ -381,6 +381,8 @@ func expandSubstring(value, operand string) string {
 
 	offset, err := strconv.Atoi(offsetStr)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "lash: %s: %s: substring expression\n", varName, offsetStr)
+		expandError = true
 		return value
 	}
 
