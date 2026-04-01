@@ -42,7 +42,7 @@
 - [x] Tilde expansion (`~`, `~/`, `~user/`)
 - [x] Command substitution (`$(cmd)`, backtick `` `cmd` ``)
 - [x] Arithmetic expansion (`$((expr))`)
-- [ ] Process substitution (`<(cmd)`, `>(cmd)`)
+- [x] Process substitution (`<(cmd)`, `>(cmd)`)
 - [ ] Brace expansion (`{a,b,c}`, `{1..10}`)
 
 ## Phase 4: Pattern Matching & Globbing

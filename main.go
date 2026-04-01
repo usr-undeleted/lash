@@ -616,6 +616,7 @@ func executeChain(chain []chainEntry, cfg *Config) {
 		if expandError {
 			expandError = false
 			lastExitCode = 2
+			waitProcSubst()
 			continue
 		}
 		tokens = expandGlobs(tokens)
@@ -681,6 +682,7 @@ func executeChain(chain []chainEntry, cfg *Config) {
 			} else {
 				executePipelineWithEnv(segments, background, prefixEnv)
 			}
+			waitProcSubst()
 			continue
 		}
 
@@ -694,6 +696,7 @@ func executeChain(chain []chainEntry, cfg *Config) {
 		} else {
 			executePipeline(segments, background)
 		}
+		waitProcSubst()
 	}
 }
 
@@ -720,6 +723,10 @@ func tokenize(line string) []string {
 	substDepth := 0
 	substInSingle := false
 	substInDouble := false
+	procSubstDepth := 0
+	procSubstInSingle := false
+	procSubstInDouble := false
+
 	var current strings.Builder
 	var tokens []string
 	bytes := []byte(line)
@@ -733,6 +740,44 @@ func tokenize(line string) []string {
 
 	for i := 0; i < len(bytes); i++ {
 		ch := rune(bytes[i])
+
+		if procSubstDepth > 0 {
+			if procSubstInSingle {
+				if bytes[i] == '\'' {
+					procSubstInSingle = false
+				}
+				current.WriteByte(bytes[i])
+				continue
+			}
+			if bytes[i] == '\'' && !procSubstInDouble {
+				procSubstInSingle = true
+				current.WriteByte(bytes[i])
+				continue
+			}
+			if bytes[i] == '"' && !procSubstInSingle {
+				procSubstInDouble = !procSubstInDouble
+				current.WriteByte(bytes[i])
+				continue
+			}
+			if bytes[i] == '\\' && procSubstInDouble && i+1 < len(bytes) {
+				current.WriteByte(bytes[i])
+				i++
+				current.WriteByte(bytes[i])
+				continue
+			}
+			if bytes[i] == '(' && !procSubstInSingle && !procSubstInDouble {
+				procSubstDepth++
+			}
+			if bytes[i] == ')' && !procSubstInSingle && !procSubstInDouble {
+				procSubstDepth--
+				if procSubstDepth == 0 {
+					current.WriteByte(bytes[i])
+					continue
+				}
+			}
+			current.WriteByte(bytes[i])
+			continue
+		}
 
 		if substDepth > 0 {
 			if substInSingle {
@@ -794,7 +839,40 @@ func tokenize(line string) []string {
 		}
 
 		switch ch {
-		case ';', '|', '<':
+		case '<':
+			if i+1 < len(bytes) && bytes[i+1] == '(' {
+				flushCurrent()
+				procSubstDepth = 1
+
+				procSubstInSingle = false
+				procSubstInDouble = false
+				current.WriteByte(bytes[i])
+				i++
+				current.WriteByte(bytes[i])
+				continue
+			}
+			flushCurrent()
+			tokens = append(tokens, string(ch))
+		case '>':
+			if i+1 < len(bytes) && bytes[i+1] == '>' {
+				flushCurrent()
+				tokens = append(tokens, ">>")
+				i++
+			} else if i+1 < len(bytes) && bytes[i+1] == '(' {
+				flushCurrent()
+				procSubstDepth = 1
+
+				procSubstInSingle = false
+				procSubstInDouble = false
+				current.WriteByte(bytes[i])
+				i++
+				current.WriteByte(bytes[i])
+				continue
+			} else {
+				flushCurrent()
+				tokens = append(tokens, ">")
+			}
+		case ';', '|':
 			flushCurrent()
 			tokens = append(tokens, string(ch))
 		case '&':
@@ -805,15 +883,6 @@ func tokenize(line string) []string {
 			} else {
 				flushCurrent()
 				tokens = append(tokens, "&")
-			}
-		case '>':
-			if i+1 < len(bytes) && bytes[i+1] == '>' {
-				flushCurrent()
-				tokens = append(tokens, ">>")
-				i++
-			} else {
-				flushCurrent()
-				tokens = append(tokens, ">")
 			}
 		case '$':
 			if i+1 < len(bytes) && bytes[i+1] == '(' {
@@ -1315,44 +1384,57 @@ func executeSimple(args []string, background bool) {
 		return
 	}
 
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	resolvedArgs, extraFiles := resolveProcSubstArgs(cmdArgs)
+
+	cmd := exec.Command(resolvedArgs[0], resolvedArgs[1:]...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if len(extraFiles) > 0 {
+		cmd.ExtraFiles = extraFiles
+	}
 
 	if inFile != "" {
-		f, err := os.Open(inFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-			lastExitCode = 1
-			return
+		if f := resolveProcSubstFile(inFile); f != nil {
+			cmd.Stdin = f
+		} else {
+			f, err := os.Open(inFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				lastExitCode = 1
+				return
+			}
+			defer f.Close()
+			cmd.Stdin = f
 		}
-		defer f.Close()
-		cmd.Stdin = f
 	}
 
 	if outFile != "" {
-		flag := os.O_CREATE | os.O_WRONLY
-		if appendMode {
-			flag |= os.O_APPEND
+		if f := resolveProcSubstFile(outFile); f != nil {
+			cmd.Stdout = f
 		} else {
-			flag |= os.O_TRUNC
+			flag := os.O_CREATE | os.O_WRONLY
+			if appendMode {
+				flag |= os.O_APPEND
+			} else {
+				flag |= os.O_TRUNC
+			}
+			f, err := os.OpenFile(outFile, flag, 0644)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				lastExitCode = 1
+				return
+			}
+			defer f.Close()
+			cmd.Stdout = f
 		}
-		f, err := os.OpenFile(outFile, flag, 0644)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-			lastExitCode = 1
-			return
-		}
-		defer f.Close()
-		cmd.Stdout = f
 	}
 
 	err := cmd.Start()
 	if err != nil {
 		if _, ok := err.(*exec.Error); ok {
-			fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", cmdArgs[0])
+			fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", resolvedArgs[0])
 			lastExitCode = 127
 		} else {
 			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
@@ -1361,7 +1443,7 @@ func executeSimple(args []string, background bool) {
 		return
 	}
 
-	commandStr := strings.Join(cmdArgs, " ")
+	commandStr := strings.Join(resolvedArgs, " ")
 
 	if background {
 		pid := cmd.Process.Pid
@@ -1404,19 +1486,28 @@ func executePipeline(segments [][]string, background bool) {
 			return
 		}
 
-		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+		resolvedArgs, extraFiles := resolveProcSubstArgs(cmdArgs)
+
+		cmd := exec.Command(resolvedArgs[0], resolvedArgs[1:]...)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		cmd.Stderr = os.Stderr
+		if len(extraFiles) > 0 {
+			cmd.ExtraFiles = extraFiles
+		}
 
 		if inFile != "" {
-			f, err := os.Open(inFile)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-				lastExitCode = 1
-				return
+			if f := resolveProcSubstFile(inFile); f != nil {
+				cmd.Stdin = f
+			} else {
+				f, err := os.Open(inFile)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+					lastExitCode = 1
+					return
+				}
+				defer f.Close()
+				cmd.Stdin = f
 			}
-			defer f.Close()
-			cmd.Stdin = f
 		} else if i == 0 {
 			cmd.Stdin = os.Stdin
 		} else {
@@ -1424,20 +1515,24 @@ func executePipeline(segments [][]string, background bool) {
 		}
 
 		if outFile != "" {
-			flag := os.O_CREATE | os.O_WRONLY
-			if appendMode {
-				flag |= os.O_APPEND
+			if f := resolveProcSubstFile(outFile); f != nil {
+				cmd.Stdout = f
 			} else {
-				flag |= os.O_TRUNC
+				flag := os.O_CREATE | os.O_WRONLY
+				if appendMode {
+					flag |= os.O_APPEND
+				} else {
+					flag |= os.O_TRUNC
+				}
+				f, err := os.OpenFile(outFile, flag, 0644)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+					lastExitCode = 1
+					return
+				}
+				defer f.Close()
+				cmd.Stdout = f
 			}
-			f, err := os.OpenFile(outFile, flag, 0644)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-				lastExitCode = 1
-				return
-			}
-			defer f.Close()
-			cmd.Stdout = f
 		} else if i == len(segments)-1 {
 			cmd.Stdout = os.Stdout
 		} else {
@@ -1536,45 +1631,58 @@ func executeSimpleWithEnv(args []string, background bool, prefixEnv map[string]s
 		return
 	}
 
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	resolvedArgs, extraFiles := resolveProcSubstArgs(cmdArgs)
+
+	cmd := exec.Command(resolvedArgs[0], resolvedArgs[1:]...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Env = buildEnvWithPrefix(prefixEnv)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	if len(extraFiles) > 0 {
+		cmd.ExtraFiles = extraFiles
+	}
 
 	if inFile != "" {
-		f, err := os.Open(inFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-			lastExitCode = 1
-			return
+		if f := resolveProcSubstFile(inFile); f != nil {
+			cmd.Stdin = f
+		} else {
+			f, err := os.Open(inFile)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				lastExitCode = 1
+				return
+			}
+			defer f.Close()
+			cmd.Stdin = f
 		}
-		defer f.Close()
-		cmd.Stdin = f
 	}
 
 	if outFile != "" {
-		flag := os.O_CREATE | os.O_WRONLY
-		if appendMode {
-			flag |= os.O_APPEND
+		if f := resolveProcSubstFile(outFile); f != nil {
+			cmd.Stdout = f
 		} else {
-			flag |= os.O_TRUNC
+			flag := os.O_CREATE | os.O_WRONLY
+			if appendMode {
+				flag |= os.O_APPEND
+			} else {
+				flag |= os.O_TRUNC
+			}
+			f, err := os.OpenFile(outFile, flag, 0644)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				lastExitCode = 1
+				return
+			}
+			defer f.Close()
+			cmd.Stdout = f
 		}
-		f, err := os.OpenFile(outFile, flag, 0644)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-			lastExitCode = 1
-			return
-		}
-		defer f.Close()
-		cmd.Stdout = f
 	}
 
 	err := cmd.Start()
 	if err != nil {
 		if _, ok := err.(*exec.Error); ok {
-			fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", cmdArgs[0])
+			fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", resolvedArgs[0])
 			lastExitCode = 127
 		} else {
 			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
@@ -1583,7 +1691,7 @@ func executeSimpleWithEnv(args []string, background bool, prefixEnv map[string]s
 		return
 	}
 
-	commandStr := strings.Join(cmdArgs, " ")
+	commandStr := strings.Join(resolvedArgs, " ")
 
 	if background {
 		pid := cmd.Process.Pid
@@ -1627,20 +1735,29 @@ func executePipelineWithEnv(segments [][]string, background bool, prefixEnv map[
 			return
 		}
 
-		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+		resolvedArgs, extraFiles := resolveProcSubstArgs(cmdArgs)
+
+		cmd := exec.Command(resolvedArgs[0], resolvedArgs[1:]...)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		cmd.Env = childEnv
 		cmd.Stderr = os.Stderr
+		if len(extraFiles) > 0 {
+			cmd.ExtraFiles = extraFiles
+		}
 
 		if inFile != "" {
-			f, err := os.Open(inFile)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-				lastExitCode = 1
-				return
+			if f := resolveProcSubstFile(inFile); f != nil {
+				cmd.Stdin = f
+			} else {
+				f, err := os.Open(inFile)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+					lastExitCode = 1
+					return
+				}
+				defer f.Close()
+				cmd.Stdin = f
 			}
-			defer f.Close()
-			cmd.Stdin = f
 		} else if i == 0 {
 			cmd.Stdin = os.Stdin
 		} else {
@@ -1648,20 +1765,24 @@ func executePipelineWithEnv(segments [][]string, background bool, prefixEnv map[
 		}
 
 		if outFile != "" {
-			flag := os.O_CREATE | os.O_WRONLY
-			if appendMode {
-				flag |= os.O_APPEND
+			if f := resolveProcSubstFile(outFile); f != nil {
+				cmd.Stdout = f
 			} else {
-				flag |= os.O_TRUNC
+				flag := os.O_CREATE | os.O_WRONLY
+				if appendMode {
+					flag |= os.O_APPEND
+				} else {
+					flag |= os.O_TRUNC
+				}
+				f, err := os.OpenFile(outFile, flag, 0644)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+					lastExitCode = 1
+					return
+				}
+				defer f.Close()
+				cmd.Stdout = f
 			}
-			f, err := os.OpenFile(outFile, flag, 0644)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-				lastExitCode = 1
-				return
-			}
-			defer f.Close()
-			cmd.Stdout = f
 		} else if i == len(segments)-1 {
 			cmd.Stdout = os.Stdout
 		} else {

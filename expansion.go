@@ -63,6 +63,19 @@ func expandString(s string) string {
 			continue
 		}
 
+		if !inDouble && (ch == '<' || ch == '>') && i+1 < len(s) && s[i+1] == '(' {
+			end := findMatchingProcSubstParen(s, i+2)
+			if end != -1 {
+				token := s[i : end+1]
+				replaced := expandProcSubst(token)
+				if replaced != "" || expandError {
+					result.WriteString(replaced)
+					i = end + 1
+					continue
+				}
+			}
+		}
+
 		if ch == '$' && i+1 < len(s) {
 			expanded, advanced := expandDollar(s, i, inDouble)
 			if advanced > 0 {
@@ -1453,10 +1466,361 @@ func executePipelineSubstitution(segments [][]string, captureStdout *os.File) {
 	}
 }
 
+func findMatchingProcSubstParen(s string, start int) int {
+	depth := 1
+	inSingle := false
+	inDouble := false
+	for i := start; i < len(s); i++ {
+		if inSingle {
+			if s[i] == '\'' {
+				inSingle = false
+			}
+			continue
+		}
+		if s[i] == '\'' && !inDouble {
+			inSingle = true
+			continue
+		}
+		if s[i] == '"' && !inSingle {
+			inDouble = !inDouble
+			continue
+		}
+		if s[i] == '\\' && inDouble && i+1 < len(s) {
+			i++
+			continue
+		}
+		if s[i] == '(' && !inSingle && !inDouble {
+			depth++
+		}
+		if s[i] == ')' && !inSingle && !inDouble {
+			depth--
+			if depth == 0 {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
 func isAlphaOrUnderscore(c byte) bool {
 	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'
 }
 
 func isAlnumOrUnderscore(c byte) bool {
 	return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'
+}
+
+type procSubstEntry struct {
+	cmd *exec.Cmd
+	fd  *os.File
+}
+
+var procSubstEntries []procSubstEntry
+var procSubstCount int
+var procSubstMap map[string]*os.File
+
+func init() {
+	procSubstMap = make(map[string]*os.File)
+}
+
+func procSubstPlaceholder() string {
+	id := procSubstCount
+	procSubstCount++
+	return "__LASH_PROCSUBST_" + strconv.Itoa(id) + "__"
+}
+
+func resolveProcSubstFile(path string) *os.File {
+	if f, ok := procSubstMap[path]; ok {
+		return f
+	}
+	return nil
+}
+
+func resolveProcSubstArgs(args []string) ([]string, []*os.File) {
+	var extraFiles []*os.File
+	resolved := make([]string, len(args))
+	for i, arg := range args {
+		if f, ok := procSubstMap[arg]; ok {
+			extraFiles = append(extraFiles, f)
+			resolved[i] = "/dev/fd/" + strconv.Itoa(3+len(extraFiles)-1)
+		} else {
+			resolved[i] = arg
+		}
+	}
+	return resolved, extraFiles
+}
+
+func expandProcSubst(token string) string {
+	if len(token) < 3 {
+		return token
+	}
+	dir := token[0]
+	if (dir != '<' && dir != '>') || token[1] != '(' || token[len(token)-1] != ')' {
+		return token
+	}
+	innerCmd := token[2 : len(token)-1]
+	innerCmd = strings.TrimSpace(innerCmd)
+	if innerCmd == "" {
+		fmt.Fprintf(os.Stderr, "lash: process substitution: empty command\n")
+		lastExitCode = 2
+		return ""
+	}
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+		lastExitCode = 1
+		return ""
+	}
+
+	tokens := tokenize(innerCmd)
+	if len(tokens) == 0 {
+		r.Close()
+		w.Close()
+		return ""
+	}
+
+	expanded := expandVariables(tokens)
+	segments := splitPipes(expanded)
+
+	var cmd *exec.Cmd
+	if len(segments) == 1 {
+		cmdArgs, inFile, outFile, appendMode := parseRedirection(segments[0])
+		if len(cmdArgs) == 0 {
+			r.Close()
+			w.Close()
+			return ""
+		}
+		cmd = exec.Command(cmdArgs[0], cmdArgs[1:]...)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+		cmd.Stderr = os.Stderr
+
+		if dir == '<' {
+			cmd.Stdout = w
+			if inFile != "" {
+				f, err := os.Open(inFile)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+					r.Close()
+					w.Close()
+					return ""
+				}
+				cmd.Stdin = f
+			}
+		} else {
+			cmd.Stdin = r
+			if outFile != "" {
+				flag := os.O_CREATE | os.O_WRONLY
+				if appendMode {
+					flag |= os.O_APPEND
+				} else {
+					flag |= os.O_TRUNC
+				}
+				f, err := os.OpenFile(outFile, flag, 0644)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+					r.Close()
+					w.Close()
+					return ""
+				}
+				cmd.Stdout = f
+			} else {
+				cmd.Stdout = os.Stdout
+			}
+		}
+	} else {
+		type pipePair struct {
+			r *os.File
+			w *os.File
+		}
+		pipes := make([]pipePair, len(segments)-1)
+		for i := range pipes {
+			pr, pw, err := os.Pipe()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				r.Close()
+				w.Close()
+				return ""
+			}
+			pipes[i] = pipePair{r: pr, w: pw}
+		}
+
+		var cmds []*exec.Cmd
+		for i, seg := range segments {
+			cmdArgs, inFile, outFile, appendMode := parseRedirection(seg)
+			if len(cmdArgs) == 0 {
+				r.Close()
+				w.Close()
+				for _, p := range pipes {
+					p.r.Close()
+					p.w.Close()
+				}
+				return ""
+			}
+
+			c := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+			c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+			c.Stderr = os.Stderr
+
+			if inFile != "" {
+				f, err := os.Open(inFile)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+					r.Close()
+					w.Close()
+					for _, p := range pipes {
+						p.r.Close()
+						p.w.Close()
+					}
+					return ""
+				}
+				c.Stdin = f
+			} else if i == 0 {
+				if dir == '<' {
+					c.Stdin = os.Stdin
+				} else {
+					c.Stdin = r
+				}
+			} else {
+				c.Stdin = pipes[i-1].r
+			}
+
+			if outFile != "" {
+				flag := os.O_CREATE | os.O_WRONLY
+				if appendMode {
+					flag |= os.O_APPEND
+				} else {
+					flag |= os.O_TRUNC
+				}
+				f, err := os.OpenFile(outFile, flag, 0644)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+					r.Close()
+					w.Close()
+					for _, p := range pipes {
+						p.r.Close()
+						p.w.Close()
+					}
+					return ""
+				}
+				c.Stdout = f
+			} else if i == len(segments)-1 {
+				if dir == '<' {
+					c.Stdout = w
+				} else {
+					c.Stdout = os.Stdout
+				}
+			} else {
+				c.Stdout = pipes[i].w
+			}
+
+			cmds = append(cmds, c)
+		}
+
+		for _, c := range cmds {
+			if err := c.Start(); err != nil {
+				if _, ok := err.(*exec.Error); ok {
+					fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", c.Path)
+					lastExitCode = 127
+				} else {
+					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+					lastExitCode = 1
+				}
+				r.Close()
+				w.Close()
+				for _, p := range pipes {
+					p.r.Close()
+					p.w.Close()
+				}
+				return ""
+			}
+		}
+
+		for _, p := range pipes {
+			p.w.Close()
+		}
+
+		go func() {
+			for _, c := range cmds {
+				var status syscall.WaitStatus
+				for {
+					_, err := syscall.Wait4(c.Process.Pid, &status, 0, nil)
+					if err != syscall.EINTR {
+						break
+					}
+				}
+			}
+			for _, p := range pipes {
+				p.r.Close()
+			}
+			if dir == '<' {
+				w.Close()
+			} else {
+				r.Close()
+			}
+		}()
+
+		var keptFd *os.File
+		if dir == '<' {
+			keptFd = r
+		} else {
+			keptFd = w
+		}
+		placeholder := procSubstPlaceholder()
+		procSubstEntries = append(procSubstEntries, procSubstEntry{cmd: cmds[0], fd: keptFd})
+		procSubstMap[placeholder] = keptFd
+		return placeholder
+	}
+
+	if err := cmd.Start(); err != nil {
+		if _, ok := err.(*exec.Error); ok {
+			fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", cmd.Path)
+			lastExitCode = 127
+		} else {
+			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+			lastExitCode = 1
+		}
+		r.Close()
+		w.Close()
+		return ""
+	}
+
+	if dir == '<' {
+		w.Close()
+	} else {
+		r.Close()
+	}
+
+	var keptFd *os.File
+	if dir == '<' {
+		keptFd = r
+	} else {
+		keptFd = w
+	}
+	placeholder := procSubstPlaceholder()
+	procSubstEntries = append(procSubstEntries, procSubstEntry{cmd: cmd, fd: keptFd})
+	procSubstMap[placeholder] = keptFd
+	return placeholder
+}
+
+func waitProcSubst() {
+	for _, entry := range procSubstEntries {
+		entry.fd.Close()
+		var status syscall.WaitStatus
+		for {
+			_, err := syscall.Wait4(entry.cmd.Process.Pid, &status, 0, nil)
+			if err != syscall.EINTR {
+				break
+			}
+		}
+		if status.Exited() {
+			if status.ExitStatus() != 0 {
+				lastExitCode = status.ExitStatus()
+			}
+		}
+	}
+	procSubstEntries = nil
+	for k := range procSubstMap {
+		delete(procSubstMap, k)
+	}
 }
