@@ -37,6 +37,7 @@ var distroIcons = map[string]string{
 	"rockeylinux":         "\uF32B",
 	"solus":               "\uF32D",
 	"zorin":               "\uF32F",
+	"android":             "\uE70E",
 }
 
 const iconMacOS = "\uF179"
