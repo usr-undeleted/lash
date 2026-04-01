@@ -77,6 +77,7 @@ Remaining work: local variables, default value expansion, substring/length expan
 - Commit changes when confident a feature is implemented and at least working with no fatal errors. All next changes should focus on fixing any other bugs the feature might have.
 - Always run `./build.sh` before committing (it auto-bumps MAJOR.MINOR from ROADMAP.md).
 - After `./build.sh`, if the commit is NOT a roadmap feature (e.g. bugfix, debug cleanup, refactor), manually bump the PATCH version in README.md (e.g. `v3.6` → `v3.6.1`). `build.sh` only handles MAJOR.MINOR — PATCH is your responsibility.
+- Bump the version accordingly once a feature/bug fix is deemed solved.
 - Always run `git pull` or `git pull --rebase` before making any changes to ensure your branch is up to date with remote.
 - Stay organized, following the phases' progressions smoothly and properly.
 - These rules are non-negotiable. Do not rationalize bypassing them.

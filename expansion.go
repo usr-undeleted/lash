@@ -102,6 +102,30 @@ func expandString(s string) string {
 			continue
 		}
 
+		if ch == '\\' && !inSingle && i+1 < len(s) {
+			if inDouble {
+				next := s[i+1]
+				if next == '"' || next == '\\' || next == '$' || next == '`' || next == '\n' {
+					if next == '\n' {
+						i += 2
+						continue
+					}
+					result.WriteByte(next)
+					i += 2
+					continue
+				}
+				result.WriteByte(ch)
+				i++
+				continue
+			}
+			i++
+			if i < len(s) {
+				result.WriteByte(s[i])
+				i++
+			}
+			continue
+		}
+
 		result.WriteByte(ch)
 		i++
 	}
@@ -1247,7 +1271,8 @@ func runCommandSubstitution(cmd string) (string, int) {
 				continue
 			}
 
-			toks := expandVariables(entry.args)
+			toks := expandBraces(entry.args)
+			toks = expandVariables(toks)
 			toks = expandGlobs(toks)
 			if len(toks) == 0 {
 				continue
@@ -1580,7 +1605,8 @@ func expandProcSubst(token string) string {
 		return ""
 	}
 
-	expanded := expandVariables(tokens)
+	expanded := expandBraces(tokens)
+	expanded = expandVariables(expanded)
 	segments := splitPipes(expanded)
 
 	var cmd *exec.Cmd

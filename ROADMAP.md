@@ -43,7 +43,7 @@
 - [x] Command substitution (`$(cmd)`, backtick `` `cmd` ``)
 - [x] Arithmetic expansion (`$((expr))`)
 - [x] Process substitution (`<(cmd)`, `>(cmd)`)
-- [ ] Brace expansion (`{a,b,c}`, `{1..10}`)
+- [x] Brace expansion (`{a,b,c}`, `{1..10}`)
 
 ## Phase 4: Pattern Matching & Globbing
 

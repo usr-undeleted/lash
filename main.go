@@ -656,7 +656,8 @@ func executeChain(chain []chainEntry, cfg *Config) {
 			continue
 		}
 
-		tokens := expandVariables(entry.args)
+		tokens := expandBraces(entry.args)
+		tokens = expandVariables(tokens)
 		if expandError {
 			expandError = false
 			lastExitCode = 2
@@ -873,6 +874,13 @@ func tokenize(line string) []string {
 		}
 
 		if inSingle || inDouble {
+			current.WriteByte(bytes[i])
+			continue
+		}
+
+		if ch == '\\' && i+1 < len(bytes) {
+			current.WriteByte(bytes[i])
+			i++
 			current.WriteByte(bytes[i])
 			continue
 		}
