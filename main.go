@@ -447,6 +447,43 @@ func expandPS1Escapes(ps1 string) string {
 			} else {
 				b.WriteString(getOSIcon())
 			}
+		case 'c':
+			if content, consumed, ok := tryParseBrace(runes, i+1); ok {
+				expandedContent := expandPS1Escapes(content)
+				contentWidth := visibleWidth(expandedContent)
+				currentLeft := b.String()
+				lastNl := strings.LastIndex(currentLeft, "\n")
+				var lastLine string
+				if lastNl >= 0 {
+					lastLine = currentLeft[lastNl+1:]
+				} else {
+					lastLine = currentLeft
+				}
+				stripped := strings.TrimRight(lastLine, " ")
+				if len(stripped) != len(lastLine) {
+					prefix := ""
+					if lastNl >= 0 {
+						prefix = currentLeft[:lastNl+1]
+					}
+					b.Reset()
+					b.WriteString(prefix)
+					b.WriteString(stripped)
+				}
+				leftWidth := visibleWidth(stripped)
+				termWidth := getTermWidth()
+				availableWidth := termWidth - leftWidth
+				if contentWidth > availableWidth {
+					b.WriteString(expandedContent)
+				} else {
+					padding := (availableWidth - contentWidth) / 2
+					b.WriteString(strings.Repeat(" ", padding))
+					b.WriteString(expandedContent)
+				}
+				i += consumed
+			} else {
+				b.WriteByte('\\')
+				b.WriteRune(runes[i])
+			}
 		case '!':
 			b.WriteString(strconv.Itoa(cmdNumber))
 		case '#':
