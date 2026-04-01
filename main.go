@@ -237,6 +237,49 @@ func expandPS1(ps1 string) string {
 	return result
 }
 
+func expandTimeFormat(format string) string {
+	now := time.Now()
+	var b strings.Builder
+	runes := []rune(format)
+	for i := 0; i < len(runes); i++ {
+		if runes[i] == '%' && i+1 < len(runes) {
+			code := string(runes[i+1:])
+			switch {
+			case strings.HasPrefix(code, "yyyy"):
+				b.WriteString(fmt.Sprintf("%04d", now.Year()))
+				i += 4
+			case strings.HasPrefix(code, "yy"):
+				b.WriteString(fmt.Sprintf("%02d", now.Year()%100))
+				i += 2
+			case strings.HasPrefix(code, "hh"):
+				b.WriteString(fmt.Sprintf("%02d", now.Hour()))
+				i += 2
+			case strings.HasPrefix(code, "HH"):
+				h := now.Hour() % 12
+				if h == 0 {
+					h = 12
+				}
+				b.WriteString(fmt.Sprintf("%02d", h))
+				i += 2
+			case strings.HasPrefix(code, "MM"):
+				b.WriteString(fmt.Sprintf("%02d", now.Minute()))
+				i += 2
+			case strings.HasPrefix(code, "dd"):
+				b.WriteString(fmt.Sprintf("%02d", now.Day()))
+				i += 2
+			case strings.HasPrefix(code, "mm"):
+				b.WriteString(fmt.Sprintf("%02d", now.Month()))
+				i += 2
+			default:
+				b.WriteRune(runes[i])
+			}
+		} else {
+			b.WriteRune(runes[i])
+		}
+	}
+	return b.String()
+}
+
 func tryParseBrace(runes []rune, pos int) (content string, consumed int, ok bool) {
 	if pos >= len(runes) || runes[pos] != '{' {
 		return "", 0, false
@@ -297,7 +340,15 @@ func expandPS1Escapes(ps1 string) string {
 		case 't':
 			b.WriteString(time.Now().Format("15:04:05"))
 		case 'T':
-			b.WriteString(time.Now().Format("15:04:05"))
+			if content, consumed, ok := tryParseBrace(runes, i+1); ok {
+				if content != "" {
+					b.WriteString(expandTimeFormat(content))
+				}
+				i += consumed
+			} else {
+				now := time.Now()
+				b.WriteString(fmt.Sprintf("%02d%02d%02d", now.Day(), now.Month(), now.Year()%100))
+			}
 		case '@':
 			b.WriteString(time.Now().Format("15:04"))
 		case 'd':
