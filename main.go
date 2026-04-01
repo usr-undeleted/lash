@@ -564,7 +564,7 @@ func handleGlobalCommand(args []string) {
 		printVersion(cfg.LogoSize)
 		os.Exit(0)
 	case "set-config":
-		if len(args) >= 3 && args[1] == "list" {
+		if len(args) >= 2 && args[1] == "list" {
 			fmt.Println("syntax-color = <0|1>   highlight commands green/red as you type")
 			fmt.Println("logosize    = <mini|small|big>   logo size for lash version")
 			os.Exit(0)
