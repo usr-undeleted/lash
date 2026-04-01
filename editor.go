@@ -902,11 +902,7 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	cursorW := bufWidth(e.buf[:e.cursor])
 
 	targetPos := typingCol + cursorW
-	if targetPos > 0 && targetPos%termW == 0 {
-		e.screenRow = targetPos/termW - 1
-	} else {
-		e.screenRow = targetPos / termW
-	}
+	e.screenRow = targetPos / termW
 
 	endPos := typingCol + newW
 	var endRow int
@@ -924,9 +920,6 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	}
 	buf.WriteString("\r")
 	targetCol := targetPos % termW
-	if targetPos > 0 && targetCol == 0 {
-		targetCol = termW - 1
-	}
 	if targetCol > 0 {
 		buf.WriteString(fmt.Sprintf("\033[%dC", targetCol))
 	}
