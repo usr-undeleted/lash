@@ -25,7 +25,7 @@ var varTable map[string]string
 var exportedVars map[string]bool
 var varMu sync.Mutex
 
-const defaultPS1 = `\[\e[1;36m\]\u@\h\[\e[0m\] \[\e[1;33m\]\w\[\e[0m\] on \[\e[1m\]\g\G◇\[\e[0m\]\x✗\X \n\[\e[1m\]╰\$\[\e[0m\] `
+const defaultPS1 = `╭─| \l | \033[36m\u\033[0m@\033[36m\h\033[0m | \033[36m\w\033[0m \g{| \033[33m\g\033[31m\G!\033[0m }|\F─\X{❯ \X \033[31m\x↵\033[0m }❮\n╰─$ `
 
 func initVarTable() {
 	varTable = make(map[string]string)
