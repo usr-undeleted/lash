@@ -63,3 +63,6 @@ dkms.conf
 
 # opencode plans
 .opencode/plans/
+
+# undeleted's
+icons.txt

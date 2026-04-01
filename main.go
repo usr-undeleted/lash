@@ -373,6 +373,8 @@ func expandPS1Escapes(ps1 string) string {
 			} else if lastExitCode >= 1 {
 				b.WriteString(fmt.Sprintf("%s%d%s", colorRed, lastExitCode, colorReset))
 			}
+		case 'l':
+			b.WriteString(getOSIcon())
 		case '!':
 			b.WriteString(strconv.Itoa(cmdNumber))
 		case '#':
