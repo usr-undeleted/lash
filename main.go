@@ -18,6 +18,7 @@ import (
 var lastExitCode int = 0
 var expandError bool
 var cmdNumber int = 0
+var returnFlag bool
 var pendingNotifs []string
 var notifMu sync.Mutex
 
@@ -284,9 +285,20 @@ func tryParseBrace(runes []rune, pos int) (content string, consumed int, ok bool
 	if pos >= len(runes) || runes[pos] != '{' {
 		return "", 0, false
 	}
+	depth := 1
 	for j := pos + 1; j < len(runes); j++ {
-		if runes[j] == '}' {
-			return string(runes[pos+1 : j]), j - pos + 1, true
+		ch := runes[j]
+		if ch == '\\' && j+1 < len(runes) {
+			j++
+			continue
+		}
+		if ch == '{' {
+			depth++
+		} else if ch == '}' {
+			depth--
+			if depth == 0 {
+				return string(runes[pos+1 : j]), j - pos + 1, true
+			}
 		}
 	}
 	return "", 0, false
@@ -494,6 +506,7 @@ func sourceFile(path string, cfg *Config) int {
 	}
 	defer f.Close()
 
+	returnFlag = false
 	scanner := bufio.NewScanner(f)
 	code := 0
 	for scanner.Scan() {
@@ -509,13 +522,22 @@ func sourceFile(path string, cfg *Config) int {
 		if len(tokens) > 0 && (tokens[0] == "alias" || tokens[0] == "unalias") {
 			executeBuiltin(tokens, cfg)
 			code = lastExitCode
+			if returnFlag {
+				break
+			}
 			continue
 		}
 		chains := splitChains(line)
 		for _, chain := range chains {
 			executeChain(chain, cfg)
+			if returnFlag {
+				break
+			}
 		}
 		code = lastExitCode
+		if returnFlag {
+			break
+		}
 	}
 	return code
 }
@@ -1033,7 +1055,7 @@ func isBuiltin(cmd string) bool {
 	switch cmd {
 	case "exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 		"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
-		"source", ".":
+		"source", ".", "return":
 		return true
 	}
 	return false
@@ -1407,6 +1429,26 @@ func executeBuiltin(args []string, cfg *Config) {
 				continue
 			}
 		}
+	case "return":
+		if len(args) > 1 {
+			n, err := strconv.Atoi(args[1])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "lash: return: %s: numeric argument required\n", args[1])
+				lastExitCode = 2
+				returnFlag = true
+				return
+			}
+			if n < 0 {
+				n = 0
+			}
+			if n > 255 {
+				n = 255
+			}
+			lastExitCode = n
+		} else {
+			lastExitCode = 0
+		}
+		returnFlag = true
 	case "source", ".":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "lash: source: filename argument required")

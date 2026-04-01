@@ -387,7 +387,9 @@ func findMatchingBrace(s string, openPos int) (int, error) {
 				i += 2
 				continue
 			}
-			if ch == '}' {
+			if ch == '{' {
+				depth++
+			} else if ch == '}' {
 				depth--
 				if depth == 0 {
 					return i, nil
