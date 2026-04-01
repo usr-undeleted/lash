@@ -44,6 +44,22 @@ const iconMacOS = "\uF179"
 const iconWindows = "\uF372"
 const iconLinux = "\uE712"
 
+func getNamedIcon(name string) string {
+	id := strings.ToLower(name)
+	switch id {
+	case "macos", "darwin":
+		return iconMacOS
+	case "windows", "win":
+		return iconWindows
+	case "linux", "tux":
+		return iconLinux
+	}
+	if icon, ok := distroIcons[id]; ok {
+		return icon
+	}
+	return ""
+}
+
 func getOSIcon() string {
 	switch runtime.GOOS {
 	case "darwin":

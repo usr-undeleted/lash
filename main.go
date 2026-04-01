@@ -437,7 +437,16 @@ func expandPS1Escapes(ps1 string) string {
 				b.WriteString(fmt.Sprintf("%s%d%s", colorRed, lastExitCode, colorReset))
 			}
 		case 'l':
-			b.WriteString(getOSIcon())
+			if content, consumed, ok := tryParseBrace(runes, i+1); ok {
+				if icon := getNamedIcon(content); icon != "" {
+					b.WriteString(icon)
+				} else {
+					b.WriteString(getOSIcon())
+				}
+				i += consumed
+			} else {
+				b.WriteString(getOSIcon())
+			}
 		case '!':
 			b.WriteString(strconv.Itoa(cmdNumber))
 		case '#':
