@@ -1,7 +1,7 @@
 # lash
 
 <p align="center">
-  <img src="logo/lash.png" alt="lash" width="450">
+  <img src="logo/lash.png" alt="lash" width="325">
 </p>
 
 <p align="center">
