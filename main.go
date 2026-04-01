@@ -481,7 +481,49 @@ func sourceLashrc(cfg *Config) {
 	sourceFile(path, cfg)
 }
 
+func handleGlobalCommand(args []string) {
+	sub := args[0]
+	switch sub {
+	case "version":
+		cfg := LoadConfig()
+		printVersion(cfg.LogoSize)
+		os.Exit(0)
+	case "set-config":
+		if len(args) >= 3 && args[1] == "list" {
+			fmt.Println("syntax-color = <0|1>   highlight commands green/red as you type")
+			fmt.Println("logosize    = <mini|small|big>   logo size for lash version")
+			os.Exit(0)
+		}
+		if len(args) < 3 {
+			fmt.Fprintln(os.Stderr, "lash: usage: lash set-config <key> <value>")
+			fmt.Fprintln(os.Stderr, "       lash set-config list")
+			os.Exit(1)
+		}
+		cfg := LoadConfig()
+		key := args[1]
+		val := args[2]
+		if !cfg.Set(key, val) {
+			fmt.Fprintf(os.Stderr, "lash: unknown config key: %s\n", key)
+			os.Exit(1)
+		}
+		if err := cfg.Save(); err != nil {
+			fmt.Fprintf(os.Stderr, "lash: failed to save config: %s\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("lash: set %s = %s\n", key, val)
+		os.Exit(0)
+	default:
+		fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", sub)
+		fmt.Fprintln(os.Stderr, "usage: lash [version|set-config ...]")
+		os.Exit(1)
+	}
+}
+
 func main() {
+	if len(os.Args) > 1 {
+		handleGlobalCommand(os.Args[1:])
+	}
+
 	initJobControl()
 	initAliases()
 	initVarTable()
