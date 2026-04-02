@@ -79,6 +79,10 @@ func getOSIcon() string {
 		return iconWindows
 	}
 
+	if isAndroid() {
+		return distroIcons["android"]
+	}
+
 	id := getDistroID()
 	if id == "" {
 		return "?"
@@ -87,6 +91,10 @@ func getOSIcon() string {
 		return icon
 	}
 	return iconLinux
+}
+
+func isAndroid() bool {
+	return os.Getenv("ANDROID_ROOT") != ""
 }
 
 func isWSL() bool {
@@ -101,6 +109,10 @@ func isWSL() bool {
 }
 
 func getDistroID() string {
+	if isAndroid() {
+		return "android"
+	}
+
 	f, err := os.Open("/etc/os-release")
 	if err != nil {
 		return ""
