@@ -10,12 +10,17 @@ import (
 	"syscall"
 )
 
+var allBuiltins = []string{
+	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
+	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
+	"source", ".", "return",
+}
+
 func isBuiltin(cmd string) bool {
-	switch cmd {
-	case "exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
-		"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
-		"source", ".", "return":
-		return true
+	for _, b := range allBuiltins {
+		if b == cmd {
+			return true
+		}
 	}
 	return false
 }
@@ -315,6 +320,12 @@ func executeBuiltin(args []string, cfg *Config) {
 		for _, a := range args[1:] {
 			if isBuiltin(a) {
 				fmt.Printf("%s is a shell builtin\n", a)
+			} else if isAlias(a) {
+				aliasMu.RLock()
+				fmt.Printf("%s is aliased to '%s'\n", a, aliasTable[a].Raw)
+				aliasMu.RUnlock()
+			} else if isKeyword(a) {
+				fmt.Printf("%s is a shell keyword\n", a)
 			} else {
 				path, err := exec.LookPath(a)
 				if err != nil {

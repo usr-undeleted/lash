@@ -958,10 +958,86 @@ func (e *LineEditor) syntaxHighlight() string {
 	cmdPart := string(e.buf[:actualFirstEnd])
 	rest := string(e.buf[actualFirstEnd:])
 
+	var result strings.Builder
 	if isValidCommand(tokens[0]) {
-		return colorGreen + cmdPart + colorReset + rest
+		result.WriteString(colorGreen)
+		result.WriteString(cmdPart)
+		result.WriteString(colorReset)
+	} else {
+		result.WriteString(colorRed)
+		result.WriteString(cmdPart)
+		result.WriteString(colorReset)
 	}
-	return colorRed + cmdPart + colorReset + rest
+
+	if len(rest) > 0 {
+		result.WriteString(highlightKeywords(rest))
+	}
+
+	return result.String()
+}
+
+func highlightKeywords(text string) string {
+	runes := []rune(text)
+	var buf strings.Builder
+	i := 0
+
+	for i < len(runes) {
+		if runes[i] == ' ' || runes[i] == '\t' {
+			buf.WriteRune(runes[i])
+			i++
+			continue
+		}
+
+		if runes[i] == '\'' {
+			buf.WriteRune(runes[i])
+			i++
+			for i < len(runes) && runes[i] != '\'' {
+				buf.WriteRune(runes[i])
+				i++
+			}
+			if i < len(runes) {
+				buf.WriteRune(runes[i])
+				i++
+			}
+			continue
+		}
+
+		if runes[i] == '"' {
+			buf.WriteRune(runes[i])
+			i++
+			for i < len(runes) && runes[i] != '"' {
+				if runes[i] == '\\' && i+1 < len(runes) {
+					buf.WriteRune(runes[i])
+					buf.WriteRune(runes[i+1])
+					i += 2
+					continue
+				}
+				buf.WriteRune(runes[i])
+				i++
+			}
+			if i < len(runes) {
+				buf.WriteRune(runes[i])
+				i++
+			}
+			continue
+		}
+
+		start := i
+		for i < len(runes) && runes[i] != ' ' && runes[i] != '\t' {
+			buf.WriteRune(runes[i])
+			i++
+		}
+		token := string(runes[start:i])
+		if isKeyword(token) {
+			colored := colorYellow + token + colorReset
+			bufStr := buf.String()
+			buf.Reset()
+			buf.WriteString(bufStr[:len(bufStr)-len(token)])
+			buf.WriteString(colored)
+		}
+	}
+
+	return buf.String()
 }
 
 func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
@@ -1110,14 +1186,24 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 func (e *LineEditor) completeCommand(partial string) []string {
 	var matches []string
 
-	// Builtins
-	for _, cmd := range []string{"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash"} {
+	for _, cmd := range allBuiltins {
 		if strings.HasPrefix(cmd, partial) {
 			matches = append(matches, cmd)
 		}
 	}
 
-	// PATH executables
+	for _, kw := range allKeywords {
+		if strings.HasPrefix(kw, partial) {
+			matches = append(matches, kw)
+		}
+	}
+
+	for _, name := range allAliasNames() {
+		if strings.HasPrefix(name, partial) {
+			matches = append(matches, name)
+		}
+	}
+
 	path := os.Getenv("PATH")
 	if path != "" {
 		seen := make(map[string]bool)

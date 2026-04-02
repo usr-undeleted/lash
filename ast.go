@@ -124,14 +124,23 @@ func (p *parser) match(token string) bool {
 	return false
 }
 
-func (p *parser) isKeyword(t string) bool {
-	switch t {
-	case "if", "then", "elif", "else", "fi",
-		"while", "until", "for", "in", "do", "done",
-		"case", "esac":
-		return true
+var allKeywords = []string{
+	"if", "then", "elif", "else", "fi",
+	"while", "until", "for", "in", "do", "done",
+	"case", "esac",
+}
+
+func isKeyword(t string) bool {
+	for _, kw := range allKeywords {
+		if kw == t {
+			return true
+		}
 	}
 	return false
+}
+
+func (p *parser) isKeyword(t string) bool {
+	return isKeyword(t)
 }
 
 func (p *parser) isOperator(t string) bool {

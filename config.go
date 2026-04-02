@@ -150,7 +150,7 @@ func boolToStr(b bool) string {
 }
 
 func isValidCommand(name string) bool {
-	if isBuiltin(name) {
+	if isBuiltin(name) || isKeyword(name) || isAlias(name) {
 		return true
 	}
 	_, err := exec.LookPath(name)

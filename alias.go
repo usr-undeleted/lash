@@ -35,6 +35,23 @@ func initAliases() {
 	aliasTable = make(map[string]*Alias)
 }
 
+func isAlias(name string) bool {
+	aliasMu.RLock()
+	defer aliasMu.RUnlock()
+	_, ok := aliasTable[name]
+	return ok
+}
+
+func allAliasNames() []string {
+	aliasMu.RLock()
+	defer aliasMu.RUnlock()
+	names := make([]string, 0, len(aliasTable))
+	for name := range aliasTable {
+		names = append(names, name)
+	}
+	return names
+}
+
 func stripQuotes(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) >= 2 {
