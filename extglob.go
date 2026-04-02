@@ -350,6 +350,9 @@ func matchExtGlob(pattern string) []string {
 	var matches []string
 	for _, e := range entries {
 		name := e.Name()
+		if !includeDotfile(name) {
+			continue
+		}
 		if re.MatchString(name) {
 			if dir == "." {
 				matches = append(matches, name)
@@ -384,6 +387,9 @@ func matchNegExtGlob(dir string, globPart string, negGroups []negGroup) []string
 	var matches []string
 	for _, e := range entries {
 		name := e.Name()
+		if !includeDotfile(name) {
+			continue
+		}
 		excluded := false
 		for _, negRe := range negRegexes {
 			if negRe.MatchString(name) {

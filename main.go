@@ -21,6 +21,7 @@ var cmdNumber int = 0
 var returnFlag bool
 var pendingNotifs []string
 var notifMu sync.Mutex
+var currentConfig *Config
 
 var varTable map[string]string
 var exportedVars map[string]bool
@@ -652,6 +653,7 @@ func main() {
 	setVar("PS1", defaultPS1, true)
 
 	cfg := LoadConfig()
+	currentConfig = cfg
 	sourceLashrc(cfg)
 	editor := NewLineEditor(cfg)
 	for {
@@ -766,9 +768,8 @@ func expandGlobs(tokens []string) []string {
 				result = append(result, t)
 			}
 		} else if strings.ContainsAny(t, "*?[") {
-			matches, err := filepath.Glob(t)
+			matches, err := customGlob(t)
 			if err == nil && len(matches) > 0 {
-				sort.Strings(matches)
 				result = append(result, matches...)
 			} else {
 				result = append(result, t)

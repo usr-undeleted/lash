@@ -11,9 +11,10 @@ import (
 )
 
 type Config struct {
-	SyntaxColor bool
-	LogoSize    string
-	HistorySize int
+	SyntaxColor  bool
+	LogoSize     string
+	HistorySize  int
+	GlobDotfiles bool
 }
 
 func configPath() string {
@@ -57,6 +58,8 @@ func LoadConfig() *Config {
 			if n, err := strconv.Atoi(val); err == nil && n > 0 {
 				cfg.HistorySize = n
 			}
+		case "glob-dotfiles":
+			cfg.GlobDotfiles = val == "1"
 		}
 	}
 	return cfg
@@ -75,6 +78,7 @@ func (c *Config) Save() error {
 	lines = append(lines, fmt.Sprintf("syntax-color = %s", boolToStr(c.SyntaxColor)))
 	lines = append(lines, fmt.Sprintf("logosize = %s", c.LogoSize))
 	lines = append(lines, fmt.Sprintf("history-size = %d", c.HistorySize))
+	lines = append(lines, fmt.Sprintf("glob-dotfiles = %s", boolToStr(c.GlobDotfiles)))
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -104,6 +108,9 @@ func (c *Config) Set(key, val string) bool {
 			return true
 		}
 		return false
+	case "glob-dotfiles":
+		c.GlobDotfiles = val == "1"
+		return true
 	}
 	return false
 }

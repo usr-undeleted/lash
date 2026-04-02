@@ -1,11 +1,111 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
+
+func includeDotfile(name string) bool {
+	if len(name) == 0 {
+		return true
+	}
+	if name[0] != '.' {
+		return true
+	}
+	if currentConfig != nil && currentConfig.GlobDotfiles {
+		return true
+	}
+	return false
+}
+
+func customGlob(pattern string) ([]string, error) {
+	dir := "."
+	filePattern := pattern
+	if strings.Contains(pattern, "/") {
+		lastSlash := strings.LastIndex(pattern, "/")
+		dir = pattern[:lastSlash]
+		if dir == "" {
+			dir = "/"
+		}
+		filePattern = pattern[lastSlash+1:]
+	}
+
+	regexStr := "^" + simpleGlobToRegex(filePattern) + "$"
+	re, err := regexp.Compile(regexStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid glob pattern: %s", pattern)
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	var matches []string
+	for _, e := range entries {
+		name := e.Name()
+		if !includeDotfile(name) {
+			continue
+		}
+		if re.MatchString(name) {
+			if dir == "." {
+				matches = append(matches, name)
+			} else {
+				matches = append(matches, filepath.Join(dir, name))
+			}
+		}
+	}
+
+	sort.Strings(matches)
+	return matches, nil
+}
+
+func simpleGlobToRegex(pattern string) string {
+	var re strings.Builder
+	for i := 0; i < len(pattern); i++ {
+		ch := pattern[i]
+		if ch == '\\' && i+1 < len(pattern) {
+			re.WriteString(regexp.QuoteMeta(string(pattern[i+1])))
+			i++
+			continue
+		}
+		switch ch {
+		case '*':
+			re.WriteString("[^/]*")
+		case '?':
+			re.WriteString("[^/]")
+		case '[':
+			j := i + 1
+			if j < len(pattern) && (pattern[j] == '!' || pattern[j] == '^') {
+				j++
+			}
+			if j < len(pattern) && pattern[j] == ']' {
+				j++
+			}
+			for j < len(pattern) && pattern[j] != ']' {
+				j++
+			}
+			if j < len(pattern) {
+				bracket := pattern[i : j+1]
+				if len(bracket) > 1 && bracket[1] == '!' {
+					re.WriteString("[" + bracket[1:])
+				} else {
+					re.WriteString(bracket)
+				}
+				i = j
+				continue
+			}
+			re.WriteString(regexp.QuoteMeta(string(ch)))
+		default:
+			re.WriteString(regexp.QuoteMeta(string(ch)))
+		}
+	}
+	return re.String()
+}
 
 func hasDoubleStar(pattern string) bool {
 	parts := splitPathComponents(pattern)
@@ -35,7 +135,7 @@ func globRecursive(pattern string) []string {
 		}
 	}
 	if dsIndex < 0 {
-		matches, err := filepath.Glob(pattern)
+		matches, err := customGlob(pattern)
 		if err != nil || len(matches) == 0 {
 			return nil
 		}
@@ -66,7 +166,9 @@ func globRecursive(pattern string) []string {
 			if err != nil {
 				return nil
 			}
-			addMatch(path)
+			if includeDotfile(d.Name()) {
+				addMatch(path)
+			}
 			return nil
 		})
 	} else {
@@ -80,7 +182,7 @@ func globRecursive(pattern string) []string {
 
 func collectGlobMatches(dir string, suffixPattern string, addMatch func(string)) {
 	fullPattern := filepath.Join(dir, suffixPattern)
-	matches, err := filepath.Glob(fullPattern)
+	matches, err := customGlob(fullPattern)
 	if err == nil {
 		for _, m := range matches {
 			addMatch(m)
@@ -93,6 +195,9 @@ func collectGlobMatches(dir string, suffixPattern string, addMatch func(string))
 	}
 	for _, e := range entries {
 		if !e.IsDir() {
+			continue
+		}
+		if !includeDotfile(e.Name()) {
 			continue
 		}
 		subDir := filepath.Join(dir, e.Name())
