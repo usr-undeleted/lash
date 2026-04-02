@@ -424,7 +424,7 @@ func expandPS1Escapes(ps1 string) string {
 				}
 				i += consumed
 			} else if lastExitCode >= 1 {
-				b.WriteString(fmt.Sprintf("%s%d%s", colorRed, lastExitCode, colorReset))
+				b.WriteString(fmt.Sprintf("%d", lastExitCode))
 			}
 		case 'l':
 			if content, consumed, ok := tryParseBrace(runes, i+1); ok {
