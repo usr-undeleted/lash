@@ -1,6 +1,6 @@
 #!/bin/sh
 version=$(awk '
-/## Phase / {
+/^## Phase / {
     match($0, /Phase ([0-9]+)/, m)
     n = ++nphases
     phase_num[n] = m[1]

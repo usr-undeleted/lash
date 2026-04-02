@@ -30,7 +30,7 @@
 - [x] Suspended processes (Ctrl+Z)
 - [x] More built-ins: `export`, `unset`, `env`, `set`, `echo` with flags (`-n`, `-e`), `type`, `which`, `true`, `false`, `test`/`[`
 - [x] Basic wildcard/glob expansion (`*`, `?`)
-## Phase 3: Variable & Expansion Engine (current)
+## Phase 3: Variable & Expansion Engine
 
 - [x] Local variables (`name=value`)
 - [x] Environment variables (`export name=value`)
@@ -54,7 +54,7 @@
 - [x] Case-sensitive/insensitive matching option
 - [x] Filename quoting and dequoting
 
-## Phase 5: Scripting & Control Flow
+## Phase 5: Scripting & Control Flow (current)
 
 ### Phase 4→5 Refactor (prerequisite)
 - [x] Split `main.go` — extract `tokenizer.go`, `builtins.go`, `executor.go`; keep REPL loop in main.go

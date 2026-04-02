@@ -35,7 +35,7 @@ func getVersion() string {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		if strings.HasPrefix(line, "## Phase ") {
+		if strings.HasPrefix(line, "## Phase ") && !strings.HasPrefix(line, "### ") {
 			var p int
 			fmt.Sscanf(line, "## Phase %d", &p)
 			if strings.Contains(line, "(current)") {
