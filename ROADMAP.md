@@ -48,7 +48,7 @@
 ## Phase 4: Pattern Matching & Globbing
 
 - [x] Basic globbing (`*`, `?`, `[abc]`, `[!abc]`)
-- [ ] Recursive globbing (`**`)
+- [x] Recursive globbing (`**`)
 - [ ] Extended globbing (`?(pattern)`, `*(pattern)`, `+(pattern)`, `@(pattern)`, `!(pattern)`)
 - [ ] Globbing with dotfiles option
 - [ ] Case-sensitive/insensitive matching option

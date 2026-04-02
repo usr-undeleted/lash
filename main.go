@@ -751,7 +751,14 @@ func expandVariables(tokens []string) []string {
 func expandGlobs(tokens []string) []string {
 	var result []string
 	for _, t := range tokens {
-		if strings.ContainsAny(t, "*?[") {
+		if hasDoubleStar(t) {
+			matches := globRecursive(t)
+			if len(matches) > 0 {
+				result = append(result, matches...)
+			} else {
+				result = append(result, t)
+			}
+		} else if strings.ContainsAny(t, "*?[") {
 			matches, err := filepath.Glob(t)
 			if err == nil && len(matches) > 0 {
 				sort.Strings(matches)
