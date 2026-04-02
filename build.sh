@@ -43,3 +43,13 @@ go build -o lash .
 # Aliases
 # alias ll {ALL} { ls -la $@ ; }
 EOF
+mkdir -p ~/.config/lash
+[ -f ~/.config/lash/config ] || cat > ~/.config/lash/config << 'EOF'
+# lash configuration
+# key = value
+
+syntax-color = 0
+logosize = big
+history-size = 1000
+glob-dotfiles = 0
+EOF

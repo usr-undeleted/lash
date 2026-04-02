@@ -115,6 +115,25 @@ func (c *Config) Set(key, val string) bool {
 	return false
 }
 
+type configEntry struct {
+	key   string
+	usage string
+	desc  string
+}
+
+var configKeys = []configEntry{
+	{"syntax-color", "<0|1>", "highlight commands green/red as you type"},
+	{"logosize", "<mini|small|big>", "logo size for lash version"},
+	{"history-size", "<int>", "max number of history entries"},
+	{"glob-dotfiles", "<0|1>", "include dotfiles in glob expansion"},
+}
+
+func printConfigList() {
+	for _, e := range configKeys {
+		fmt.Printf("%-15s = %-20s %s\n", e.key, e.usage, e.desc)
+	}
+}
+
 func boolToStr(b bool) string {
 	if b {
 		return "1"

@@ -612,8 +612,7 @@ func handleGlobalCommand(args []string) {
 		os.Exit(0)
 	case "set-config":
 		if len(args) >= 2 && args[1] == "list" {
-			fmt.Println("syntax-color = <0|1>   highlight commands green/red as you type")
-			fmt.Println("logosize    = <mini|small|big>   logo size for lash version")
+			printConfigList()
 			os.Exit(0)
 		}
 		if len(args) < 3 {
@@ -1339,8 +1338,7 @@ func executeBuiltin(args []string, cfg *Config) {
 		switch args[1] {
 		case "set-config":
 			if len(args) == 3 && args[2] == "list" {
-				fmt.Println("syntax-color = <0|1>   highlight commands green/red as you type")
-				fmt.Println("logosize    = <mini|small|big>   logo size for lash version")
+				printConfigList()
 				lastExitCode = 0
 				return
 			}
