@@ -51,7 +51,7 @@
 - [x] Recursive globbing (`**`)
 - [x] Extended globbing (`?(pattern)`, `*(pattern)`, `+(pattern)`, `@(pattern)`, `!(pattern)`)
 - [x] Globbing with dotfiles option
-- [ ] Case-sensitive/insensitive matching option
+- [x] Case-sensitive/insensitive matching option
 - [ ] Filename quoting and dequoting
 
 ## Phase 5: Scripting & Control Flow

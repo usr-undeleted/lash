@@ -35,6 +35,9 @@ func customGlob(pattern string) ([]string, error) {
 	}
 
 	regexStr := "^" + simpleGlobToRegex(filePattern) + "$"
+	if currentConfig != nil && !currentConfig.GlobCaseSensitive {
+		regexStr = "(?i)" + regexStr
+	}
 	re, err := regexp.Compile(regexStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid glob pattern: %s", pattern)

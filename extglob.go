@@ -148,6 +148,9 @@ func extractNegGroups(pattern string) (string, []negGroup) {
 func globToRegex(pattern string) string {
 	var re strings.Builder
 	re.WriteString("^")
+	if currentConfig != nil && !currentConfig.GlobCaseSensitive {
+		re.WriteString("(?i)")
+	}
 	i := 0
 	for i < len(pattern) {
 		ch := pattern[i]
@@ -373,6 +376,9 @@ func matchNegExtGlob(dir string, globPart string, negGroups []negGroup) []string
 	for _, p := range ng.pats {
 		full := ng.prefix + p + ng.suffix
 		regexStr := "^" + globToRegexPart(full) + "$"
+		if currentConfig != nil && !currentConfig.GlobCaseSensitive {
+			regexStr = "(?i)" + regexStr
+		}
 		re, err := regexp.Compile(regexStr)
 		if err == nil {
 			negRegexes = append(negRegexes, re)

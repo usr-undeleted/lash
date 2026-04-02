@@ -11,10 +11,11 @@ import (
 )
 
 type Config struct {
-	SyntaxColor  bool
-	LogoSize     string
-	HistorySize  int
-	GlobDotfiles bool
+	SyntaxColor       bool
+	LogoSize          string
+	HistorySize       int
+	GlobDotfiles      bool
+	GlobCaseSensitive bool
 }
 
 func configPath() string {
@@ -26,7 +27,7 @@ func configPath() string {
 }
 
 func LoadConfig() *Config {
-	cfg := &Config{LogoSize: "big", HistorySize: 1000}
+	cfg := &Config{LogoSize: "big", HistorySize: 1000, GlobCaseSensitive: true}
 	path := configPath()
 	if path == "" {
 		return cfg
@@ -60,6 +61,8 @@ func LoadConfig() *Config {
 			}
 		case "glob-dotfiles":
 			cfg.GlobDotfiles = val == "1"
+		case "glob-case-sensitivity":
+			cfg.GlobCaseSensitive = val != "0"
 		}
 	}
 	return cfg
@@ -79,6 +82,7 @@ func (c *Config) Save() error {
 	lines = append(lines, fmt.Sprintf("logosize = %s", c.LogoSize))
 	lines = append(lines, fmt.Sprintf("history-size = %d", c.HistorySize))
 	lines = append(lines, fmt.Sprintf("glob-dotfiles = %s", boolToStr(c.GlobDotfiles)))
+	lines = append(lines, fmt.Sprintf("glob-case-sensitivity = %s", boolToStr(c.GlobCaseSensitive)))
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -111,6 +115,9 @@ func (c *Config) Set(key, val string) bool {
 	case "glob-dotfiles":
 		c.GlobDotfiles = val == "1"
 		return true
+	case "glob-case-sensitivity":
+		c.GlobCaseSensitive = val != "0"
+		return true
 	}
 	return false
 }
@@ -126,6 +133,7 @@ var configKeys = []configEntry{
 	{"logosize", "<mini|small|big>", "logo size for lash version"},
 	{"history-size", "<int>", "max number of history entries"},
 	{"glob-dotfiles", "<0|1>", "include dotfiles in glob expansion"},
+	{"glob-case-sensitivity", "<0|1>", "case-sensitive (1) or insensitive (0) glob matching"},
 }
 
 func printConfigList() {

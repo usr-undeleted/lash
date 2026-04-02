@@ -52,4 +52,5 @@ syntax-color = 0
 logosize = big
 history-size = 1000
 glob-dotfiles = 0
+glob-case-sensitivity = 1
 EOF
