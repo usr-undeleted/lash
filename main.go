@@ -751,7 +751,14 @@ func expandVariables(tokens []string) []string {
 func expandGlobs(tokens []string) []string {
 	var result []string
 	for _, t := range tokens {
-		if hasDoubleStar(t) {
+		if hasExtGlob(t) {
+			matches := matchExtGlob(t)
+			if len(matches) > 0 {
+				result = append(result, matches...)
+			} else {
+				result = append(result, t)
+			}
+		} else if hasDoubleStar(t) {
 			matches := globRecursive(t)
 			if len(matches) > 0 {
 				result = append(result, matches...)
@@ -897,6 +904,7 @@ func tokenize(line string) []string {
 	procSubstDepth := 0
 	procSubstInSingle := false
 	procSubstInDouble := false
+	extGlobDepth := 0
 
 	var current strings.Builder
 	var tokens []string
@@ -911,6 +919,16 @@ func tokenize(line string) []string {
 
 	for i := 0; i < len(bytes); i++ {
 		ch := rune(bytes[i])
+
+		if extGlobDepth > 0 {
+			current.WriteByte(bytes[i])
+			if bytes[i] == '(' {
+				extGlobDepth++
+			} else if bytes[i] == ')' {
+				extGlobDepth--
+			}
+			continue
+		}
 
 		if procSubstDepth > 0 {
 			if procSubstInSingle {
@@ -1013,6 +1031,14 @@ func tokenize(line string) []string {
 
 		if ch == ' ' || ch == '\t' {
 			flushCurrent()
+			continue
+		}
+
+		if (ch == '?' || ch == '*' || ch == '+' || ch == '@' || ch == '!') && i+1 < len(bytes) && bytes[i+1] == '(' {
+			current.WriteByte(bytes[i])
+			i++
+			current.WriteByte(bytes[i])
+			extGlobDepth = 1
 			continue
 		}
 

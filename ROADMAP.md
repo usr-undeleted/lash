@@ -49,7 +49,7 @@
 
 - [x] Basic globbing (`*`, `?`, `[abc]`, `[!abc]`)
 - [x] Recursive globbing (`**`)
-- [ ] Extended globbing (`?(pattern)`, `*(pattern)`, `+(pattern)`, `@(pattern)`, `!(pattern)`)
+- [x] Extended globbing (`?(pattern)`, `*(pattern)`, `+(pattern)`, `@(pattern)`, `!(pattern)`)
 - [ ] Globbing with dotfiles option
 - [ ] Case-sensitive/insensitive matching option
 - [ ] Filename quoting and dequoting
