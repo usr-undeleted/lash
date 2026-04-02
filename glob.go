@@ -22,6 +22,13 @@ func includeDotfile(name string) bool {
 	return false
 }
 
+func restoreGlobMarkers(s string) string {
+	s = strings.ReplaceAll(s, "\uf000", "*")
+	s = strings.ReplaceAll(s, "\uf001", "?")
+	s = strings.ReplaceAll(s, "\uf002", "[")
+	return s
+}
+
 func customGlob(pattern string) ([]string, error) {
 	dir := "."
 	filePattern := pattern

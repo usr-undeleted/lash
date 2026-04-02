@@ -757,24 +757,24 @@ func expandGlobs(tokens []string) []string {
 			if len(matches) > 0 {
 				result = append(result, matches...)
 			} else {
-				result = append(result, t)
+				result = append(result, restoreGlobMarkers(t))
 			}
 		} else if hasDoubleStar(t) {
 			matches := globRecursive(t)
 			if len(matches) > 0 {
 				result = append(result, matches...)
 			} else {
-				result = append(result, t)
+				result = append(result, restoreGlobMarkers(t))
 			}
 		} else if strings.ContainsAny(t, "*?[") {
 			matches, err := customGlob(t)
 			if err == nil && len(matches) > 0 {
 				result = append(result, matches...)
 			} else {
-				result = append(result, t)
+				result = append(result, restoreGlobMarkers(t))
 			}
 		} else {
-			result = append(result, t)
+			result = append(result, restoreGlobMarkers(t))
 		}
 	}
 	return result

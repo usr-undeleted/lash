@@ -46,7 +46,16 @@ func expandString(s string) string {
 				i++
 				continue
 			}
-			result.WriteByte(ch)
+			switch ch {
+			case '*':
+				result.WriteRune('\uf000')
+			case '?':
+				result.WriteRune('\uf001')
+			case '[':
+				result.WriteRune('\uf002')
+			default:
+				result.WriteByte(ch)
+			}
 			i++
 			continue
 		}
@@ -126,7 +135,20 @@ func expandString(s string) string {
 			continue
 		}
 
-		result.WriteByte(ch)
+		if inDouble {
+			switch ch {
+			case '*':
+				result.WriteRune('\uf000')
+			case '?':
+				result.WriteRune('\uf001')
+			case '[':
+				result.WriteRune('\uf002')
+			default:
+				result.WriteByte(ch)
+			}
+		} else {
+			result.WriteByte(ch)
+		}
 		i++
 	}
 
@@ -1609,6 +1631,9 @@ func expandProcSubst(token string) string {
 
 	expanded := expandBraces(tokens)
 	expanded = expandVariables(expanded)
+	for i, t := range expanded {
+		expanded[i] = restoreGlobMarkers(t)
+	}
 	segments := splitPipes(expanded)
 
 	var cmd *exec.Cmd
