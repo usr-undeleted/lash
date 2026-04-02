@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"os/user"
 	"strconv"
 	"strings"
-	"syscall"
 	"unicode/utf8"
 )
 
@@ -1273,6 +1271,11 @@ func runCommandSubstitution(cmd string) (string, int) {
 	}
 
 	expanded := expandVariables(tokens)
+	expanded = expandBraces(expanded)
+	for i, t := range expanded {
+		expanded[i] = restoreGlobMarkers(t)
+	}
+	line := strings.Join(expanded, " ")
 
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -1280,59 +1283,9 @@ func runCommandSubstitution(cmd string) (string, int) {
 		return "", 1
 	}
 
-	oldStdout := os.Stdout
-	os.Stdout = w
-
-	chains := splitChains(strings.Join(expanded, " "))
-	finalExitCode := 0
-
-	for _, chain := range chains {
-		for _, entry := range chain {
-			if entry.operator == "&&" && finalExitCode != 0 {
-				continue
-			}
-			if entry.operator == "||" && finalExitCode == 0 {
-				continue
-			}
-
-			toks := expandBraces(entry.args)
-			toks = expandVariables(toks)
-			toks = expandGlobs(toks)
-			if len(toks) == 0 {
-				continue
-			}
-
-			background := false
-			if toks[len(toks)-1] == "&" {
-				background = true
-				toks = toks[:len(toks)-1]
-			}
-
-			segments := splitPipes(toks)
-			if len(segments) == 0 {
-				continue
-			}
-
-			if background {
-				fmt.Fprintln(os.Stderr, "lash: background jobs not supported in command substitution")
-				w.Close()
-				os.Stdout = oldStdout
-				return "", 1
-			}
-
-			if len(segments) == 1 {
-				if isBuiltin(segments[0][0]) {
-					executeBuiltin(segments[0], nil)
-				} else {
-					executeSimpleSubstitution(segments[0], w)
-				}
-			} else {
-				executePipelineSubstitution(segments, w)
-			}
-		}
-	}
-
-	os.Stdout = oldStdout
+	prog := Parse(line)
+	subCtx := defaultContext().withOverrides(nil, w, nil)
+	executeNode(prog, subCtx)
 	w.Close()
 
 	var buf bytes.Buffer
@@ -1341,178 +1294,6 @@ func runCommandSubstitution(cmd string) (string, int) {
 
 	output := strings.TrimRight(buf.String(), "\n")
 	return output, lastExitCode
-}
-
-func executeSimpleSubstitution(args []string, captureStdout *os.File) {
-	cmdArgs, inFile, outFile, appendMode := parseRedirection(args)
-	if len(cmdArgs) == 0 {
-		return
-	}
-
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Stderr = os.Stderr
-
-	if inFile != "" {
-		f, err := os.Open(inFile)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-			lastExitCode = 1
-			return
-		}
-		defer f.Close()
-		cmd.Stdin = f
-	} else {
-		cmd.Stdin = os.Stdin
-	}
-
-	if outFile != "" {
-		flag := os.O_CREATE | os.O_WRONLY
-		if appendMode {
-			flag |= os.O_APPEND
-		} else {
-			flag |= os.O_TRUNC
-		}
-		f, err := os.OpenFile(outFile, flag, 0644)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-			lastExitCode = 1
-			return
-		}
-		defer f.Close()
-		cmd.Stdout = f
-	} else {
-		cmd.Stdout = captureStdout
-	}
-
-	err := cmd.Start()
-	if err != nil {
-		if _, ok := err.(*exec.Error); ok {
-			fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", cmdArgs[0])
-			lastExitCode = 127
-		} else {
-			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-			lastExitCode = 1
-		}
-		return
-	}
-
-	var status syscall.WaitStatus
-	for {
-		_, err := syscall.Wait4(cmd.Process.Pid, &status, 0, nil)
-		if err != syscall.EINTR {
-			break
-		}
-	}
-
-	if status.Exited() {
-		lastExitCode = status.ExitStatus()
-	} else if status.Signaled() {
-		lastExitCode = 128 + int(status.Signal())
-	}
-}
-
-func executePipelineSubstitution(segments [][]string, captureStdout *os.File) {
-	type pipePair struct {
-		r *os.File
-		w *os.File
-	}
-
-	pipes := make([]pipePair, len(segments)-1)
-	for i := range pipes {
-		r, w, err := os.Pipe()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-			lastExitCode = 1
-			return
-		}
-		pipes[i] = pipePair{r, w}
-	}
-
-	var cmds []*exec.Cmd
-	for i, seg := range segments {
-		cmdArgs, inFile, outFile, appendMode := parseRedirection(seg)
-		if len(cmdArgs) == 0 {
-			lastExitCode = 1
-			return
-		}
-
-		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		cmd.Stderr = os.Stderr
-
-		if inFile != "" {
-			f, err := os.Open(inFile)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-				lastExitCode = 1
-				return
-			}
-			defer f.Close()
-			cmd.Stdin = f
-		} else if i == 0 {
-			cmd.Stdin = os.Stdin
-		} else {
-			cmd.Stdin = pipes[i-1].r
-		}
-
-		if outFile != "" {
-			flag := os.O_CREATE | os.O_WRONLY
-			if appendMode {
-				flag |= os.O_APPEND
-			} else {
-				flag |= os.O_TRUNC
-			}
-			f, err := os.OpenFile(outFile, flag, 0644)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-				lastExitCode = 1
-				return
-			}
-			defer f.Close()
-			cmd.Stdout = f
-		} else if i == len(segments)-1 {
-			cmd.Stdout = captureStdout
-		} else {
-			cmd.Stdout = pipes[i].w
-		}
-
-		cmds = append(cmds, cmd)
-	}
-
-	for _, cmd := range cmds {
-		if err := cmd.Start(); err != nil {
-			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-			lastExitCode = 1
-			return
-		}
-	}
-
-	for _, p := range pipes {
-		p.w.Close()
-	}
-
-	var lastStatus syscall.WaitStatus
-	for _, cmd := range cmds {
-		var status syscall.WaitStatus
-		for {
-			_, err := syscall.Wait4(cmd.Process.Pid, &status, 0, nil)
-			if err != syscall.EINTR {
-				break
-			}
-		}
-		lastStatus = status
-	}
-
-	if lastStatus.Exited() {
-		lastExitCode = lastStatus.ExitStatus()
-	} else if lastStatus.Signaled() {
-		lastExitCode = 128 + int(lastStatus.Signal())
-	}
-
-	for _, p := range pipes {
-		p.r.Close()
-	}
 }
 
 func findMatchingProcSubstParen(s string, start int) int {
@@ -1560,8 +1341,7 @@ func isAlnumOrUnderscore(c byte) bool {
 }
 
 type procSubstEntry struct {
-	cmd *exec.Cmd
-	fd  *os.File
+	fd *os.File
 }
 
 var procSubstEntries []procSubstEntry
@@ -1634,215 +1414,25 @@ func expandProcSubst(token string) string {
 	for i, t := range expanded {
 		expanded[i] = restoreGlobMarkers(t)
 	}
-	segments := splitPipes(expanded)
+	line := strings.Join(expanded, " ")
 
-	var cmd *exec.Cmd
-	if len(segments) == 1 {
-		cmdArgs, inFile, outFile, appendMode := parseRedirection(segments[0])
-		if len(cmdArgs) == 0 {
-			r.Close()
-			w.Close()
-			return ""
-		}
-		cmd = exec.Command(cmdArgs[0], cmdArgs[1:]...)
-		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-		cmd.Stderr = os.Stderr
+	prog := Parse(line)
 
-		if dir == '<' {
-			cmd.Stdout = w
-			if inFile != "" {
-				f, err := os.Open(inFile)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-					r.Close()
-					w.Close()
-					return ""
-				}
-				cmd.Stdin = f
-			}
-		} else {
-			cmd.Stdin = r
-			if outFile != "" {
-				flag := os.O_CREATE | os.O_WRONLY
-				if appendMode {
-					flag |= os.O_APPEND
-				} else {
-					flag |= os.O_TRUNC
-				}
-				f, err := os.OpenFile(outFile, flag, 0644)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-					r.Close()
-					w.Close()
-					return ""
-				}
-				cmd.Stdout = f
-			} else {
-				cmd.Stdout = os.Stdout
-			}
-		}
-	} else {
-		type pipePair struct {
-			r *os.File
-			w *os.File
-		}
-		pipes := make([]pipePair, len(segments)-1)
-		for i := range pipes {
-			pr, pw, err := os.Pipe()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-				r.Close()
-				w.Close()
-				return ""
-			}
-			pipes[i] = pipePair{r: pr, w: pw}
-		}
-
-		var cmds []*exec.Cmd
-		for i, seg := range segments {
-			cmdArgs, inFile, outFile, appendMode := parseRedirection(seg)
-			if len(cmdArgs) == 0 {
-				r.Close()
-				w.Close()
-				for _, p := range pipes {
-					p.r.Close()
-					p.w.Close()
-				}
-				return ""
-			}
-
-			c := exec.Command(cmdArgs[0], cmdArgs[1:]...)
-			c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-			c.Stderr = os.Stderr
-
-			if inFile != "" {
-				f, err := os.Open(inFile)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-					r.Close()
-					w.Close()
-					for _, p := range pipes {
-						p.r.Close()
-						p.w.Close()
-					}
-					return ""
-				}
-				c.Stdin = f
-			} else if i == 0 {
-				if dir == '<' {
-					c.Stdin = os.Stdin
-				} else {
-					c.Stdin = r
-				}
-			} else {
-				c.Stdin = pipes[i-1].r
-			}
-
-			if outFile != "" {
-				flag := os.O_CREATE | os.O_WRONLY
-				if appendMode {
-					flag |= os.O_APPEND
-				} else {
-					flag |= os.O_TRUNC
-				}
-				f, err := os.OpenFile(outFile, flag, 0644)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-					r.Close()
-					w.Close()
-					for _, p := range pipes {
-						p.r.Close()
-						p.w.Close()
-					}
-					return ""
-				}
-				c.Stdout = f
-			} else if i == len(segments)-1 {
-				if dir == '<' {
-					c.Stdout = w
-				} else {
-					c.Stdout = os.Stdout
-				}
-			} else {
-				c.Stdout = pipes[i].w
-			}
-
-			cmds = append(cmds, c)
-		}
-
-		for _, c := range cmds {
-			if err := c.Start(); err != nil {
-				if _, ok := err.(*exec.Error); ok {
-					fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", c.Path)
-					lastExitCode = 127
-				} else {
-					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-					lastExitCode = 1
-				}
-				r.Close()
-				w.Close()
-				for _, p := range pipes {
-					p.r.Close()
-					p.w.Close()
-				}
-				return ""
-			}
-		}
-
-		for _, p := range pipes {
-			p.w.Close()
-		}
-
-		go func() {
-			for _, c := range cmds {
-				var status syscall.WaitStatus
-				for {
-					_, err := syscall.Wait4(c.Process.Pid, &status, 0, nil)
-					if err != syscall.EINTR {
-						break
-					}
-				}
-			}
-			for _, p := range pipes {
-				p.r.Close()
-			}
-			if dir == '<' {
-				w.Close()
-			} else {
-				r.Close()
-			}
-		}()
-
-		var keptFd *os.File
-		if dir == '<' {
-			keptFd = r
-		} else {
-			keptFd = w
-		}
-		placeholder := procSubstPlaceholder()
-		procSubstEntries = append(procSubstEntries, procSubstEntry{cmd: cmds[0], fd: keptFd})
-		procSubstMap[placeholder] = keptFd
-		return placeholder
-	}
-
-	if err := cmd.Start(); err != nil {
-		if _, ok := err.(*exec.Error); ok {
-			fmt.Fprintf(os.Stderr, "lash: %s: command not found\n", cmd.Path)
-			lastExitCode = 127
-		} else {
-			fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-			lastExitCode = 1
-		}
-		r.Close()
-		w.Close()
-		return ""
-	}
-
+	var subCtx *ExecContext
 	if dir == '<' {
-		w.Close()
+		subCtx = defaultContext().withOverrides(nil, w, nil)
 	} else {
-		r.Close()
+		subCtx = defaultContext().withOverrides(r, nil, nil)
 	}
+
+	go func() {
+		executeNode(prog, subCtx)
+		if dir == '<' {
+			w.Close()
+		} else {
+			r.Close()
+		}
+	}()
 
 	var keptFd *os.File
 	if dir == '<' {
@@ -1851,7 +1441,6 @@ func expandProcSubst(token string) string {
 		keptFd = w
 	}
 	placeholder := procSubstPlaceholder()
-	procSubstEntries = append(procSubstEntries, procSubstEntry{cmd: cmd, fd: keptFd})
 	procSubstMap[placeholder] = keptFd
 	return placeholder
 }
@@ -1859,18 +1448,6 @@ func expandProcSubst(token string) string {
 func waitProcSubst() {
 	for _, entry := range procSubstEntries {
 		entry.fd.Close()
-		var status syscall.WaitStatus
-		for {
-			_, err := syscall.Wait4(entry.cmd.Process.Pid, &status, 0, nil)
-			if err != syscall.EINTR {
-				break
-			}
-		}
-		if status.Exited() {
-			if status.ExitStatus() != 0 {
-				lastExitCode = status.ExitStatus()
-			}
-		}
 	}
 	procSubstEntries = nil
 	for k := range procSubstMap {

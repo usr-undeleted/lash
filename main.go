@@ -544,37 +544,22 @@ func sourceFile(path string, cfg *Config) int {
 
 	returnFlag = false
 	scanner := bufio.NewScanner(f)
-	code := 0
+	var lines []string
 	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
+		line := scanner.Text()
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		line = expandAliasLine(line)
-		if line == "" {
-			continue
-		}
-		tokens := tokenize(line)
-		if len(tokens) > 0 && (tokens[0] == "alias" || tokens[0] == "unalias") {
-			executeBuiltin(tokens, cfg)
-			code = lastExitCode
-			if returnFlag {
-				break
-			}
-			continue
-		}
-		chains := splitChains(line)
-		for _, chain := range chains {
-			executeChain(chain, cfg)
-			if returnFlag {
-				break
-			}
-		}
-		code = lastExitCode
-		if returnFlag {
-			break
-		}
+		lines = append(lines, trimmed)
 	}
+	code := 0
+	ctx := defaultContext()
+	full := strings.Join(lines, "\n")
+	full = expandAliasLine(full)
+	prog := Parse(full)
+	executeNode(prog, ctx)
+	code = lastExitCode
 	return code
 }
 
@@ -676,10 +661,8 @@ func main() {
 			continue
 		}
 
-		chains := splitChains(line)
 		cmdNumber++
-		for _, chain := range chains {
-			executeChain(chain, cfg)
-		}
+		prog := Parse(line)
+		executeNode(prog, defaultContext())
 	}
 }

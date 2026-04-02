@@ -59,14 +59,14 @@
 ### Phase 4→5 Refactor (prerequisite)
 - [x] Split `main.go` — extract `tokenizer.go`, `builtins.go`, `executor.go`; keep REPL loop in main.go
 - [x] Implement minimal AST (`ast.go`) with node types: `Command`, `Pipeline`, `IfStatement`, `WhileStatement`, `ForStatement`, `CaseStatement`
-- [ ] Replace flat token-slice execution with AST-based execution for new control flow constructs
+- [x] Replace flat token-slice execution with AST-based execution for new control flow constructs
 
-- [ ] `if` / `then` / `elif` / `else` / `fi`
-- [ ] `while` / `do` / `done`
-- [ ] `until` / `do` / `done`
-- [ ] `for` / `in` / `do` / `done`
+- [x] `if` / `then` / `elif` / `else` / `fi`
+- [x] `while` / `do` / `done`
+- [x] `until` / `do` / `done`
+- [x] `for` / `in` / `do` / `done`
 - [ ] C-style `for` loops (`for ((i=0; i<10; i++))`)
-- [ ] `case` / `esac`
+- [x] `case` / `esac`
 - [ ] `select` / `do` / `done`
 - [ ] Functions (`func() { ... }`)
 - [ ] Function arguments and local variables (`local`)

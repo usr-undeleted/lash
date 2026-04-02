@@ -244,7 +244,7 @@ func (p *parser) parseSimpleCommand() Node {
 			}
 			p.advance()
 			cmd.Background = true
-			continue
+			break
 		}
 
 		if t == ">" || t == ">>" || t == "<" {
