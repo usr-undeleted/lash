@@ -248,9 +248,27 @@ func tokenize(line string) []string {
 				flushCurrent()
 				tokens = append(tokens, ">")
 			}
-		case ';', '|':
+		case ';':
+			if i+1 < len(bytes) && bytes[i+1] == ';' {
+				flushCurrent()
+				tokens = append(tokens, ";;")
+				i++
+			} else {
+				flushCurrent()
+				tokens = append(tokens, ";")
+			}
+		case ')':
 			flushCurrent()
-			tokens = append(tokens, string(ch))
+			tokens = append(tokens, ")")
+		case '|':
+			if i+1 < len(bytes) && bytes[i+1] == '|' {
+				flushCurrent()
+				tokens = append(tokens, "||")
+				i++
+			} else {
+				flushCurrent()
+				tokens = append(tokens, "|")
+			}
 		case '&':
 			if i+1 < len(bytes) && bytes[i+1] == '&' {
 				flushCurrent()
