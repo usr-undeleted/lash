@@ -52,7 +52,7 @@
 - [x] Extended globbing (`?(pattern)`, `*(pattern)`, `+(pattern)`, `@(pattern)`, `!(pattern)`)
 - [x] Globbing with dotfiles option
 - [x] Case-sensitive/insensitive matching option
-- [ ] Filename quoting and dequoting
+- [x] Filename quoting and dequoting
 
 ## Phase 5: Scripting & Control Flow
 
