@@ -661,6 +661,7 @@ func main() {
 			continue
 		}
 
+		returnFlag = false
 		cmdNumber++
 		prog := Parse(line)
 		executeNode(prog, defaultContext())
