@@ -718,7 +718,7 @@ func main() {
 
 		tokens := tokenize(line)
 		if len(tokens) > 0 && (tokens[0] == "alias" || tokens[0] == "unalias") {
-			executeBuiltin(tokens, cfg)
+			executeBuiltin(tokens, defaultContext())
 			continue
 		}
 

@@ -73,7 +73,7 @@
 - [x] Return values from functions (`return`)
 - [x] Positional parameters (`$0`, `$1`..`$9`, `$@`, `$*`, `$#`)
 - [x] `shift` builtin
-- [ ] `read` builtin (with flags for prompts, delimiters, etc.)
+- [x] `read` builtin (with flags for prompts, delimiters, etc.)
 - [ ] Here documents (`<< EOF`)
 - [ ] Here strings (`<<< "string"`)
 - [ ] `set` / `unset` with various flags (`set -e`, `set -x`, `set -o pipefail`)

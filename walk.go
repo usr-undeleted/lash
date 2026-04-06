@@ -155,12 +155,12 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 			for name, val := range prefixEnv {
 				setVar(name, val, false)
 			}
-			executeBuiltin(expanded, ctx.Cfg)
+			executeBuiltin(expanded, ctx)
 			for name := range prefixEnv {
 				unsetVar(name)
 			}
 		} else {
-			executeBuiltin(expanded, ctx.Cfg)
+			executeBuiltin(expanded, ctx)
 		}
 		waitProcSubst()
 		return

@@ -1,19 +1,22 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 var allBuiltins = []string{
 	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
-	"source", ".", "return", "local", "shift",
+	"source", ".", "return", "local", "shift", "read",
 }
 
 func isBuiltin(cmd string) bool {
@@ -25,7 +28,7 @@ func isBuiltin(cmd string) bool {
 	return false
 }
 
-func executeBuiltin(args []string, cfg *Config) {
+func executeBuiltin(args []string, ctx *ExecContext) {
 	switch args[0] {
 	case "exit":
 		code := lastExitCode
@@ -235,12 +238,12 @@ func executeBuiltin(args []string, cfg *Config) {
 			}
 			key := args[2]
 			val := args[3]
-			if !cfg.Set(key, val) {
+			if !ctx.Cfg.Set(key, val) {
 				fmt.Fprintf(os.Stderr, "lash: unknown config key: %s\n", key)
 				lastExitCode = 1
 				return
 			}
-			if err := cfg.Save(); err != nil {
+			if err := ctx.Cfg.Save(); err != nil {
 				fmt.Fprintf(os.Stderr, "lash: failed to save config: %s\n", err)
 				lastExitCode = 1
 				return
@@ -248,7 +251,7 @@ func executeBuiltin(args []string, cfg *Config) {
 			fmt.Printf("lash: set %s = %s\n", key, val)
 			lastExitCode = 0
 		case "version":
-			printVersion(cfg.LogoSize)
+			printVersion(ctx.Cfg.LogoSize)
 			lastExitCode = 0
 		default:
 			fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", args[1])
@@ -470,8 +473,235 @@ func executeBuiltin(args []string, cfg *Config) {
 			lastExitCode = 1
 			return
 		}
-		lastExitCode = sourceFile(args[1], cfg)
+		lastExitCode = sourceFile(args[1], ctx.Cfg)
+	case "read":
+		prompt := ""
+		raw := false
+		maxChars := 0
+		timeout := 0
+		delim := "\n"
+		var varNames []string
+
+		i := 1
+		for i < len(args) && len(args[i]) > 0 && args[i][0] == '-' {
+			switch args[i] {
+			case "-p":
+				if i+1 >= len(args) {
+					fmt.Fprintln(os.Stderr, "lash: read: -p: option requires an argument")
+					lastExitCode = 2
+					return
+				}
+				i++
+				prompt = args[i]
+			case "-r":
+				raw = true
+			case "-s":
+			case "-n":
+				if i+1 >= len(args) {
+					fmt.Fprintln(os.Stderr, "lash: read: -n: option requires an argument")
+					lastExitCode = 2
+					return
+				}
+				i++
+				n, err := strconv.Atoi(args[i])
+				if err != nil || n < 0 {
+					fmt.Fprintf(os.Stderr, "lash: read: %s: invalid number\n", args[i])
+					lastExitCode = 2
+					return
+				}
+				maxChars = n
+			case "-t":
+				if i+1 >= len(args) {
+					fmt.Fprintln(os.Stderr, "lash: read: -t: option requires an argument")
+					lastExitCode = 2
+					return
+				}
+				i++
+				n, err := strconv.Atoi(args[i])
+				if err != nil || n < 0 {
+					fmt.Fprintf(os.Stderr, "lash: read: %s: invalid timeout\n", args[i])
+					lastExitCode = 2
+					return
+				}
+				timeout = n
+			case "-d":
+				if i+1 >= len(args) {
+					fmt.Fprintln(os.Stderr, "lash: read: -d: option requires an argument")
+					lastExitCode = 2
+					return
+				}
+				i++
+				delim = args[i]
+			default:
+				fmt.Fprintf(os.Stderr, "lash: read: %s: invalid option\n", args[i])
+				lastExitCode = 2
+				return
+			}
+			i++
+		}
+		varNames = args[i:]
+
+		var reader *bufio.Reader
+		if stdinReader != nil {
+			reader = stdinReader
+		} else {
+			reader = bufio.NewReader(ctx.Stdin)
+		}
+
+		if prompt != "" {
+			fmt.Fprintf(ctx.Stderr, "%s", prompt)
+		}
+
+		var input string
+		var readErr error
+
+		if timeout > 0 {
+			type readResult struct {
+				data string
+				err  error
+			}
+			ch := make(chan readResult, 1)
+			go func() {
+				var line string
+				var err error
+				if maxChars > 0 {
+					buf := make([]byte, maxChars)
+					n, rerr := io.ReadFull(reader, buf)
+					if rerr != nil && rerr != io.ErrUnexpectedEOF && rerr != io.EOF {
+						ch <- readResult{"", rerr}
+						return
+					}
+					line = string(buf[:n])
+				} else {
+					if len(delim) == 1 && delim[0] != '\n' {
+						line, err = reader.ReadString(delim[0])
+					} else {
+						line, err = reader.ReadString('\n')
+					}
+				}
+				ch <- readResult{line, err}
+			}()
+			select {
+			case res := <-ch:
+				input = res.data
+				readErr = res.err
+			case <-time.After(time.Duration(timeout) * time.Second):
+				lastExitCode = 142
+				return
+			}
+		} else {
+			if maxChars > 0 {
+				buf := make([]byte, maxChars)
+				n, rerr := io.ReadFull(reader, buf)
+				if rerr != nil && rerr != io.ErrUnexpectedEOF && rerr != io.EOF {
+					lastExitCode = 1
+					return
+				}
+				input = string(buf[:n])
+			} else {
+				if len(delim) == 1 && delim[0] != '\n' {
+					input, readErr = reader.ReadString(delim[0])
+				} else {
+					input, readErr = reader.ReadString('\n')
+				}
+			}
+		}
+
+		if readErr != nil {
+			if readErr == io.EOF && len(input) > 0 {
+				setVar("REPLY", input, false)
+				assignReadVars(varNames, input)
+				lastExitCode = 0
+				return
+			}
+			lastExitCode = 1
+			return
+		}
+
+		input = strings.TrimRight(input, "\r\n")
+		if len(delim) == 1 && delim[0] != '\n' {
+			input = strings.TrimRight(input, delim)
+		}
+
+		if !raw {
+			input = processReadEscapes(reader, input)
+		}
+
+		setVar("REPLY", input, false)
+		assignReadVars(varNames, input)
+		lastExitCode = 0
 	}
+}
+
+func assignReadVars(varNames []string, input string) {
+	ifs := getVar("IFS")
+	if ifs == "" {
+		ifs = " \t\n"
+	}
+
+	if len(varNames) == 0 {
+		return
+	}
+
+	if len(varNames) == 1 {
+		setVar(varNames[0], input, false)
+		return
+	}
+
+	trimmed := strings.TrimRight(input, ifs)
+	fields := strings.Fields(trimmed)
+	if len(fields) == 0 {
+		for _, name := range varNames {
+			setVar(name, "", false)
+		}
+		return
+	}
+
+	for i := 0; i < len(varNames)-1; i++ {
+		if i < len(fields) {
+			setVar(varNames[i], fields[i], false)
+		} else {
+			setVar(varNames[i], "", false)
+		}
+	}
+
+	lastVar := varNames[len(varNames)-1]
+	if len(fields) < len(varNames) {
+		setVar(lastVar, "", false)
+	} else {
+		remainder := strings.Join(fields[len(varNames)-1:], " ")
+		setVar(lastVar, remainder, false)
+	}
+}
+
+func processReadEscapes(reader *bufio.Reader, line string) string {
+	var result strings.Builder
+	i := 0
+	for i < len(line) {
+		if line[i] == '\\' && i+1 < len(line) {
+			next := line[i+1]
+			if next == '\n' {
+				nextLine, err := reader.ReadString('\n')
+				if err != nil {
+					i += 2
+					continue
+				}
+				nextLine = strings.TrimRight(nextLine, "\r\n")
+				if i > 0 || result.Len() > 0 {
+					result.WriteByte(' ')
+				}
+				line = nextLine
+				i = 0
+				continue
+			}
+			result.WriteByte(next)
+			i += 2
+			continue
+		}
+		result.WriteByte(line[i])
+		i++
+	}
+	return result.String()
 }
 
 func interpretEscapeSequences(s string) string {
