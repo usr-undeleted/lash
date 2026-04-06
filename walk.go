@@ -61,6 +61,8 @@ func executeNode(node Node, ctx *ExecContext) {
 		executeWhile(n, ctx)
 	case *ForStmt:
 		executeFor(n, ctx)
+	case *CStyleForStmt:
+		executeCStyleFor(n, ctx)
 	case *CaseStmt:
 		executeCase(n, ctx)
 	}
@@ -431,6 +433,30 @@ func executeFor(node *ForStmt, ctx *ExecContext) {
 		}
 		setVar(node.Var, val, false)
 		executeNode(node.Body, ctx)
+	}
+}
+
+func executeCStyleFor(node *CStyleForStmt, ctx *ExecContext) {
+	if node.Init != "" {
+		evalArithmetic(node.Init)
+	}
+	for {
+		if returnFlag {
+			return
+		}
+		if node.Cond != "" {
+			result := evalArithmetic(node.Cond)
+			if result == "0" {
+				break
+			}
+		}
+		executeNode(node.Body, ctx)
+		if returnFlag {
+			return
+		}
+		if node.Step != "" {
+			evalArithmetic(node.Step)
+		}
 	}
 }
 

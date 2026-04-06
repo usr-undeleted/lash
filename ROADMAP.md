@@ -65,7 +65,7 @@
 - [x] `while` / `do` / `done`
 - [x] `until` / `do` / `done`
 - [x] `for` / `in` / `do` / `done`
-- [ ] C-style `for` loops (`for ((i=0; i<10; i++))`)
+- [x] C-style `for` loops (`for ((i=0; i<10; i++))`)
 - [x] `case` / `esac`
 - [ ] `select` / `do` / `done`
 - [ ] Functions (`func() { ... }`)

@@ -66,6 +66,15 @@ type ForStmt struct {
 
 func (f *ForStmt) nodeType() string { return "ForStmt" }
 
+type CStyleForStmt struct {
+	Init string
+	Cond string
+	Step string
+	Body Node
+}
+
+func (c *CStyleForStmt) nodeType() string { return "CStyleForStmt" }
+
 type CaseStmt struct {
 	Word     string
 	Branches []CaseBranch
@@ -373,6 +382,11 @@ func (p *parser) parseFor() Node {
 	if p.pos >= len(p.tokens) {
 		return nil
 	}
+
+	if p.peek() == "((" {
+		return p.parseCStyleFor()
+	}
+
 	varName := p.advance()
 
 	var words []string
@@ -396,6 +410,45 @@ func (p *parser) parseFor() Node {
 		Var:   varName,
 		Words: words,
 		Body:  body,
+	}
+}
+
+func (p *parser) parseCStyleFor() Node {
+	p.advance()
+
+	if p.pos >= len(p.tokens) {
+		return nil
+	}
+
+	expr := strings.TrimSpace(p.advance())
+	parts := strings.SplitN(expr, ";", 3)
+
+	init := ""
+	cond := ""
+	step := ""
+	if len(parts) >= 1 {
+		init = strings.TrimSpace(parts[0])
+	}
+	if len(parts) >= 2 {
+		cond = strings.TrimSpace(parts[1])
+	}
+	if len(parts) >= 3 {
+		step = strings.TrimSpace(parts[2])
+	}
+
+	p.skipSemicolons()
+	if !p.match("do") {
+		return &CStyleForStmt{Init: init, Cond: cond, Step: step}
+	}
+
+	body := p.parseCompoundBody("done")
+	p.match("done")
+
+	return &CStyleForStmt{
+		Init: init,
+		Cond: cond,
+		Step: step,
+		Body: body,
 	}
 }
 

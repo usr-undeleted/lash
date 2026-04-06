@@ -147,6 +147,41 @@ func tokenize(line string) []string {
 			continue
 		}
 
+		if ch == '(' && i+1 < len(bytes) && bytes[i+1] == '(' {
+			flushCurrent()
+			tokens = append(tokens, "((")
+			i++
+			i++
+			var content strings.Builder
+			depth := 1
+			for i < len(bytes) && depth > 0 {
+				if bytes[i] == '(' && i+1 < len(bytes) && bytes[i+1] == '(' {
+					depth++
+					content.WriteByte('(')
+					i++
+					content.WriteByte('(')
+					i++
+					continue
+				}
+				if bytes[i] == ')' && i+1 < len(bytes) && bytes[i+1] == ')' {
+					depth--
+					if depth == 0 {
+						i++
+						break
+					}
+					content.WriteByte(')')
+					i++
+					content.WriteByte(')')
+					i++
+					continue
+				}
+				content.WriteByte(bytes[i])
+				i++
+			}
+			tokens = append(tokens, content.String())
+			continue
+		}
+
 		if (ch == '?' || ch == '*' || ch == '+' || ch == '@' || ch == '!') && i+1 < len(bytes) && bytes[i+1] == '(' {
 			current.WriteByte(bytes[i])
 			i++
