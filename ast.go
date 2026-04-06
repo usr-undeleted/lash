@@ -91,6 +91,13 @@ type ContinueStmt struct{}
 
 func (c *ContinueStmt) nodeType() string { return "ContinueStmt" }
 
+type FuncDef struct {
+	Name string
+	Body Node
+}
+
+func (f *FuncDef) nodeType() string { return "FuncDef" }
+
 type CaseStmt struct {
 	Word     string
 	Branches []CaseBranch
@@ -153,6 +160,7 @@ var allKeywords = []string{
 	"if", "then", "elif", "else", "fi",
 	"while", "until", "for", "in", "do", "done",
 	"case", "esac", "select", "break", "continue",
+	"function",
 }
 
 func isKeyword(t string) bool {
@@ -266,6 +274,12 @@ func (p *parser) parseCommand() Node {
 		p.advance()
 		return &ContinueStmt{}
 	}
+	if p.peek() == "function" {
+		return p.parseFuncDef()
+	}
+	if p.isFuncDefPattern() {
+		return p.parseFuncDef()
+	}
 
 	return p.parseSimpleCommand()
 }
@@ -275,11 +289,10 @@ func (p *parser) parseSimpleCommand() Node {
 
 	for p.pos < len(p.tokens) {
 		t := p.peek()
-		if t == ";" || t == ";;" || t == "&&" || t == "||" || t == "|" || t == ")" || p.isCompoundEnd(t) {
+		if t == ";" || t == ";;" || t == "&&" || t == "||" || t == "|" || t == ")" || t == "}" {
 			break
 		}
-
-		if t == "{" {
+		if len(cmd.Args) == 0 && p.isCompoundEnd(t) {
 			break
 		}
 
@@ -295,7 +308,7 @@ func (p *parser) parseSimpleCommand() Node {
 		if t == ">" || t == ">>" || t == "<" {
 			op := p.advance()
 			target := p.advance()
-			if target == "" || target == ";" || target == "&&" || target == "||" || target == "|" || p.isCompoundEnd(target) {
+			if target == "" || target == ";" || target == "&&" || target == "||" || target == "|" || target == ")" || target == "}" {
 				p.pos--
 				cmd.Args = append(cmd.Args, op)
 				continue
@@ -509,6 +522,60 @@ func (p *parser) parseSelect() Node {
 		Var:   varName,
 		Words: words,
 		Body:  body,
+	}
+}
+
+func (p *parser) isFuncDefPattern() bool {
+	if p.pos >= len(p.tokens) {
+		return false
+	}
+	t := p.peek()
+	if isKeyword(t) {
+		return false
+	}
+	if p.peekAt(1) == "(" && p.peekAt(2) == ")" {
+		return isValidVarName(t)
+	}
+	if strings.HasSuffix(t, "(") && p.peekAt(1) == ")" {
+		name := t[:len(t)-1]
+		return isValidVarName(name)
+	}
+	return false
+}
+
+func (p *parser) parseFuncDef() Node {
+	if p.peek() == "function" {
+		p.advance()
+	}
+
+	if p.pos >= len(p.tokens) {
+		return nil
+	}
+
+	name := p.advance()
+	if strings.HasSuffix(name, "(") {
+		name = name[:len(name)-1]
+	} else {
+		if p.peek() == "(" {
+			p.advance()
+		}
+	}
+	p.match(")")
+
+	if !isValidVarName(name) {
+		return nil
+	}
+
+	if !p.match("{") {
+		return nil
+	}
+
+	body := p.parseCompoundBody("}")
+	p.match("}")
+
+	return &FuncDef{
+		Name: name,
+		Body: body,
 	}
 }
 

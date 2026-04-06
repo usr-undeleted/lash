@@ -68,12 +68,11 @@
 - [x] C-style `for` loops (`for ((i=0; i<10; i++))`)
 - [x] `case` / `esac`
 - [x] `select` / `do` / `done`
-- [ ] Functions (`func() { ... }`)
-- [ ] Function arguments and local variables (`local`)
-- [ ] Return values from functions (`return`)
-- [x] `source` / `.` (dot) command for including scripts
-- [ ] Positional parameters (`$0`, `$1`..`$9`, `$@`, `$*`, `$#`)
-- [ ] `shift` builtin
+- [x] Functions (`func() { ... }`)
+- [x] Function arguments and local variables (`local`)
+- [x] Return values from functions (`return`)
+- [x] Positional parameters (`$0`, `$1`..`$9`, `$@`, `$*`, `$#`)
+- [x] `shift` builtin
 - [ ] `read` builtin (with flags for prompts, delimiters, etc.)
 - [ ] Here documents (`<< EOF`)
 - [ ] Here strings (`<<< "string"`)

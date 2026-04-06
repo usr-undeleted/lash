@@ -4,12 +4,44 @@ import (
 	"strings"
 )
 
+const atSentinel = "\x00LASH_AT\x00"
+
 func expandVariables(tokens []string) []string {
-	expanded := make([]string, len(tokens))
-	for i, t := range tokens {
-		expanded[i] = expandString(t)
+	var result []string
+	for _, t := range tokens {
+		expanded := expandString(t)
+		if strings.Contains(expanded, atSentinel) {
+			result = expandAtSentinel(expanded, result)
+		} else {
+			result = append(result, expanded)
+		}
 	}
-	return expanded
+	return result
+}
+
+func expandAtSentinel(expanded string, result []string) []string {
+	parts := strings.Split(expanded, atSentinel)
+	if len(parts) == 0 {
+		return result
+	}
+	first := true
+	for _, part := range parts {
+		if first {
+			if part != "" {
+				result = append(result, part)
+			}
+			first = false
+			continue
+		}
+		for _, p := range positionalParams {
+			if part != "" {
+				result = append(result, part+p)
+			} else {
+				result = append(result, p)
+			}
+		}
+	}
+	return result
 }
 
 func expandGlobs(tokens []string) []string {

@@ -167,6 +167,25 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 	case next == '$':
 		return strconv.Itoa(os.Getpid()), 2
 
+	case next == '#':
+		return strconv.Itoa(len(positionalParams)), 2
+
+	case next == '@':
+		return "\x00LASH_AT\x00", 2
+
+	case next == '*':
+		return strings.Join(positionalParams, " "), 2
+
+	case next == '0':
+		return getVar("0"), 2
+
+	case next >= '1' && next <= '9':
+		n := int(next - '0')
+		if n <= len(positionalParams) {
+			return positionalParams[n-1], 2
+		}
+		return "", 2
+
 	case next == '{':
 		end, err := findMatchingBrace(s, pos+1)
 		if err != nil {
@@ -549,6 +568,34 @@ func preprocessArithExpr(expr string) string {
 				name := string(runes[i+1 : j])
 				result.WriteString(getVar(name))
 				i = j
+				continue
+			}
+			if runes[i+1] == '#' {
+				result.WriteString(strconv.Itoa(len(positionalParams)))
+				i += 2
+				continue
+			}
+			if runes[i+1] == '@' {
+				result.WriteString(strings.Join(positionalParams, " "))
+				i += 2
+				continue
+			}
+			if runes[i+1] == '*' {
+				result.WriteString(strings.Join(positionalParams, " "))
+				i += 2
+				continue
+			}
+			if runes[i+1] == '0' {
+				result.WriteString(getVar("0"))
+				i += 2
+				continue
+			}
+			if runes[i+1] >= '1' && runes[i+1] <= '9' {
+				n := int(runes[i+1] - '0')
+				if n <= len(positionalParams) {
+					result.WriteString(positionalParams[n-1])
+				}
+				i += 2
 				continue
 			}
 		}

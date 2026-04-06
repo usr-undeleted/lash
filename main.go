@@ -29,11 +29,18 @@ var varTable map[string]string
 var exportedVars map[string]bool
 var varMu sync.Mutex
 
+var positionalParams []string
+var scopeStack []map[string]string
+
+var funcTable map[string]*FuncDef
+var funcMu sync.Mutex
+
 const defaultPS1 = `╭─| \l | \033[36m\u\033[0m@\033[36m\h\033[0m | \033[36m\w\033[0m \g{| \033[33m\g\033[31m\G!\033[0m }|\F─\X{❯ \X \033[31m\x↵\033[0m }❮\n╰─$ `
 
 func initVarTable() {
 	varTable = make(map[string]string)
 	exportedVars = make(map[string]bool)
+	funcTable = make(map[string]*FuncDef)
 	for _, env := range os.Environ() {
 		if idx := strings.Index(env, "="); idx >= 0 {
 			key := env[:idx]
@@ -47,6 +54,11 @@ func initVarTable() {
 func getVar(name string) string {
 	varMu.Lock()
 	defer varMu.Unlock()
+	for i := len(scopeStack) - 1; i >= 0; i-- {
+		if val, ok := scopeStack[i][name]; ok {
+			return val
+		}
+	}
 	if val, ok := varTable[name]; ok {
 		return val
 	}
@@ -56,6 +68,12 @@ func getVar(name string) string {
 func setVar(name, value string, exported bool) {
 	varMu.Lock()
 	defer varMu.Unlock()
+	for i := len(scopeStack) - 1; i >= 0; i-- {
+		if _, ok := scopeStack[i][name]; ok {
+			scopeStack[i][name] = value
+			return
+		}
+	}
 	varTable[name] = value
 	if exported {
 		exportedVars[name] = true
@@ -71,6 +89,12 @@ func setVar(name, value string, exported bool) {
 func unsetVar(name string) {
 	varMu.Lock()
 	defer varMu.Unlock()
+	for i := len(scopeStack) - 1; i >= 0; i-- {
+		if _, ok := scopeStack[i][name]; ok {
+			delete(scopeStack[i], name)
+			return
+		}
+	}
 	delete(varTable, name)
 	delete(exportedVars, name)
 	os.Unsetenv(name)
@@ -80,6 +104,39 @@ func isExported(name string) bool {
 	varMu.Lock()
 	defer varMu.Unlock()
 	return exportedVars[name]
+}
+
+func pushScope() {
+	scopeStack = append(scopeStack, make(map[string]string))
+}
+
+func popScope() {
+	if len(scopeStack) > 0 {
+		scopeStack = scopeStack[:len(scopeStack)-1]
+	}
+}
+
+func setLocal(name, value string) bool {
+	if len(scopeStack) == 0 {
+		return false
+	}
+	scopeStack[len(scopeStack)-1][name] = value
+	return true
+}
+
+func defineFunc(name string, def *FuncDef) {
+	funcMu.Lock()
+	defer funcMu.Unlock()
+	funcTable[name] = def
+}
+
+func lookupFunc(name string) *FuncDef {
+	funcMu.Lock()
+	defer funcMu.Unlock()
+	if fn, ok := funcTable[name]; ok {
+		return fn
+	}
+	return nil
 }
 
 func isValidVarName(name string) bool {

@@ -13,7 +13,7 @@ import (
 var allBuiltins = []string{
 	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
-	"source", ".", "return",
+	"source", ".", "return", "local", "shift",
 }
 
 func isBuiltin(cmd string) bool {
@@ -324,6 +324,8 @@ func executeBuiltin(args []string, cfg *Config) {
 				aliasMu.RLock()
 				fmt.Printf("%s is aliased to '%s'\n", a, aliasTable[a].Raw)
 				aliasMu.RUnlock()
+			} else if lookupFunc(a) != nil {
+				fmt.Printf("%s is a function\n", a)
 			} else if isKeyword(a) {
 				fmt.Printf("%s is a shell keyword\n", a)
 			} else {
@@ -418,6 +420,50 @@ func executeBuiltin(args []string, cfg *Config) {
 			lastExitCode = 0
 		}
 		returnFlag = true
+	case "local":
+		if len(scopeStack) == 0 {
+			fmt.Fprintln(os.Stderr, "local: can only be used in a function")
+			lastExitCode = 1
+			return
+		}
+		for _, a := range args[1:] {
+			eqIdx := strings.Index(a, "=")
+			if eqIdx < 0 {
+				if !setLocal(a, "") {
+					lastExitCode = 1
+					return
+				}
+			} else {
+				name := a[:eqIdx]
+				val := a[eqIdx+1:]
+				if !setLocal(name, val) {
+					lastExitCode = 1
+					return
+				}
+			}
+		}
+		lastExitCode = 0
+	case "shift":
+		n := 1
+		if len(args) > 1 {
+			parsed, err := strconv.Atoi(args[1])
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "shift: %s: numeric argument required\n", args[1])
+				lastExitCode = 1
+				return
+			}
+			n = parsed
+		}
+		if n < 0 {
+			n = 0
+		}
+		if n > len(positionalParams) {
+			fmt.Fprintln(os.Stderr, "shift: shift count out of range")
+			lastExitCode = 1
+			return
+		}
+		positionalParams = positionalParams[n:]
+		lastExitCode = 0
 	case "source", ".":
 		if len(args) < 2 {
 			fmt.Fprintln(os.Stderr, "lash: source: filename argument required")

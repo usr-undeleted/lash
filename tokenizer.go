@@ -16,11 +16,13 @@ func tokenize(line string) []string {
 	var current strings.Builder
 	var tokens []string
 	bytes := []byte(line)
+	inDollarBrace := false
 
 	flushCurrent := func() {
 		if current.Len() > 0 {
 			tokens = append(tokens, current.String())
 			current.Reset()
+			inDollarBrace = false
 		}
 	}
 
@@ -236,6 +238,22 @@ func tokenize(line string) []string {
 		case ')':
 			flushCurrent()
 			tokens = append(tokens, ")")
+		case '{':
+			if current.Len() > 0 && current.String()[current.Len()-1] == '$' {
+				current.WriteByte(bytes[i])
+				inDollarBrace = true
+			} else {
+				flushCurrent()
+				tokens = append(tokens, "{")
+			}
+		case '}':
+			if inDollarBrace {
+				current.WriteByte(bytes[i])
+				inDollarBrace = false
+			} else {
+				flushCurrent()
+				tokens = append(tokens, "}")
+			}
 		case '|':
 			if i+1 < len(bytes) && bytes[i+1] == '|' {
 				flushCurrent()

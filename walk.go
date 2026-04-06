@@ -67,6 +67,8 @@ func executeNode(node Node, ctx *ExecContext) {
 		executeCStyleFor(n, ctx)
 	case *SelectStmt:
 		executeSelect(n, ctx)
+	case *FuncDef:
+		defineFunc(n.Name, n)
 	case *CaseStmt:
 		executeCase(n, ctx)
 	case *BreakStmt:
@@ -133,6 +135,20 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 		return
 	}
 	defer cleanup()
+
+	if fn := lookupFunc(expanded[0]); fn != nil {
+		pushScope()
+		savedParams := positionalParams
+		positionalParams = expanded[1:]
+		setVar("0", expanded[0], false)
+		returnFlag = false
+		executeNode(fn.Body, ctx)
+		returnFlag = false
+		popScope()
+		positionalParams = savedParams
+		waitProcSubst()
+		return
+	}
 
 	if isBuiltin(expanded[0]) {
 		if len(prefixEnv) > 0 {
