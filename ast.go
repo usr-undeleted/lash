@@ -75,6 +75,22 @@ type CStyleForStmt struct {
 
 func (c *CStyleForStmt) nodeType() string { return "CStyleForStmt" }
 
+type SelectStmt struct {
+	Var   string
+	Words []string
+	Body  Node
+}
+
+func (s *SelectStmt) nodeType() string { return "SelectStmt" }
+
+type BreakStmt struct{}
+
+func (b *BreakStmt) nodeType() string { return "BreakStmt" }
+
+type ContinueStmt struct{}
+
+func (c *ContinueStmt) nodeType() string { return "ContinueStmt" }
+
 type CaseStmt struct {
 	Word     string
 	Branches []CaseBranch
@@ -136,7 +152,7 @@ func (p *parser) match(token string) bool {
 var allKeywords = []string{
 	"if", "then", "elif", "else", "fi",
 	"while", "until", "for", "in", "do", "done",
-	"case", "esac",
+	"case", "esac", "select", "break", "continue",
 }
 
 func isKeyword(t string) bool {
@@ -236,8 +252,19 @@ func (p *parser) parseCommand() Node {
 	if p.peek() == "for" {
 		return p.parseFor()
 	}
+	if p.peek() == "select" {
+		return p.parseSelect()
+	}
 	if p.peek() == "case" {
 		return p.parseCase()
+	}
+	if p.peek() == "break" {
+		p.advance()
+		return &BreakStmt{}
+	}
+	if p.peek() == "continue" {
+		p.advance()
+		return &ContinueStmt{}
 	}
 
 	return p.parseSimpleCommand()
@@ -449,6 +476,39 @@ func (p *parser) parseCStyleFor() Node {
 		Cond: cond,
 		Step: step,
 		Body: body,
+	}
+}
+
+func (p *parser) parseSelect() Node {
+	p.advance()
+
+	if p.pos >= len(p.tokens) {
+		return nil
+	}
+
+	varName := p.advance()
+
+	var words []string
+	if p.match("in") {
+		for p.pos < len(p.tokens) && p.peek() != ";" && p.peek() != "do" {
+			words = append(words, p.advance())
+		}
+	}
+
+	if p.peek() == ";" {
+		p.advance()
+	}
+	if !p.match("do") {
+		return &SelectStmt{Var: varName, Words: words}
+	}
+
+	body := p.parseCompoundBody("done")
+	p.match("done")
+
+	return &SelectStmt{
+		Var:   varName,
+		Words: words,
+		Body:  body,
 	}
 }
 

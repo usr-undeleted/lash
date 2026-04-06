@@ -67,7 +67,7 @@
 - [x] `for` / `in` / `do` / `done`
 - [x] C-style `for` loops (`for ((i=0; i<10; i++))`)
 - [x] `case` / `esac`
-- [ ] `select` / `do` / `done`
+- [x] `select` / `do` / `done`
 - [ ] Functions (`func() { ... }`)
 - [ ] Function arguments and local variables (`local`)
 - [ ] Return values from functions (`return`)
@@ -79,7 +79,7 @@
 - [ ] Here strings (`<<< "string"`)
 - [ ] `set` / `unset` with various flags (`set -e`, `set -x`, `set -o pipefail`)
 - [ ] Trap command (`trap 'handler' SIGNAL`)
-- [ ] `break`, `continue`, `exit` in loops
+- [x] `break`, `continue`, `exit` in loops
 - [ ] Conditional expressions in `[[ ]]` and `[ ]`
 - [ ] String comparisons and pattern matching in conditionals
 - [ ] Array support (indexed: `arr=(a b c)`, associative: `declare -A map`)

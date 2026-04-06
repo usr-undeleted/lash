@@ -18,6 +18,9 @@ var lastExitCode int = 0
 var expandError bool
 var cmdNumber int = 0
 var returnFlag bool
+var breakFlag bool
+var continueFlag bool
+var stdinReader *bufio.Reader
 var pendingNotifs []string
 var notifMu sync.Mutex
 var currentConfig *Config
@@ -629,6 +632,7 @@ func main() {
 	currentConfig = cfg
 	sourceLashrc(cfg)
 	editor := NewLineEditor(cfg)
+	stdinReader = bufio.NewReader(os.Stdin)
 	for {
 		reapZombies()
 		drainNotifs()

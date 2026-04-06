@@ -182,6 +182,13 @@ func (e *LineEditor) ReadLine(prompt string) (string, error) {
 
 func (e *LineEditor) readLineFallback(prompt string) (string, error) {
 	fmt.Print(prompt)
+	if stdinReader != nil {
+		line, err := stdinReader.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+		return strings.TrimRight(line, "\n"), nil
+	}
 	if e.reader == nil {
 		e.reader = bufio.NewReader(os.Stdin)
 	}

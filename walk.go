@@ -1,10 +1,12 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -63,14 +65,20 @@ func executeNode(node Node, ctx *ExecContext) {
 		executeFor(n, ctx)
 	case *CStyleForStmt:
 		executeCStyleFor(n, ctx)
+	case *SelectStmt:
+		executeSelect(n, ctx)
 	case *CaseStmt:
 		executeCase(n, ctx)
+	case *BreakStmt:
+		breakFlag = true
+	case *ContinueStmt:
+		continueFlag = true
 	}
 }
 
 func executeProgram(prog *Program, ctx *ExecContext) {
 	for _, cmd := range prog.Commands {
-		if returnFlag {
+		if returnFlag || breakFlag || continueFlag {
 			return
 		}
 		executeNode(cmd, ctx)
@@ -410,7 +418,12 @@ func executeWhile(node *WhileStmt, ctx *ExecContext) {
 		if returnFlag {
 			return
 		}
+		breakFlag = false
+		continueFlag = false
 		executeNode(node.Condition, ctx)
+		if returnFlag {
+			return
+		}
 		shouldRun := lastExitCode == 0
 		if node.Until {
 			shouldRun = lastExitCode != 0
@@ -419,6 +432,16 @@ func executeWhile(node *WhileStmt, ctx *ExecContext) {
 			break
 		}
 		executeNode(node.Body, ctx)
+		if returnFlag {
+			return
+		}
+		if breakFlag {
+			breakFlag = false
+			return
+		}
+		if continueFlag {
+			continue
+		}
 	}
 }
 
@@ -431,8 +454,20 @@ func executeFor(node *ForStmt, ctx *ExecContext) {
 		if returnFlag {
 			return
 		}
+		breakFlag = false
+		continueFlag = false
 		setVar(node.Var, val, false)
 		executeNode(node.Body, ctx)
+		if returnFlag {
+			return
+		}
+		if breakFlag {
+			breakFlag = false
+			return
+		}
+		if continueFlag {
+			continue
+		}
 	}
 }
 
@@ -444,6 +479,8 @@ func executeCStyleFor(node *CStyleForStmt, ctx *ExecContext) {
 		if returnFlag {
 			return
 		}
+		breakFlag = false
+		continueFlag = false
 		if node.Cond != "" {
 			result := evalArithmetic(node.Cond)
 			if result == "0" {
@@ -454,8 +491,76 @@ func executeCStyleFor(node *CStyleForStmt, ctx *ExecContext) {
 		if returnFlag {
 			return
 		}
+		if breakFlag {
+			breakFlag = false
+			return
+		}
+		if continueFlag {
+			if node.Step != "" {
+				evalArithmetic(node.Step)
+			}
+			continue
+		}
 		if node.Step != "" {
 			evalArithmetic(node.Step)
+		}
+	}
+}
+
+func executeSelect(node *SelectStmt, ctx *ExecContext) {
+	words := expandBraces(node.Words)
+	words = expandVariables(words)
+	words = expandGlobs(words)
+
+	var reader *bufio.Reader
+	if stdinReader != nil {
+		reader = stdinReader
+	} else {
+		reader = bufio.NewReader(ctx.Stdin)
+	}
+
+	prompt := getVar("PS3")
+	if prompt == "" {
+		prompt = "#? "
+	}
+
+	for {
+		if returnFlag {
+			return
+		}
+		breakFlag = false
+		continueFlag = false
+
+		for i, w := range words {
+			fmt.Fprintf(ctx.Stderr, "%d) %s\n", i+1, w)
+		}
+		fmt.Fprintf(ctx.Stderr, "%s", prompt)
+
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		line = strings.TrimRight(line, "\n\r")
+
+		setVar("REPLY", line, false)
+
+		num, err := strconv.Atoi(strings.TrimSpace(line))
+		if err != nil || num < 1 || num > len(words) {
+			setVar(node.Var, "", false)
+		} else {
+			setVar(node.Var, words[num-1], false)
+		}
+
+		executeNode(node.Body, ctx)
+		if returnFlag {
+			return
+		}
+		if breakFlag {
+			breakFlag = false
+			return
+		}
+		if continueFlag {
+			continue
 		}
 	}
 }
