@@ -74,17 +74,17 @@
 - [x] Positional parameters (`$0`, `$1`..`$9`, `$@`, `$*`, `$#`)
 - [x] `shift` builtin
 - [x] `read` builtin (with flags for prompts, delimiters, etc.)
-- [ ] Here documents (`<< EOF`)
-- [ ] Here strings (`<<< "string"`)
-- [ ] `set` / `unset` with various flags (`set -e`, `set -x`, `set -o pipefail`)
+- [x] Here documents (`<< EOF`)
+- [x] Here strings (`<<< "string"`)
+- [x] `set` / `unset` with various flags (`set -e`, `set -x`, `set -o pipefail`)
 - [ ] Trap command (`trap 'handler' SIGNAL`)
 - [x] `break`, `continue`, `exit` in loops
 - [ ] Conditional expressions in `[[ ]]` and `[ ]`
 - [ ] String comparisons and pattern matching in conditionals
 - [ ] Array support (indexed: `arr=(a b c)`, associative: `declare -A map`)
 - [ ] Array slicing and iteration
-- [ ] Subshell execution (`(cmd)`)
-- [ ] Command grouping (`{ cmd1; cmd2; }`)
+- [x] Subshell execution (`(cmd)`)
+- [x] Command grouping (`{ cmd1; cmd2; }`)
 
 ## Phase 6: Configuration & Customization
 

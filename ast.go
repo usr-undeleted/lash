@@ -110,6 +110,18 @@ type CaseBranch struct {
 	Body     Node
 }
 
+type Subshell struct {
+	Body Node
+}
+
+func (s *Subshell) nodeType() string { return "Subshell" }
+
+type Group struct {
+	Body Node
+}
+
+func (g *Group) nodeType() string { return "Group" }
+
 type Assignment struct {
 	Name  string
 	Value string
@@ -178,7 +190,7 @@ func (p *parser) isKeyword(t string) bool {
 
 func (p *parser) isOperator(t string) bool {
 	switch t {
-	case ";", "&&", "||", "|", "&", ">>", ">", "<":
+	case ";", "&&", "||", "|", "&", ">>", ">", "<", "<<", "<<-", "<<<":
 		return true
 	}
 	return false
@@ -280,6 +292,12 @@ func (p *parser) parseCommand() Node {
 	if p.isFuncDefPattern() {
 		return p.parseFuncDef()
 	}
+	if p.peek() == "(" {
+		return p.parseSubshell()
+	}
+	if p.peek() == "{" {
+		return p.parseGroup()
+	}
 
 	return p.parseSimpleCommand()
 }
@@ -289,7 +307,7 @@ func (p *parser) parseSimpleCommand() Node {
 
 	for p.pos < len(p.tokens) {
 		t := p.peek()
-		if t == ";" || t == ";;" || t == "&&" || t == "||" || t == "|" || t == ")" || t == "}" {
+		if t == ";" || t == ";;" || t == "&&" || t == "||" || t == "|" || t == ")" || t == "}" || t == "(" {
 			break
 		}
 		if len(cmd.Args) == 0 && p.isCompoundEnd(t) {
@@ -305,7 +323,7 @@ func (p *parser) parseSimpleCommand() Node {
 			break
 		}
 
-		if t == ">" || t == ">>" || t == "<" {
+		if t == ">" || t == ">>" || t == "<" || t == "<<" || t == "<<-" || t == "<<<" {
 			op := p.advance()
 			target := p.advance()
 			if target == "" || target == ";" || target == "&&" || target == "||" || target == "|" || target == ")" || target == "}" {
@@ -652,4 +670,18 @@ func (p *parser) parseCompoundBody(endTokens ...string) Node {
 		return nil
 	}
 	return prog
+}
+
+func (p *parser) parseSubshell() Node {
+	p.advance()
+	body := p.parseCompoundBody(")")
+	p.match(")")
+	return &Subshell{Body: body}
+}
+
+func (p *parser) parseGroup() Node {
+	p.advance()
+	body := p.parseCompoundBody("}")
+	p.match("}")
+	return &Group{Body: body}
 }

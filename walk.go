@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,6 +76,10 @@ func executeNode(node Node, ctx *ExecContext) {
 		breakFlag = true
 	case *ContinueStmt:
 		continueFlag = true
+	case *Subshell:
+		executeSubshell(n, ctx)
+	case *Group:
+		executeNode(n.Body, ctx)
 	}
 }
 
@@ -84,6 +89,9 @@ func executeProgram(prog *Program, ctx *ExecContext) {
 			return
 		}
 		executeNode(cmd, ctx)
+		if setErrExit && !inCondition && lastExitCode != 0 {
+			os.Exit(lastExitCode)
+		}
 	}
 }
 
@@ -119,6 +127,10 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 	expanded = expandGlobs(expanded)
 	if len(expanded) == 0 {
 		return
+	}
+
+	if setXTrace {
+		fmt.Fprintf(ctx.Stderr, "+ %s\n", strings.Join(expanded, " "))
 	}
 
 	prefixEnv := make(map[string]string)
@@ -390,7 +402,20 @@ func executePipelineNode(pipe *Pipeline, ctx *ExecContext) {
 		return
 	}
 
-	exitCode := waitForeground(pids, pgid, commandStr)
+	codes := waitForegroundCodes(pids, pgid, commandStr)
+	var exitCode int
+	if len(codes) == 0 {
+		exitCode = 0
+	} else if setPipefail {
+		exitCode = 0
+		for _, c := range codes {
+			if c != 0 {
+				exitCode = c
+			}
+		}
+	} else {
+		exitCode = codes[len(codes)-1]
+	}
 	if exitCode < 0 {
 		lastExitCode = 128 + int(syscall.SIGTSTP)
 	} else {
@@ -411,7 +436,9 @@ func executePipelineNode(pipe *Pipeline, ctx *ExecContext) {
 }
 
 func executeIf(node *IfStmt, ctx *ExecContext) {
+	inCondition = true
 	executeNode(node.Condition, ctx)
+	inCondition = false
 	if lastExitCode == 0 {
 		executeNode(node.Body, ctx)
 		return
@@ -420,13 +447,22 @@ func executeIf(node *IfStmt, ctx *ExecContext) {
 		if returnFlag {
 			return
 		}
+		inCondition = true
 		executeNode(elif.Condition, ctx)
+		inCondition = false
 		if lastExitCode == 0 {
 			executeNode(elif.Body, ctx)
 			return
 		}
 	}
-	executeNode(node.Else, ctx)
+	executed := false
+	if node.Else != nil {
+		executeNode(node.Else, ctx)
+		executed = true
+	}
+	if !executed {
+		lastExitCode = 0
+	}
 }
 
 func executeWhile(node *WhileStmt, ctx *ExecContext) {
@@ -436,7 +472,9 @@ func executeWhile(node *WhileStmt, ctx *ExecContext) {
 		}
 		breakFlag = false
 		continueFlag = false
+		inCondition = true
 		executeNode(node.Condition, ctx)
+		inCondition = false
 		if returnFlag {
 			return
 		}
@@ -445,6 +483,7 @@ func executeWhile(node *WhileStmt, ctx *ExecContext) {
 			shouldRun = lastExitCode != 0
 		}
 		if !shouldRun {
+			lastExitCode = 0
 			break
 		}
 		executeNode(node.Body, ctx)
@@ -616,6 +655,56 @@ func applyRedirections(redirs []Redir, ctx *ExecContext) (*ExecContext, func(), 
 
 	for _, r := range redirs {
 		switch r.Op {
+		case "<<", "<<-":
+			info, ok := heredocMap[r.Target]
+			if !ok {
+				fmt.Fprintf(os.Stderr, "lash: heredoc: content not found\n")
+				lastExitCode = 1
+				return ctx, func() {
+					for _, of := range opened {
+						of.Close()
+					}
+				}, true
+			}
+			content := info.Content
+			if !info.Quoted {
+				content = expandString(content)
+			}
+			pr, pw, err := os.Pipe()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				lastExitCode = 1
+				return ctx, func() {
+					for _, of := range opened {
+						of.Close()
+					}
+				}, true
+			}
+			go func() {
+				pw.WriteString(content)
+				pw.Close()
+			}()
+			opened = append(opened, pr)
+			newCtx = newCtx.withOverrides(pr, nil, nil)
+		case "<<<":
+			expanded := expandString(stripQuotes(r.Target))
+			pr, pw, err := os.Pipe()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+				lastExitCode = 1
+				return ctx, func() {
+					for _, of := range opened {
+						of.Close()
+					}
+				}, true
+			}
+			go func() {
+				pw.WriteString(expanded)
+				pw.Write([]byte{'\n'})
+				pw.Close()
+			}()
+			opened = append(opened, pr)
+			newCtx = newCtx.withOverrides(pr, nil, nil)
 		case "<":
 			if f := resolveProcSubstFile(r.Target); f != nil {
 				newCtx = newCtx.withOverrides(f, nil, nil)
@@ -747,4 +836,55 @@ func executeBackground(args []string, ctx *ExecContext, prefixEnv map[string]str
 	job := addJob(pid, pid, JobRunning, commandStr)
 	fmt.Printf("[%d] %d\n", job.Number, pid)
 	lastExitCode = 0
+}
+
+func executeSubshell(node *Subshell, ctx *ExecContext) {
+	savedVars := snapshotVars()
+	savedDir, _ := os.Getwd()
+	savedParams := make([]string, len(positionalParams))
+	copy(savedParams, positionalParams)
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+		lastExitCode = 1
+		return
+	}
+
+	savedStdout := os.Stdout
+	os.Stdout = w
+
+	oldInSubshell := inSubshell
+	inSubshell = true
+
+	executeNode(node.Body, ctx)
+
+	os.Stdout = savedStdout
+	w.Close()
+	io.Copy(savedStdout, r)
+	r.Close()
+
+	inSubshell = oldInSubshell
+	restoreVars(savedVars)
+	positionalParams = savedParams
+	os.Chdir(savedDir)
+}
+
+func snapshotVars() map[string]string {
+	varMu.Lock()
+	defer varMu.Unlock()
+	s := make(map[string]string, len(varTable))
+	for k, v := range varTable {
+		s[k] = v
+	}
+	return s
+}
+
+func restoreVars(saved map[string]string) {
+	varMu.Lock()
+	defer varMu.Unlock()
+	varTable = make(map[string]string, len(saved))
+	for k, v := range saved {
+		varTable[k] = v
+	}
 }

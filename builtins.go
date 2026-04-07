@@ -16,7 +16,7 @@ import (
 var allBuiltins = []string{
 	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
-	"source", ".", "return", "local", "shift", "read",
+	"source", ".", "return", "local", "shift", "read", "set",
 }
 
 func isBuiltin(cmd string) bool {
@@ -37,6 +37,11 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			if err == nil {
 				code = n
 			}
+		}
+		if inSubshell {
+			lastExitCode = code
+			returnFlag = true
+			return
 		}
 		os.Exit(code)
 	case "cd":
@@ -291,13 +296,95 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 	case "false":
 		lastExitCode = 1
 	case "unset":
-		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "unset: usage: unset <var> [var...]")
+		unsetFunc := false
+		var varNames []string
+		for _, a := range args[1:] {
+			if a == "-f" {
+				unsetFunc = true
+				continue
+			}
+			if a == "-v" {
+				continue
+			}
+			varNames = append(varNames, a)
+		}
+		if len(varNames) == 0 {
+			fmt.Fprintln(os.Stderr, "unset: usage: unset [-f] [-v] <name> [name...]")
 			lastExitCode = 1
 			return
 		}
-		for _, a := range args[1:] {
-			unsetVar(a)
+		for _, a := range varNames {
+			if unsetFunc {
+				funcMu.Lock()
+				delete(funcTable, a)
+				funcMu.Unlock()
+			} else {
+				unsetVar(a)
+			}
+		}
+		lastExitCode = 0
+	case "set":
+		if len(args) == 1 {
+			varMu.Lock()
+			var keys []string
+			for k := range varTable {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				fmt.Printf("%s=%s\n", k, varTable[k])
+			}
+			varMu.Unlock()
+			lastExitCode = 0
+			return
+		}
+		i := 1
+		for i < len(args) && len(args[i]) > 0 && (args[i][0] == '-' || args[i][0] == '+') {
+			if len(args[i]) < 2 {
+				break
+			}
+			enable := args[i][0] == '-'
+			flag := args[i][1:]
+			switch flag {
+			case "e":
+				setErrExit = enable
+			case "x":
+				setXTrace = enable
+			case "-":
+				i++
+				positionalParams = args[i:]
+				lastExitCode = 0
+				return
+			case "o":
+				i++
+				if i >= len(args) {
+					fmt.Fprintln(os.Stderr, "set: -o: option requires an argument")
+					lastExitCode = 2
+					return
+				}
+				opt := args[i]
+				switch opt {
+				case "pipefail":
+					setPipefail = enable
+				default:
+					fmt.Fprintf(os.Stderr, "set: -o: %s: invalid option\n", opt)
+					lastExitCode = 2
+					return
+				}
+			default:
+				if enable {
+					positionalParams = args[i:]
+					lastExitCode = 0
+					return
+				}
+				fmt.Fprintf(os.Stderr, "set: %s: invalid option\n", args[i])
+				lastExitCode = 2
+				return
+			}
+			i++
+		}
+		if i < len(args) {
+			positionalParams = args[i:]
 		}
 		lastExitCode = 0
 	case "env":

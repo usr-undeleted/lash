@@ -184,6 +184,12 @@ func tokenize(line string) []string {
 			continue
 		}
 
+		if ch == '(' {
+			flushCurrent()
+			tokens = append(tokens, "(")
+			continue
+		}
+
 		if (ch == '?' || ch == '*' || ch == '+' || ch == '@' || ch == '!') && i+1 < len(bytes) && bytes[i+1] == '(' {
 			current.WriteByte(bytes[i])
 			i++
@@ -205,8 +211,24 @@ func tokenize(line string) []string {
 				current.WriteByte(bytes[i])
 				continue
 			}
-			flushCurrent()
-			tokens = append(tokens, string(ch))
+			if i+1 < len(bytes) && bytes[i+1] == '<' {
+				if i+2 < len(bytes) && bytes[i+2] == '<' {
+					flushCurrent()
+					tokens = append(tokens, "<<<")
+					i += 2
+				} else if i+2 < len(bytes) && bytes[i+2] == '-' {
+					flushCurrent()
+					tokens = append(tokens, "<<-")
+					i += 2
+				} else {
+					flushCurrent()
+					tokens = append(tokens, "<<")
+					i++
+				}
+			} else {
+				flushCurrent()
+				tokens = append(tokens, string(ch))
+			}
 		case '>':
 			if i+1 < len(bytes) && bytes[i+1] == '>' {
 				flushCurrent()

@@ -24,6 +24,20 @@ var stdinReader *bufio.Reader
 var pendingNotifs []string
 var notifMu sync.Mutex
 var currentConfig *Config
+var setErrExit bool
+var setXTrace bool
+var setPipefail bool
+var inCondition bool
+var inSubshell bool
+
+var heredocMap map[string]*heredocInfo
+var heredocCount int
+
+type heredocInfo struct {
+	Content string
+	Quoted  bool
+	Strip   bool
+}
 
 var varTable map[string]string
 var exportedVars map[string]bool
@@ -41,6 +55,7 @@ func initVarTable() {
 	varTable = make(map[string]string)
 	exportedVars = make(map[string]bool)
 	funcTable = make(map[string]*FuncDef)
+	heredocMap = make(map[string]*heredocInfo)
 	for _, env := range os.Environ() {
 		if idx := strings.Index(env, "="); idx >= 0 {
 			key := env[:idx]
@@ -605,9 +620,25 @@ func sourceFile(path string, cfg *Config) int {
 	returnFlag = false
 	scanner := bufio.NewScanner(f)
 	ctx := defaultContext()
-	var lines []string
+
+	var allLines []string
 	for scanner.Scan() {
-		line := scanner.Text()
+		allLines = append(allLines, scanner.Text())
+	}
+
+	lineIdx := 0
+	readNextFromSource := func() (string, error) {
+		if lineIdx >= len(allLines) {
+			return "", io.EOF
+		}
+		line := allLines[lineIdx]
+		lineIdx++
+		return line + "\n", nil
+	}
+
+	for lineIdx < len(allLines) {
+		line := allLines[lineIdx]
+		lineIdx++
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
@@ -617,17 +648,18 @@ func sourceFile(path string, cfg *Config) int {
 			executeBuiltin(tokens, ctx)
 			continue
 		}
-		lines = append(lines, trimmed)
-	}
-	code := 0
-	if len(lines) > 0 {
-		full := strings.Join(lines, "\n")
-		full = expandAliasLine(full)
-		prog := Parse(full)
+
+		processed := preprocessHeredocs(trimmed, readNextFromSource)
+		processed = expandAliasLine(processed)
+		if processed == "" {
+			continue
+		}
+		returnFlag = false
+		prog := Parse(processed)
 		executeNode(prog, ctx)
-		code = lastExitCode
 	}
-	return code
+
+	return lastExitCode
 }
 
 func sourceLashrc(cfg *Config) {
@@ -642,6 +674,64 @@ func sourceLashrc(cfg *Config) {
 	}
 	f.Close()
 	sourceFile(path, cfg)
+}
+
+func preprocessHeredocs(line string, readNextLine func() (string, error)) string {
+	tokens := tokenize(line)
+	var result strings.Builder
+	i := 0
+	for i < len(tokens) {
+		t := tokens[i]
+		if (t == "<<" || t == "<<-") && i+1 < len(tokens) {
+			op := t
+			delimToken := tokens[i+1]
+			strip := op == "<<-"
+
+			quoted := false
+			delim := delimToken
+			if len(delim) >= 2 && ((delim[0] == '\'' && delim[len(delim)-1] == '\'') || (delim[0] == '"' && delim[len(delim)-1] == '"')) {
+				quoted = true
+				delim = delim[1 : len(delim)-1]
+			}
+
+			placeholder := "__LASH_HEREDOC_" + strconv.Itoa(heredocCount) + "__"
+			heredocCount++
+
+			var content strings.Builder
+			for {
+				nextLine, err := readNextLine()
+				if err != nil {
+					break
+				}
+				trimmed := strings.TrimRight(nextLine, "\r\n")
+				if strip {
+					trimmed = strings.TrimLeft(trimmed, "\t")
+				}
+				if trimmed == delim {
+					break
+				}
+				content.WriteString(nextLine)
+			}
+
+			heredocMap[placeholder] = &heredocInfo{
+				Content: content.String(),
+				Quoted:  quoted,
+				Strip:   strip,
+			}
+
+			result.WriteString(op)
+			result.WriteByte(' ')
+			result.WriteString(placeholder)
+			i += 2
+			continue
+		}
+		result.WriteString(t)
+		if i+1 < len(tokens) {
+			result.WriteByte(' ')
+		}
+		i++
+	}
+	return result.String()
 }
 
 func handleGlobalCommand(args []string) {
@@ -722,6 +812,14 @@ func main() {
 		if line == "" {
 			continue
 		}
+
+		line = preprocessHeredocs(line, func() (string, error) {
+			nextLine, err := editor.ReadLine("> ")
+			if err != nil {
+				return "", err
+			}
+			return nextLine + "\n", nil
+		})
 
 		tokens := tokenize(line)
 		if len(tokens) > 0 && (tokens[0] == "alias" || tokens[0] == "unalias") {

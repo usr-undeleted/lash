@@ -307,6 +307,14 @@ func takeTerminal() {
 }
 
 func waitForeground(pids []int, pgid int, command string) int {
+	codes := waitForegroundCodes(pids, pgid, command)
+	if len(codes) == 0 {
+		return 0
+	}
+	return codes[len(codes)-1]
+}
+
+func waitForegroundCodes(pids []int, pgid int, command string) []int {
 	setFgPIDs(pids)
 	defer clearFgPIDs()
 
@@ -326,7 +334,7 @@ func waitForeground(pids []int, pgid int, command string) int {
 		syscall.Kill(p, syscall.SIGCONT)
 	}
 
-	lastExit := 0
+	codes := make([]int, 0, len(pids))
 	for len(remaining) > 0 {
 		var status syscall.WaitStatus
 		pid, err := syscall.Wait4(-1, &status, syscall.WUNTRACED, nil)
@@ -370,18 +378,18 @@ func waitForeground(pids []int, pgid int, command string) int {
 			}
 			job := addJob(pids[0], pgid, JobStopped, command)
 			fmt.Printf("\n[%d]+  Stopped    %s\n", job.Number, job.Command)
-			return -1
+			return append(codes, -1)
 		}
 
 		if status.Exited() {
-			lastExit = status.ExitStatus()
+			codes = append(codes, status.ExitStatus())
 		} else if status.Signaled() {
-			lastExit = 128 + int(status.Signal())
+			codes = append(codes, 128+int(status.Signal()))
 		}
 		delete(remaining, pid)
 	}
 
-	return lastExit
+	return codes
 }
 
 func listSignals() []syscall.Signal {
