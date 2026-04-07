@@ -604,6 +604,7 @@ func sourceFile(path string, cfg *Config) int {
 
 	returnFlag = false
 	scanner := bufio.NewScanner(f)
+	ctx := defaultContext()
 	var lines []string
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -611,15 +612,21 @@ func sourceFile(path string, cfg *Config) int {
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
+		tokens := tokenize(trimmed)
+		if len(tokens) > 0 && (tokens[0] == "alias" || tokens[0] == "unalias") {
+			executeBuiltin(tokens, ctx)
+			continue
+		}
 		lines = append(lines, trimmed)
 	}
 	code := 0
-	ctx := defaultContext()
-	full := strings.Join(lines, "\n")
-	full = expandAliasLine(full)
-	prog := Parse(full)
-	executeNode(prog, ctx)
-	code = lastExitCode
+	if len(lines) > 0 {
+		full := strings.Join(lines, "\n")
+		full = expandAliasLine(full)
+		prog := Parse(full)
+		executeNode(prog, ctx)
+		code = lastExitCode
+	}
 	return code
 }
 
