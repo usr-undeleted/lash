@@ -116,11 +116,17 @@ func builtinFetch(args []string, ctx *ExecContext) {
 		return
 	}
 
+	raw := false
 	var specs []fetchSpec
 	var allIssues []fetchFormatIssue
 
 	i := 1
 	for i < len(args) {
+		if args[i] == "--raw" || args[i] == "-r" {
+			raw = true
+			i++
+			continue
+		}
 		if args[i] == "{" || args[i] == "}" {
 			i++
 			continue
@@ -171,27 +177,26 @@ func builtinFetch(args []string, ctx *ExecContext) {
 		return
 	}
 
+	if raw {
+		var allVals []string
+		for _, spec := range specs {
+			cat := fetchCategoryMap[spec.category]
+			data := cat.fetch()
+			fields := resolveFields(spec, cat.fields)
+			for _, f := range fields {
+				allVals = append(allVals, data[f.short])
+			}
+		}
+		fmt.Println(strings.Join(allVals, " "))
+		lastExitCode = 0
+		return
+	}
+
 	first := true
 	for _, spec := range specs {
 		cat := fetchCategoryMap[spec.category]
 		data := cat.fetch()
-		var fields []fetchField
-		if spec.format == "" {
-			fields = cat.fields
-		} else {
-			seen := make(map[string]bool)
-			parts := strings.Split(spec.format, ",")
-			for _, p := range parts {
-				p = strings.TrimSpace(p)
-				for _, f := range cat.fields {
-					if (f.short == p || f.long == p) && !seen[f.short] {
-						fields = append(fields, f)
-						seen[f.short] = true
-						break
-					}
-				}
-			}
-		}
+		fields := resolveFields(spec, cat.fields)
 		if !first {
 			fmt.Println()
 		}
@@ -209,6 +214,26 @@ func builtinFetch(args []string, ctx *ExecContext) {
 	}
 
 	lastExitCode = 0
+}
+
+func resolveFields(spec fetchSpec, fields []fetchField) []fetchField {
+	if spec.format == "" {
+		return fields
+	}
+	seen := make(map[string]bool)
+	var result []fetchField
+	parts := strings.Split(spec.format, ",")
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		for _, f := range fields {
+			if (f.short == p || f.long == p) && !seen[f.short] {
+				result = append(result, f)
+				seen[f.short] = true
+				break
+			}
+		}
+	}
+	return result
 }
 
 func validateFetchFormat(category, format string, fields []fetchField) []fetchFormatIssue {
@@ -336,8 +361,11 @@ func min3(a, b, c int) int {
 func printFetchHelp() {
 	help := `fetch — display system information
 
-usage: fetch [category{format} ...]
+usage: fetch [--raw|-r] [category{format} ...]
        fetch -h|--help
+
+flags:
+  --raw, -r          raw output (space-separated values, no labels)
 
 categories:
   kernel{t,v,a,h}   type, version, architecture, hostname
@@ -360,7 +388,8 @@ examples:
   fetch kernel              show all kernel fields
   fetch kernel{t,v}         show kernel type and version only
   fetch os{icon}            show distro icon only
-  fetch kernel{t,v} user{u}`
+  fetch kernel{t,v} user{u}
+  fetch --raw kernel{t,v}   raw: "Linux 6.19.10-1-cachyos"`
 	fmt.Println(help)
 }
 
