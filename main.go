@@ -764,9 +764,6 @@ func handleGlobalCommand(args []string) {
 		}
 		fmt.Printf("lash: set %s = %s\n", key, val)
 		os.Exit(0)
-	case "--version", "-v":
-		fmt.Printf("lash %s\n", getVersion())
-		os.Exit(0)
 	default:
 		fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", sub)
 		fmt.Fprintln(os.Stderr, "usage: lash [version|set-config ...]")
