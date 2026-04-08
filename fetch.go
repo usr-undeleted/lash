@@ -33,6 +33,10 @@ type fetchSpec struct {
 	format   string
 }
 
+var fetchCategoryOrder = []string{
+	"kernel", "os", "shell", "user", "uptime", "memory", "cpu", "gpu", "desktop",
+}
+
 var fetchCategoryMap = map[string]fetchCategory{
 	"kernel": {
 		fields: []fetchField{
@@ -158,6 +162,18 @@ func builtinFetch(args []string, ctx *ExecContext) {
 		return
 	}
 
+	var expandedSpecs []fetchSpec
+	for _, spec := range specs {
+		if spec.category == "all" {
+			for _, catName := range fetchCategoryOrder {
+				expandedSpecs = append(expandedSpecs, fetchSpec{catName, ""})
+			}
+			continue
+		}
+		expandedSpecs = append(expandedSpecs, spec)
+	}
+	specs = expandedSpecs
+
 	for _, spec := range specs {
 		cat, ok := fetchCategoryMap[spec.category]
 		if !ok {
@@ -201,6 +217,7 @@ func builtinFetch(args []string, ctx *ExecContext) {
 			fmt.Println()
 		}
 		first = false
+		fmt.Printf("  \033[1m%s\033[0m\n", spec.category)
 		maxLen := 0
 		for _, f := range fields {
 			if len(f.label) > maxLen {
@@ -209,7 +226,7 @@ func builtinFetch(args []string, ctx *ExecContext) {
 		}
 		for _, f := range fields {
 			val := data[f.short]
-			fmt.Printf("  %-*s %s\n", maxLen, f.label, val)
+			fmt.Printf("    %-*s %s\n", maxLen, f.label, val)
 		}
 	}
 
@@ -361,11 +378,13 @@ func min3(a, b, c int) int {
 func printFetchHelp() {
 	help := `fetch — display system information
 
-usage: fetch [--raw|-r] [category{format} ...]
+	usage: fetch [--raw|-r] [category{format} ...]
+       fetch all              show all categories
        fetch -h|--help
 
 flags:
   --raw, -r          raw output (space-separated values, no labels)
+  all                show all categories (all fields)
 
 categories:
   kernel{t,v,a,h}   type, version, architecture, hostname
@@ -389,7 +408,8 @@ examples:
   fetch kernel{t,v}         show kernel type and version only
   fetch os{icon}            show distro icon only
   fetch kernel{t,v} user{u}
-  fetch --raw kernel{t,v}   raw: "Linux 6.19.10-1-cachyos"`
+  fetch --raw kernel{t,v}   raw: "Linux 6.19.10-1-cachyos"
+  fetch --raw all           raw: all values space-separated`
 	fmt.Println(help)
 }
 
