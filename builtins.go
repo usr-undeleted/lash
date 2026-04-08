@@ -16,7 +16,7 @@ import (
 var allBuiltins = []string{
 	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
-	"source", ".", "return", "local", "shift", "read", "set",
+	"source", ".", "return", "local", "shift", "read", "set", "fetch",
 }
 
 func isBuiltin(cmd string) bool {
@@ -717,6 +717,8 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		setVar("REPLY", input, false)
 		assignReadVars(varNames, input)
 		lastExitCode = 0
+	case "fetch":
+		builtinFetch(args, ctx)
 	}
 }
 

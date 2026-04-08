@@ -644,7 +644,7 @@ func sourceFile(path string, cfg *Config) int {
 			continue
 		}
 		tokens := tokenize(trimmed)
-		if len(tokens) > 0 && (tokens[0] == "alias" || tokens[0] == "unalias") {
+		if len(tokens) > 0 && (tokens[0] == "alias" || tokens[0] == "unalias" || tokens[0] == "fetch") {
 			executeBuiltin(tokens, ctx)
 			continue
 		}
@@ -822,7 +822,7 @@ func main() {
 		})
 
 		tokens := tokenize(line)
-		if len(tokens) > 0 && (tokens[0] == "alias" || tokens[0] == "unalias") {
+		if len(tokens) > 0 && (tokens[0] == "alias" || tokens[0] == "unalias" || tokens[0] == "fetch") {
 			executeBuiltin(tokens, defaultContext())
 			continue
 		}
