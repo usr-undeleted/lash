@@ -23,6 +23,7 @@ since we are actually adding a ton of good features, since this is a shell made 
 2. \g (git integration)
 3. \l (show user distro logo)
 4. even more customizable aliases...  
+5. fetch builtin  
 and much more to come!!  
 whenever this thing is FINALLY finished, we hope to see actualy good go devs make this be actually good (as in not ridden with ai stuff), so if you're willingly to contribute with actual good human code, just wait for us to give you the green light, as in, finally typing enough prompts until its deemed done  
 # compiling
