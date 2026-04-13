@@ -98,6 +98,19 @@ func clearInterrupt() int {
 	return int(sig)
 }
 
+func signalInterruptFromExitCode(code int) {
+	if code < 0 {
+		atomic.StoreInt32(&interruptFlag, 1)
+		atomic.StoreInt32(&interruptSignal, int32(syscall.SIGTSTP))
+	} else if code == 128+int(syscall.SIGINT) {
+		atomic.StoreInt32(&interruptFlag, 1)
+		atomic.StoreInt32(&interruptSignal, int32(syscall.SIGINT))
+	} else if code == 128+int(syscall.SIGTSTP) {
+		atomic.StoreInt32(&interruptFlag, 1)
+		atomic.StoreInt32(&interruptSignal, int32(syscall.SIGTSTP))
+	}
+}
+
 func executeProgram(prog *Program, ctx *ExecContext) {
 	for _, cmd := range prog.Commands {
 		if returnFlag || breakFlag || continueFlag || checkInterrupt() {
@@ -467,6 +480,7 @@ func executePipelineNode(pipe *Pipeline, ctx *ExecContext) {
 	} else {
 		lastExitCode = exitCode
 	}
+	signalInterruptFromExitCode(lastExitCode)
 
 	for _, p := range pipes {
 		p.r.Close()
@@ -910,6 +924,7 @@ func executeForeground(args []string, ctx *ExecContext, prefixEnv map[string]str
 	} else {
 		lastExitCode = exitCode
 	}
+	signalInterruptFromExitCode(lastExitCode)
 }
 
 func executeBackground(args []string, ctx *ExecContext, prefixEnv map[string]string) {
