@@ -82,6 +82,8 @@ func executeNode(node Node, ctx *ExecContext) {
 		executeNode(n.Body, ctx)
 	case *CondExpr:
 		executeCondExpr(n)
+	case *ArrayAssign:
+		executeArrayAssign(n)
 	}
 }
 
@@ -112,7 +114,14 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 	if len(cmd.Assignments) > 0 && len(cmd.Args) == 0 {
 		for _, a := range cmd.Assignments {
 			val := expandString(a.Value)
-			setVar(a.Name, val, false)
+			bracketIdx := strings.Index(a.Name, "[")
+			if bracketIdx >= 0 && strings.HasSuffix(a.Name, "]") {
+				arrName := a.Name[:bracketIdx]
+				index := a.Name[bracketIdx+1 : len(a.Name)-1]
+				setArrayElement(arrName, index, val)
+			} else {
+				setVar(a.Name, val, false)
+			}
 		}
 		lastExitCode = 0
 		return
@@ -136,10 +145,16 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 	}
 
 	prefixEnv := make(map[string]string)
+	var prefixArrAssigns []Assignment
 	if len(cmd.Assignments) > 0 {
 		for _, a := range cmd.Assignments {
-			val := expandString(a.Value)
-			prefixEnv[a.Name] = val
+			bracketIdx := strings.Index(a.Name, "[")
+			if bracketIdx >= 0 && strings.HasSuffix(a.Name, "]") {
+				prefixArrAssigns = append(prefixArrAssigns, a)
+			} else {
+				val := expandString(a.Value)
+				prefixEnv[a.Name] = val
+			}
 		}
 	}
 
@@ -152,12 +167,14 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 
 	if fn := lookupFunc(expanded[0]); fn != nil {
 		pushScope()
+		pushArrayScope()
 		savedParams := positionalParams
 		positionalParams = expanded[1:]
 		setVar("0", expanded[0], false)
 		returnFlag = false
 		executeNode(fn.Body, ctx)
 		returnFlag = false
+		popArrayScope()
 		popScope()
 		positionalParams = savedParams
 		waitProcSubst()
@@ -165,13 +182,25 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 	}
 
 	if isBuiltin(expanded[0]) {
-		if len(prefixEnv) > 0 {
+		if len(prefixEnv) > 0 || len(prefixArrAssigns) > 0 {
 			for name, val := range prefixEnv {
 				setVar(name, val, false)
+			}
+			for _, a := range prefixArrAssigns {
+				val := expandString(a.Value)
+				bracketIdx := strings.Index(a.Name, "[")
+				arrName := a.Name[:bracketIdx]
+				index := a.Name[bracketIdx+1 : len(a.Name)-1]
+				setArrayElement(arrName, index, val)
 			}
 			executeBuiltin(expanded, ctx)
 			for name := range prefixEnv {
 				unsetVar(name)
+			}
+			for _, a := range prefixArrAssigns {
+				bracketIdx := strings.Index(a.Name, "[")
+				arrName := a.Name[:bracketIdx]
+				unsetArray(arrName)
 			}
 		} else {
 			executeBuiltin(expanded, ctx)
@@ -647,6 +676,48 @@ func executeCase(node *CaseStmt, ctx *ExecContext) {
 	}
 }
 
+func executeArrayAssign(node *ArrayAssign) {
+	expanded := make([]string, len(node.Elements))
+	for i, elem := range node.Elements {
+		expanded[i] = expandString(elem)
+	}
+
+	assocMode := false
+	for _, elem := range expanded {
+		if strings.HasPrefix(elem, "[") {
+			assocMode = true
+			break
+		}
+	}
+
+	if assocMode || node.IsAssoc {
+		arr := &ArrayVar{Assoc: make(map[string]string), IsAssoc: true}
+		for _, elem := range expanded {
+			if strings.HasPrefix(elem, "[") {
+				closeBracket := strings.Index(elem[1:], "]")
+				if closeBracket >= 0 {
+					key := elem[1 : closeBracket+1]
+					var val string
+					if closeBracket+2 < len(elem) && elem[closeBracket+2] == '=' {
+						val = elem[closeBracket+3:]
+					}
+					arr.Assoc[key] = val
+				}
+			} else {
+				eqIdx := strings.Index(elem, "=")
+				if eqIdx >= 0 {
+					arr.Assoc[elem[:eqIdx]] = elem[eqIdx+1:]
+				}
+			}
+		}
+		setArray(node.Name, arr)
+	} else {
+		arr := &ArrayVar{Indexed: expanded, IsIndexed: true}
+		setArray(node.Name, arr)
+	}
+	lastExitCode = 0
+}
+
 func applyRedirections(redirs []Redir, ctx *ExecContext) (*ExecContext, func(), bool) {
 	if len(redirs) == 0 {
 		return ctx, func() {}, false
@@ -842,6 +913,7 @@ func executeBackground(args []string, ctx *ExecContext, prefixEnv map[string]str
 
 func executeSubshell(node *Subshell, ctx *ExecContext) {
 	savedVars := snapshotVars()
+	savedArrs := snapshotArrays()
 	savedDir, _ := os.Getwd()
 	savedParams := make([]string, len(positionalParams))
 	copy(savedParams, positionalParams)
@@ -868,6 +940,7 @@ func executeSubshell(node *Subshell, ctx *ExecContext) {
 
 	inSubshell = oldInSubshell
 	restoreVars(savedVars)
+	restoreArrays(savedArrs)
 	positionalParams = savedParams
 	os.Chdir(savedDir)
 }

@@ -126,6 +126,14 @@ type CondExpr struct {
 	Tokens []string
 }
 
+type ArrayAssign struct {
+	Name     string
+	Elements []string
+	IsAssoc  bool
+}
+
+func (a *ArrayAssign) nodeType() string { return "ArrayAssign" }
+
 func (c *CondExpr) nodeType() string { return "CondExpr" }
 
 type Assignment struct {
@@ -307,6 +315,9 @@ func (p *parser) parseCommand() Node {
 	if p.peek() == "[[" {
 		return p.parseCondExpr()
 	}
+	if p.isArrayAssign() {
+		return p.parseArrayAssign()
+	}
 
 	return p.parseSimpleCommand()
 }
@@ -346,7 +357,46 @@ func (p *parser) parseSimpleCommand() Node {
 
 		if eqIdx := strings.Index(t, "="); eqIdx > 0 && len(cmd.Args) == 0 {
 			name := t[:eqIdx]
+			bracketIdx := strings.Index(name, "[")
+			if bracketIdx >= 0 && strings.HasSuffix(name, "]") {
+				arrName := name[:bracketIdx]
+				if isValidVarName(arrName) {
+					p.advance()
+					cmd.Assignments = append(cmd.Assignments, Assignment{
+						Name:  name,
+						Value: t[eqIdx+1:],
+					})
+					continue
+				}
+			}
 			if isValidVarName(name) {
+				afterEq := t[eqIdx+1:]
+				if afterEq == "(" || (len(afterEq) > 0 && afterEq[0] == '(') {
+					p.advance()
+					var elements []string
+					if afterEq == "(" {
+						for p.pos < len(p.tokens) && p.peek() != ")" {
+							elements = append(elements, p.advance())
+						}
+						p.match(")")
+					} else {
+						content := afterEq[1:]
+						if len(content) > 0 && content[len(content)-1] == ')' {
+							content = content[:len(content)-1]
+						} else {
+							for p.pos < len(p.tokens) && p.peek() != ")" {
+								elements = append(elements, p.advance())
+							}
+							p.match(")")
+							if content != "" {
+								elements = append([]string{content}, elements...)
+							}
+							return &ArrayAssign{Name: name, Elements: elements, IsAssoc: false}
+						}
+						elements = parseArrayLiteral(content)
+					}
+					return &ArrayAssign{Name: name, Elements: elements, IsAssoc: false}
+				}
 				p.advance()
 				cmd.Assignments = append(cmd.Assignments, Assignment{
 					Name:  name,
@@ -703,4 +753,62 @@ func (p *parser) parseCondExpr() Node {
 	}
 	p.match("]]")
 	return &CondExpr{Tokens: tokens}
+}
+
+func (p *parser) isArrayAssign() bool {
+	t := p.peek()
+	if !isAlphaOrUnderscore(byte(t[0])) {
+		return false
+	}
+	eqIdx := strings.Index(t, "=")
+	if eqIdx < 0 {
+		return false
+	}
+	name := t[:eqIdx]
+	if !isValidVarName(name) {
+		return false
+	}
+	if eqIdx+1 < len(t) && t[eqIdx+1] == '(' {
+		return true
+	}
+	if eqIdx+1 == len(t) && p.peekAt(1) == "(" {
+		return true
+	}
+	return false
+}
+
+func (p *parser) parseArrayAssign() Node {
+	t := p.advance()
+	eqIdx := strings.Index(t, "=")
+	name := t[:eqIdx]
+	afterEq := t[eqIdx+1:]
+
+	var elements []string
+
+	if afterEq == "" {
+		p.advance()
+		for p.pos < len(p.tokens) && p.peek() != ")" {
+			elements = append(elements, p.advance())
+		}
+		p.match(")")
+	} else {
+		if afterEq[0] == '(' {
+			content := afterEq[1:]
+			if len(content) > 0 && content[len(content)-1] == ')' {
+				content = content[:len(content)-1]
+			} else {
+				for p.pos < len(p.tokens) && p.peek() != ")" {
+					elements = append(elements, p.advance())
+				}
+				p.match(")")
+				if content != "" {
+					elements = append([]string{content}, elements...)
+				}
+				return &ArrayAssign{Name: name, Elements: elements, IsAssoc: false}
+			}
+			elements = parseArrayLiteral(content)
+		}
+	}
+
+	return &ArrayAssign{Name: name, Elements: elements, IsAssoc: false}
 }

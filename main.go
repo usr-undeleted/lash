@@ -780,6 +780,7 @@ func main() {
 	initTrapTable()
 	initAliases()
 	initVarTable()
+	initArrayTable()
 	os.Setenv("PS1", defaultPS1)
 	setVar("PS1", defaultPS1, true)
 

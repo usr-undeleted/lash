@@ -17,7 +17,7 @@ var allBuiltins = []string{
 	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
 	"source", ".", "return", "local", "shift", "read", "set", "fetch", "trap",
-	"test", "[",
+	"test", "[", "declare",
 }
 
 func isBuiltin(cmd string) bool {
@@ -320,7 +320,15 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				delete(funcTable, a)
 				funcMu.Unlock()
 			} else {
-				unsetVar(a)
+				bracketIdx := strings.Index(a, "[")
+				if bracketIdx >= 0 && strings.HasSuffix(a, "]") {
+					arrName := a[:bracketIdx]
+					unsetArray(arrName)
+				} else if isArray(a) {
+					unsetArray(a)
+				} else {
+					unsetVar(a)
+				}
 			}
 		}
 		lastExitCode = 0
@@ -336,6 +344,28 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				fmt.Printf("%s=%s\n", k, varTable[k])
 			}
 			varMu.Unlock()
+			var arrKeys []string
+			for k := range arrayTable {
+				arrKeys = append(arrKeys, k)
+			}
+			sort.Strings(arrKeys)
+			for _, k := range arrKeys {
+				arr := arrayTable[k]
+				if arr.IsAssoc {
+					akeys := make([]string, 0, len(arr.Assoc))
+					for ak := range arr.Assoc {
+						akeys = append(akeys, ak)
+					}
+					sort.Strings(akeys)
+					for _, ak := range akeys {
+						fmt.Printf("%s[%s]=%s\n", k, ak, arr.Assoc[ak])
+					}
+				} else {
+					for idx, v := range arr.Indexed {
+						fmt.Printf("%s[%d]=%s\n", k, idx, v)
+					}
+				}
+			}
 			lastExitCode = 0
 			return
 		}
@@ -419,6 +449,8 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				fmt.Printf("%s is a function\n", a)
 			} else if isKeyword(a) {
 				fmt.Printf("%s is a shell keyword\n", a)
+			} else if isArray(a) {
+				fmt.Printf("%s is an array\n", a)
 			} else {
 				path, err := exec.LookPath(a)
 				if err != nil {
@@ -520,6 +552,27 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		for _, a := range args[1:] {
 			eqIdx := strings.Index(a, "=")
 			if eqIdx < 0 {
+				bracketIdx := strings.Index(a, "[")
+				if bracketIdx >= 0 && strings.HasSuffix(a, "]") {
+					arrName := a[:bracketIdx]
+					if len(arrayScopeStack) > 0 {
+						arr := getArray(arrName)
+						if arr == nil {
+							arr = &ArrayVar{Indexed: []string{}, IsIndexed: true}
+						}
+						arrayScopeStack[len(arrayScopeStack)-1][arrName] = arr
+					}
+					continue
+				}
+				if isArray(a) {
+					if len(arrayScopeStack) > 0 {
+						arrayScopeStack[len(arrayScopeStack)-1][a] = getArray(a)
+					}
+					continue
+				}
+				if len(arrayScopeStack) > 0 {
+					arrayScopeStack[len(arrayScopeStack)-1][a] = nil
+				}
 				if !setLocal(a, "") {
 					lastExitCode = 1
 					return
@@ -527,6 +580,9 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			} else {
 				name := a[:eqIdx]
 				val := a[eqIdx+1:]
+				if val == "(" || (len(val) > 0 && val[0] == '(') {
+					continue
+				}
 				if !setLocal(name, val) {
 					lastExitCode = 1
 					return
@@ -802,6 +858,8 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			setTrap(s, handler)
 		}
 		lastExitCode = 0
+	case "declare":
+		builtinDeclare(args)
 	}
 }
 
@@ -940,4 +998,150 @@ func interpretEscapeSequences(s string) string {
 		}
 	}
 	return result.String()
+}
+
+func builtinDeclare(args []string) {
+	if len(args) == 1 {
+		varMu.Lock()
+		var keys []string
+		for k := range varTable {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fmt.Printf("%s=%s\n", k, varTable[k])
+		}
+		varMu.Unlock()
+		var arrKeys []string
+		for k := range arrayTable {
+			arrKeys = append(arrKeys, k)
+		}
+		sort.Strings(arrKeys)
+		for _, k := range arrKeys {
+			arr := arrayTable[k]
+			if arr.IsAssoc {
+				fmt.Printf("declare -A %s\n", k)
+				akeys := make([]string, 0, len(arr.Assoc))
+				for ak := range arr.Assoc {
+					akeys = append(akeys, ak)
+				}
+				sort.Strings(akeys)
+				for _, ak := range akeys {
+					fmt.Printf("%s[%s]=%s\n", k, ak, arr.Assoc[ak])
+				}
+			} else {
+				fmt.Printf("declare -a %s\n", k)
+				for idx, v := range arr.Indexed {
+					fmt.Printf("%s[%d]=%s\n", k, idx, v)
+				}
+			}
+		}
+		lastExitCode = 0
+		return
+	}
+
+	isAssoc := false
+	isIndexed := false
+	i := 1
+	for i < len(args) && strings.HasPrefix(args[i], "-") {
+		switch args[i] {
+		case "-a":
+			isIndexed = true
+		case "-A":
+			isAssoc = true
+		default:
+			fmt.Fprintf(os.Stderr, "declare: %s: invalid option\n", args[i])
+			lastExitCode = 2
+			return
+		}
+		i++
+	}
+
+	for ; i < len(args); i++ {
+		a := args[i]
+		eqIdx := strings.Index(a, "=")
+		bracketIdx := strings.Index(a, "[")
+
+		if bracketIdx >= 0 && (eqIdx < 0 || bracketIdx < eqIdx) {
+			closeBracket := strings.Index(a[bracketIdx:], "]")
+			if closeBracket < 0 {
+				fmt.Fprintf(os.Stderr, "declare: %s: bad array subscript\n", a)
+				lastExitCode = 1
+				continue
+			}
+			name := a[:bracketIdx]
+			index := a[bracketIdx+1 : bracketIdx+closeBracket]
+			var val string
+			if bracketIdx+closeBracket+1 < len(a) && a[bracketIdx+closeBracket+1] == '=' {
+				val = a[bracketIdx+closeBracket+2:]
+			}
+			if !isValidVarName(name) {
+				fmt.Fprintf(os.Stderr, "declare: %s: not a valid identifier\n", name)
+				lastExitCode = 1
+				continue
+			}
+			if isAssoc {
+				arr := getArray(name)
+				if arr == nil {
+					arr = &ArrayVar{Assoc: make(map[string]string), IsAssoc: true}
+				}
+				if !arr.IsAssoc {
+					arr.IsAssoc = true
+					arr.Assoc = make(map[string]string)
+					arr.IsIndexed = false
+				}
+				arr.Assoc[index] = val
+				setArray(name, arr)
+			} else {
+				setArrayElement(name, index, val)
+			}
+			continue
+		}
+
+		if eqIdx >= 0 {
+			name := a[:eqIdx]
+			val := a[eqIdx+1:]
+			if !isValidVarName(name) {
+				fmt.Fprintf(os.Stderr, "declare: %s: not a valid identifier\n", name)
+				lastExitCode = 1
+				continue
+			}
+			if isAssoc {
+				arr := &ArrayVar{Assoc: make(map[string]string), IsAssoc: true}
+				parsed := parseAssocLiteral(val)
+				for k, v := range parsed {
+					arr.Assoc[k] = v
+				}
+				setArray(name, arr)
+			} else if isIndexed {
+				elements := parseArrayLiteral(val)
+				arr := &ArrayVar{Indexed: elements, IsIndexed: true}
+				setArray(name, arr)
+			} else {
+				setVar(name, val, false)
+			}
+		} else {
+			if !isValidVarName(a) {
+				fmt.Fprintf(os.Stderr, "declare: %s: not a valid identifier\n", a)
+				lastExitCode = 1
+				continue
+			}
+			if isAssoc {
+				arr := getArray(a)
+				if arr == nil {
+					setArray(a, &ArrayVar{Assoc: make(map[string]string), IsAssoc: true})
+				}
+			} else if isIndexed {
+				arr := getArray(a)
+				if arr == nil {
+					setArray(a, &ArrayVar{Indexed: []string{}, IsIndexed: true})
+				}
+			} else {
+				if _, ok := varTable[a]; !ok {
+					setVar(a, "", false)
+				}
+			}
+		}
+	}
+	lastExitCode = 0
 }

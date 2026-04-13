@@ -195,20 +195,77 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 		}
 		inner := s[pos+2 : end]
 
-		// ${#VAR} — length expansion
 		if len(inner) > 0 && inner[0] == '#' {
-			val := getVar(inner[1:])
+			rest := inner[1:]
+			bracketIdx := strings.Index(rest, "[")
+			if bracketIdx >= 0 {
+				varName := rest[:bracketIdx]
+				closeBracket := strings.Index(rest[bracketIdx:], "]")
+				if closeBracket >= 0 {
+					indexContent := rest[bracketIdx+1 : bracketIdx+closeBracket]
+					if indexContent == "@" || indexContent == "*" {
+						return strconv.Itoa(getArrayLength(varName)), end - pos + 1
+					}
+				}
+			}
+			if strings.HasPrefix(rest, "!") {
+				varName := rest[1:]
+				indices := getArrayIndices(varName)
+				return strings.Join(indices, " "), end - pos + 1
+			}
+			val := getVar(rest)
 			return strconv.Itoa(utf8.RuneCountInString(val)), end - pos + 1
 		}
 
-		// ${!ref} — variable indirection
 		if len(inner) > 0 && inner[0] == '!' {
 			refName := inner[1:]
+			bracketIdx := strings.Index(refName, "[")
+			if bracketIdx >= 0 {
+				varName := refName[:bracketIdx]
+				closeBracket := strings.Index(refName[bracketIdx:], "]")
+				if closeBracket >= 0 {
+					indexContent := refName[bracketIdx+1 : bracketIdx+closeBracket]
+					if indexContent == "*" || indexContent == "@" {
+						indices := getArrayIndices(varName)
+						return strings.Join(indices, " "), end - pos + 1
+					}
+				}
+			}
 			target := getVar(refName)
 			return getVar(target), end - pos + 1
 		}
 
-		// ${VAR:-default}, ${VAR:=default}, ${VAR:+alt}, ${VAR:?err}
+		bracketIdx := strings.Index(inner, "[")
+		if bracketIdx >= 0 {
+			varName := inner[:bracketIdx]
+			rest := inner[bracketIdx:]
+			closeBracket := strings.Index(rest, "]")
+			if closeBracket >= 0 {
+				indexContent := rest[1:closeBracket]
+				afterBracket := rest[closeBracket+1:]
+
+				if indexContent == "@" {
+					if afterBracket != "" && afterBracket[0] == ':' {
+						return expandArraySlice(varName, afterBracket[1:]), end - pos + 1
+					}
+					return arrayAtSentinel + varName + arrayAtSentinel, end - pos + 1
+				}
+				if indexContent == "*" {
+					if afterBracket != "" && afterBracket[0] == ':' {
+						return expandArraySlice(varName, afterBracket[1:]), end - pos + 1
+					}
+					elements := getArrayAll(varName)
+					return strings.Join(elements, " "), end - pos + 1
+				}
+
+				expandedIndex := expandString(indexContent)
+				if afterBracket != "" && afterBracket[0] == ':' {
+					return expandArraySliceWithIndex(varName, expandedIndex, afterBracket[1:]), end - pos + 1
+				}
+				return getArrayElement(varName, expandedIndex), end - pos + 1
+			}
+		}
+
 		varName, operand, op := parseBraceExpansion(inner)
 		if op != "" {
 			val := getVar(varName)
@@ -221,7 +278,6 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 			case ":=":
 				if val == "" {
 					expanded := expandString(operand)
-					// Preserve exported status if variable was previously exported
 					_, isExported := exportedVars[varName]
 					setVar(varName, expanded, isExported)
 					return expanded, end - pos + 1
@@ -279,6 +335,9 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 			j++
 		}
 		varName := s[pos+1 : j]
+		if isArray(varName) {
+			return getArrayElement(varName, "0"), j - pos
+		}
 		return getVar(varName), j - pos
 	}
 
@@ -566,7 +625,11 @@ func preprocessArithExpr(expr string) string {
 					j++
 				}
 				name := string(runes[i+1 : j])
-				result.WriteString(getVar(name))
+				if isArray(name) {
+					result.WriteString(getArrayElement(name, "0"))
+				} else {
+					result.WriteString(getVar(name))
+				}
 				i = j
 				continue
 			}
@@ -1424,6 +1487,63 @@ func resolveProcSubstArgs(args []string) ([]string, []*os.File) {
 		}
 	}
 	return resolved, extraFiles
+}
+
+func expandArraySlice(varName string, operand string) string {
+	operand = expandString(strings.TrimSpace(operand))
+	colon := strings.Index(operand, ":")
+	var offsetStr, lengthStr string
+	if colon >= 0 {
+		offsetStr = operand[:colon]
+		lengthStr = operand[colon+1:]
+	} else {
+		offsetStr = operand
+	}
+
+	elements := getArrayAll(varName)
+
+	offset, err := strconv.Atoi(offsetStr)
+	if err != nil {
+		return ""
+	}
+
+	if offset < 0 {
+		offset = len(elements) + offset
+		if offset < 0 {
+			offset = 0
+		}
+	}
+	if offset > len(elements) {
+		return ""
+	}
+
+	if lengthStr != "" {
+		length, err := strconv.Atoi(lengthStr)
+		if err != nil {
+			return strings.Join(elements[offset:], " ")
+		}
+		if length < 0 {
+			end := len(elements) + length
+			if end <= offset {
+				return ""
+			}
+			return strings.Join(elements[offset:end], " ")
+		}
+		end := offset + length
+		if end > len(elements) {
+			end = len(elements)
+		}
+		return strings.Join(elements[offset:end], " ")
+	}
+
+	return strings.Join(elements[offset:], " ")
+}
+
+func expandArraySliceWithIndex(varName string, index string, operand string) string {
+	if index == "@" || index == "*" {
+		return expandArraySlice(varName, operand)
+	}
+	return getArrayElement(varName, index)
 }
 
 func expandProcSubst(token string) string {
