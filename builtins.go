@@ -16,7 +16,7 @@ import (
 var allBuiltins = []string{
 	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
-	"source", ".", "return", "local", "shift", "read", "set", "fetch",
+	"source", ".", "return", "local", "shift", "read", "set", "fetch", "trap",
 }
 
 func isBuiltin(cmd string) bool {
@@ -136,7 +136,7 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		}
 		if args[1] == "-l" {
 			for _, sig := range listSignals() {
-				fmt.Printf("%2d) %s\n", sig, strings.TrimPrefix(sig.String(), "SIG"))
+				fmt.Printf("%2d) %s\n", sig, signalName(sig))
 			}
 			lastExitCode = 0
 			return
@@ -719,6 +719,107 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		lastExitCode = 0
 	case "fetch":
 		builtinFetch(args, ctx)
+	case "trap":
+		if len(args) == 1 {
+			printTrapHandlers(nil)
+			lastExitCode = 0
+			return
+		}
+		if args[1] == "-l" {
+			for _, sig := range listSignals() {
+				fmt.Printf("%2d) %s\n", sig, signalName(sig))
+			}
+			lastExitCode = 0
+			return
+		}
+		if args[1] == "-p" {
+			var sigs []syscall.Signal
+			for _, a := range args[2:] {
+				s, err := parseSignal(a)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "trap: %s: %s\n", a, err)
+					lastExitCode = 1
+					return
+				}
+				sigs = append(sigs, s)
+			}
+			printTrapHandlers(sigs)
+			lastExitCode = 0
+			return
+		}
+		if args[1] == "-" && len(args) >= 3 {
+			for _, a := range args[2:] {
+				s, err := parseSignal(a)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "trap: %s: %s\n", a, err)
+					lastExitCode = 1
+					continue
+				}
+				if s == syscall.SIGKILL || s == syscall.SIGSTOP {
+					fmt.Fprintf(os.Stderr, "trap: %s: cannot trap\n", a)
+					lastExitCode = 1
+					continue
+				}
+				clearTrap(s)
+			}
+			lastExitCode = 0
+			return
+		}
+		handler := args[1]
+		sigArgs := args[2:]
+		if len(sigArgs) == 0 {
+			s, err := parseSignal(handler)
+			if err == nil {
+				h := getTrap(s)
+				if h == "" {
+					fmt.Fprintf(os.Stderr, "trap: %s: not trapped\n", handler)
+					lastExitCode = 1
+				} else {
+					fmt.Printf("trap -- '%s' %s\n", h, signalName(s))
+					lastExitCode = 0
+				}
+				return
+			}
+			fmt.Fprintf(os.Stderr, "trap: usage: trap [-lp] [handler signal ...]\n")
+			lastExitCode = 2
+			return
+		}
+		for _, a := range sigArgs {
+			s, err := parseSignal(a)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "trap: %s: %s\n", a, err)
+				lastExitCode = 1
+				continue
+			}
+			if s == syscall.SIGKILL || s == syscall.SIGSTOP {
+				fmt.Fprintf(os.Stderr, "trap: %s: cannot trap\n", a)
+				lastExitCode = 1
+				continue
+			}
+			setTrap(s, handler)
+		}
+		lastExitCode = 0
+	}
+}
+
+func printTrapHandlers(sigs []syscall.Signal) {
+	trapMu.RLock()
+	defer trapMu.RUnlock()
+	var ordered []syscall.Signal
+	if len(sigs) > 0 {
+		ordered = sigs
+	} else {
+		for s := range trapTable {
+			ordered = append(ordered, s)
+		}
+		sort.Slice(ordered, func(i, j int) bool { return int(ordered[i]) < int(ordered[j]) })
+	}
+	for _, s := range ordered {
+		h, ok := trapTable[s]
+		if !ok {
+			continue
+		}
+		fmt.Printf("trap -- '%s' %s\n", h, signalName(s))
 	}
 }
 

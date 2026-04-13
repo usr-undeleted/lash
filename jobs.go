@@ -12,6 +12,57 @@ import (
 	"unsafe"
 )
 
+var (
+	trapTable   map[syscall.Signal]string
+	trapMu      sync.RWMutex
+	trapRunning bool
+)
+
+func initTrapTable() {
+	trapTable = make(map[syscall.Signal]string)
+}
+
+func getTrap(sig syscall.Signal) string {
+	trapMu.RLock()
+	defer trapMu.RUnlock()
+	return trapTable[sig]
+}
+
+func setTrap(sig syscall.Signal, handler string) {
+	trapMu.Lock()
+	defer trapMu.Unlock()
+	trapTable[sig] = handler
+}
+
+func clearTrap(sig syscall.Signal) {
+	trapMu.Lock()
+	defer trapMu.Unlock()
+	delete(trapTable, sig)
+}
+
+func runTrapHandler(sig syscall.Signal) {
+	trapMu.RLock()
+	handler := trapTable[sig]
+	trapMu.RUnlock()
+	if handler == "" {
+		return
+	}
+	if handler == "-" {
+		clearTrap(sig)
+		return
+	}
+	if trapRunning {
+		return
+	}
+	trapRunning = true
+	defer func() { trapRunning = false }()
+
+	lastExitCode = 128 + int(sig)
+	expanded := expandString(handler)
+	prog := Parse(expanded)
+	executeNode(prog, defaultContext())
+}
+
 type JobState int
 
 const (
@@ -48,10 +99,13 @@ func initJobControl() {
 	tcsetpgrp(int(os.Stdin.Fd()), syscall.Getpgrp())
 
 	sigCh := make(chan os.Signal, 32)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTSTP)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTSTP, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGALRM, syscall.SIGPIPE, syscall.SIGWINCH)
 	go func() {
 		for sig := range sigCh {
 			s := sig.(syscall.Signal)
+			if s == syscall.SIGKILL || s == syscall.SIGSTOP {
+				continue
+			}
 			fgMu.Lock()
 			active := fgActive
 			pids := make([]int, 0, len(fgPIDs))
@@ -63,10 +117,22 @@ func initJobControl() {
 				for _, p := range pids {
 					syscall.Kill(p, s)
 				}
-			} else if s == syscall.SIGTSTP {
+				continue
+			}
+			trapMu.RLock()
+			handler, trapped := trapTable[s]
+			trapMu.RUnlock()
+			if trapped {
+				if handler == "" {
+					continue
+				}
+				runTrapHandler(s)
+				continue
+			}
+			if s == syscall.SIGTSTP {
 				signal.Stop(sigCh)
 				syscall.Kill(syscall.Getpid(), syscall.SIGTSTP)
-				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTSTP)
+				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTSTP, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGALRM, syscall.SIGPIPE, syscall.SIGWINCH)
 			}
 		}
 	}()
@@ -413,14 +479,45 @@ func parseSignal(s string) (syscall.Signal, error) {
 	if err == nil {
 		return syscall.Signal(n), err
 	}
-	name := strings.ToUpper(s)
-	if !strings.HasPrefix(name, "SIG") {
-		name = "SIG" + name
+	sigNames := map[string]syscall.Signal{
+		"HUP": syscall.SIGHUP, "INT": syscall.SIGINT, "QUIT": syscall.SIGQUIT,
+		"ILL": syscall.SIGILL, "TRAP": syscall.SIGTRAP, "ABRT": syscall.SIGABRT,
+		"BUS": syscall.SIGBUS, "FPE": syscall.SIGFPE, "KILL": syscall.SIGKILL,
+		"USR1": syscall.SIGUSR1, "SEGV": syscall.SIGSEGV, "USR2": syscall.SIGUSR2,
+		"PIPE": syscall.SIGPIPE, "ALRM": syscall.SIGALRM, "TERM": syscall.SIGTERM,
+		"STKFLT": syscall.SIGSTKFLT, "CHLD": syscall.SIGCHLD, "CONT": syscall.SIGCONT,
+		"STOP": syscall.SIGSTOP, "TSTP": syscall.SIGTSTP, "TTIN": syscall.SIGTTIN,
+		"TTOU": syscall.SIGTTOU, "URG": syscall.SIGURG, "XCPU": syscall.SIGXCPU,
+		"XFSZ": syscall.SIGXFSZ, "VTALRM": syscall.SIGVTALRM, "PROF": syscall.SIGPROF,
+		"WINCH": syscall.SIGWINCH, "IO": syscall.SIGIO, "PWR": syscall.SIGPWR,
+		"SYS": syscall.SIGSYS,
 	}
-	for _, sig := range listSignals() {
-		if sig.String() == name {
-			return sig, nil
-		}
+	upper := strings.ToUpper(s)
+	if strings.HasPrefix(upper, "SIG") {
+		upper = upper[3:]
+	}
+	if sig, ok := sigNames[upper]; ok {
+		return sig, nil
 	}
 	return 0, fmt.Errorf("invalid signal: %s", s)
+}
+
+func signalName(sig syscall.Signal) string {
+	names := map[syscall.Signal]string{
+		syscall.SIGHUP: "HUP", syscall.SIGINT: "INT", syscall.SIGQUIT: "QUIT",
+		syscall.SIGILL: "ILL", syscall.SIGTRAP: "TRAP", syscall.SIGABRT: "ABRT",
+		syscall.SIGBUS: "BUS", syscall.SIGFPE: "FPE", syscall.SIGKILL: "KILL",
+		syscall.SIGUSR1: "USR1", syscall.SIGSEGV: "SEGV", syscall.SIGUSR2: "USR2",
+		syscall.SIGPIPE: "PIPE", syscall.SIGALRM: "ALRM", syscall.SIGTERM: "TERM",
+		syscall.SIGSTKFLT: "STKFLT", syscall.SIGCHLD: "CHLD", syscall.SIGCONT: "CONT",
+		syscall.SIGSTOP: "STOP", syscall.SIGTSTP: "TSTP", syscall.SIGTTIN: "TTIN",
+		syscall.SIGTTOU: "TTOU", syscall.SIGURG: "URG", syscall.SIGXCPU: "XCPU",
+		syscall.SIGXFSZ: "XFSZ", syscall.SIGVTALRM: "VTALRM", syscall.SIGPROF: "PROF",
+		syscall.SIGWINCH: "WINCH", syscall.SIGIO: "IO", syscall.SIGPWR: "PWR",
+		syscall.SIGSYS: "SYS",
+	}
+	if name, ok := names[sig]; ok {
+		return name
+	}
+	return sig.String()
 }

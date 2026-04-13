@@ -777,6 +777,7 @@ func main() {
 	}
 
 	initJobControl()
+	initTrapTable()
 	initAliases()
 	initVarTable()
 	os.Setenv("PS1", defaultPS1)

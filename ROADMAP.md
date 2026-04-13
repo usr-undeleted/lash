@@ -77,7 +77,7 @@
 - [x] Here documents (`<< EOF`)
 - [x] Here strings (`<<< "string"`)
 - [x] `set` / `unset` with various flags (`set -e`, `set -x`, `set -o pipefail`)
-- [ ] Trap command (`trap 'handler' SIGNAL`)
+- [x] Trap command (`trap 'handler' SIGNAL`)
 - [x] `break`, `continue`, `exit` in loops
 - [ ] Conditional expressions in `[[ ]]` and `[ ]`
 - [ ] String comparisons and pattern matching in conditionals
