@@ -20,6 +20,8 @@ var cmdNumber int = 0
 var returnFlag bool
 var breakFlag bool
 var continueFlag bool
+var interruptFlag int32
+var interruptSignal int32
 var stdinReader *bufio.Reader
 var pendingNotifs []string
 var notifMu sync.Mutex
@@ -830,6 +832,7 @@ func main() {
 		}
 
 		returnFlag = false
+		interruptFlag = 0
 		cmdNumber++
 		prog := Parse(line)
 		executeNode(prog, defaultContext())

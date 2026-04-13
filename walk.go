@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 )
 
@@ -87,12 +88,26 @@ func executeNode(node Node, ctx *ExecContext) {
 	}
 }
 
+func checkInterrupt() bool {
+	return atomic.LoadInt32(&interruptFlag) != 0
+}
+
+func clearInterrupt() int {
+	sig := atomic.LoadInt32(&interruptSignal)
+	atomic.StoreInt32(&interruptFlag, 0)
+	return int(sig)
+}
+
 func executeProgram(prog *Program, ctx *ExecContext) {
 	for _, cmd := range prog.Commands {
-		if returnFlag || breakFlag || continueFlag {
+		if returnFlag || breakFlag || continueFlag || checkInterrupt() {
 			return
 		}
 		executeNode(cmd, ctx)
+		if checkInterrupt() {
+			lastExitCode = 128 + clearInterrupt()
+			return
+		}
 		if setErrExit && !inCondition && lastExitCode != 0 {
 			os.Exit(lastExitCode)
 		}
@@ -498,7 +513,7 @@ func executeIf(node *IfStmt, ctx *ExecContext) {
 
 func executeWhile(node *WhileStmt, ctx *ExecContext) {
 	for {
-		if returnFlag {
+		if returnFlag || checkInterrupt() {
 			return
 		}
 		breakFlag = false
@@ -506,6 +521,10 @@ func executeWhile(node *WhileStmt, ctx *ExecContext) {
 		inCondition = true
 		executeNode(node.Condition, ctx)
 		inCondition = false
+		if checkInterrupt() {
+			lastExitCode = 128 + clearInterrupt()
+			return
+		}
 		if returnFlag {
 			return
 		}
@@ -518,6 +537,10 @@ func executeWhile(node *WhileStmt, ctx *ExecContext) {
 			break
 		}
 		executeNode(node.Body, ctx)
+		if checkInterrupt() {
+			lastExitCode = 128 + clearInterrupt()
+			return
+		}
 		if returnFlag {
 			return
 		}
@@ -537,13 +560,17 @@ func executeFor(node *ForStmt, ctx *ExecContext) {
 	words = expandGlobs(words)
 
 	for _, val := range words {
-		if returnFlag {
+		if returnFlag || checkInterrupt() {
 			return
 		}
 		breakFlag = false
 		continueFlag = false
 		setVar(node.Var, val, false)
 		executeNode(node.Body, ctx)
+		if checkInterrupt() {
+			lastExitCode = 128 + clearInterrupt()
+			return
+		}
 		if returnFlag {
 			return
 		}
@@ -562,7 +589,7 @@ func executeCStyleFor(node *CStyleForStmt, ctx *ExecContext) {
 		evalArithmetic(node.Init)
 	}
 	for {
-		if returnFlag {
+		if returnFlag || checkInterrupt() {
 			return
 		}
 		breakFlag = false
@@ -574,6 +601,10 @@ func executeCStyleFor(node *CStyleForStmt, ctx *ExecContext) {
 			}
 		}
 		executeNode(node.Body, ctx)
+		if checkInterrupt() {
+			lastExitCode = 128 + clearInterrupt()
+			return
+		}
 		if returnFlag {
 			return
 		}
@@ -611,7 +642,7 @@ func executeSelect(node *SelectStmt, ctx *ExecContext) {
 	}
 
 	for {
-		if returnFlag {
+		if returnFlag || checkInterrupt() {
 			return
 		}
 		breakFlag = false
@@ -638,6 +669,10 @@ func executeSelect(node *SelectStmt, ctx *ExecContext) {
 		}
 
 		executeNode(node.Body, ctx)
+		if checkInterrupt() {
+			lastExitCode = 128 + clearInterrupt()
+			return
+		}
 		if returnFlag {
 			return
 		}

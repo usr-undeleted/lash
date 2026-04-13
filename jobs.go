@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"unsafe"
 )
@@ -106,6 +107,10 @@ func initJobControl() {
 			if s == syscall.SIGKILL || s == syscall.SIGSTOP {
 				continue
 			}
+			if s == syscall.SIGINT || s == syscall.SIGTSTP || s == syscall.SIGTERM {
+				atomic.StoreInt32(&interruptFlag, 1)
+				atomic.StoreInt32(&interruptSignal, int32(s))
+			}
 			fgMu.Lock()
 			active := fgActive
 			pids := make([]int, 0, len(fgPIDs))
@@ -128,11 +133,6 @@ func initJobControl() {
 				}
 				runTrapHandler(s)
 				continue
-			}
-			if s == syscall.SIGTSTP {
-				signal.Stop(sigCh)
-				syscall.Kill(syscall.Getpid(), syscall.SIGTSTP)
-				signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTSTP, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGALRM, syscall.SIGPIPE, syscall.SIGWINCH)
 			}
 		}
 	}()
