@@ -122,6 +122,12 @@ type Group struct {
 
 func (g *Group) nodeType() string { return "Group" }
 
+type CondExpr struct {
+	Tokens []string
+}
+
+func (c *CondExpr) nodeType() string { return "CondExpr" }
+
 type Assignment struct {
 	Name  string
 	Value string
@@ -297,6 +303,9 @@ func (p *parser) parseCommand() Node {
 	}
 	if p.peek() == "{" {
 		return p.parseGroup()
+	}
+	if p.peek() == "[[" {
+		return p.parseCondExpr()
 	}
 
 	return p.parseSimpleCommand()
@@ -684,4 +693,14 @@ func (p *parser) parseGroup() Node {
 	body := p.parseCompoundBody("}")
 	p.match("}")
 	return &Group{Body: body}
+}
+
+func (p *parser) parseCondExpr() Node {
+	p.advance()
+	var tokens []string
+	for p.pos < len(p.tokens) && p.peek() != "]]" {
+		tokens = append(tokens, p.advance())
+	}
+	p.match("]]")
+	return &CondExpr{Tokens: tokens}
 }

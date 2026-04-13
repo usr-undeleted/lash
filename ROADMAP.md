@@ -80,7 +80,7 @@
 - [x] Trap command (`trap 'handler' SIGNAL`)
 - [x] `break`, `continue`, `exit` in loops
 - [x] Conditional expressions in `[[ ]]` and `[ ]`
-- [ ] String comparisons and pattern matching in conditionals
+- [x] String comparisons and pattern matching in conditionals
 - [ ] Array support (indexed: `arr=(a b c)`, associative: `declare -A map`)
 - [ ] Array slicing and iteration
 - [x] Subshell execution (`(cmd)`)

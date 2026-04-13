@@ -80,6 +80,8 @@ func executeNode(node Node, ctx *ExecContext) {
 		executeSubshell(n, ctx)
 	case *Group:
 		executeNode(n.Body, ctx)
+	case *CondExpr:
+		executeCondExpr(n)
 	}
 }
 
