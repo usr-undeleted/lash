@@ -17,6 +17,7 @@ var allBuiltins = []string{
 	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
 	"source", ".", "return", "local", "shift", "read", "set", "fetch", "trap",
+	"test", "[",
 }
 
 func isBuiltin(cmd string) bool {
@@ -719,6 +720,8 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		lastExitCode = 0
 	case "fetch":
 		builtinFetch(args, ctx)
+	case "test", "[":
+		builtinTest(args)
 	case "trap":
 		if len(args) == 1 {
 			printTrapHandlers(nil)

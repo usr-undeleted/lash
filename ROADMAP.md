@@ -79,7 +79,7 @@
 - [x] `set` / `unset` with various flags (`set -e`, `set -x`, `set -o pipefail`)
 - [x] Trap command (`trap 'handler' SIGNAL`)
 - [x] `break`, `continue`, `exit` in loops
-- [ ] Conditional expressions in `[[ ]]` and `[ ]`
+- [x] Conditional expressions in `[[ ]]` and `[ ]`
 - [ ] String comparisons and pattern matching in conditionals
 - [ ] Array support (indexed: `arr=(a b c)`, associative: `declare -A map`)
 - [ ] Array slicing and iteration
