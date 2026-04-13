@@ -118,7 +118,7 @@ func executeProgram(prog *Program, ctx *ExecContext) {
 		}
 		executeNode(cmd, ctx)
 		if checkInterrupt() {
-			lastExitCode = 128 + clearInterrupt()
+			lastExitCode = 128 + int(atomic.LoadInt32(&interruptSignal))
 			return
 		}
 		if setErrExit && !inCondition && lastExitCode != 0 {
