@@ -313,6 +313,33 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				fmt.Fprintln(os.Stderr, "see 'lash theme help' for theme usage.")
 				lastExitCode = 1
 			}
+		case "keybind":
+			if len(args) < 3 {
+				printKeybindHelp()
+				lastExitCode = 1
+				return
+			}
+			switch args[2] {
+			case "set":
+				builtinKeybindSet(args[3:])
+			case "list":
+				builtinKeybindList()
+				lastExitCode = 0
+			case "reset":
+				builtinKeybindReset(args[3:])
+			case "delete":
+				builtinKeybindDelete(args[3:])
+			case "actions":
+				builtinKeybindActions()
+				lastExitCode = 0
+			case "help":
+				printKeybindHelp()
+				lastExitCode = 0
+			default:
+				fmt.Fprintf(os.Stderr, "lash: keybind: unknown subcommand: %s\n", args[2])
+				fmt.Fprintln(os.Stderr, "see 'lash keybind help' for keybind usage.")
+				lastExitCode = 1
+			}
 		default:
 			fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", args[1])
 			fmt.Fprintln(os.Stderr, "see 'lash help' for shell usage.")

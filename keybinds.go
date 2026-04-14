@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"os"
 	"sort"
 	"strings"
 )
@@ -200,4 +202,138 @@ func sortedKeys(m map[string]string) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+func printKeybindHelp() {
+	fmt.Fprintln(os.Stderr, "usage: lash keybind <command> [args]")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "commands:")
+	fmt.Fprintln(os.Stderr, "  set <key> <action>  bind a key to an action")
+	fmt.Fprintln(os.Stderr, "  list                show all current bindings")
+	fmt.Fprintln(os.Stderr, "  reset [key]         reset one key or all to defaults")
+	fmt.Fprintln(os.Stderr, "  delete <key>        remove a custom binding")
+	fmt.Fprintln(os.Stderr, "  actions             list available actions")
+	fmt.Fprintln(os.Stderr, "  help                show this help")
+}
+
+func builtinKeybindSet(args []string) {
+	if len(args) < 2 {
+		fmt.Fprintln(os.Stderr, "lash: keybind set: missing arguments")
+		fmt.Fprintln(os.Stderr, "see 'lash keybind help' for keybind usage.")
+		lastExitCode = 1
+		return
+	}
+	key := strings.ToLower(args[0])
+	action := strings.ToLower(args[1])
+	if !isValidKey(key) {
+		fmt.Fprintf(os.Stderr, "lash: keybind set: '%s': unknown key\n", key)
+		lastExitCode = 1
+		return
+	}
+	if !isValidAction(action) {
+		fmt.Fprintf(os.Stderr, "lash: keybind set: '%s': unknown action\n", action)
+		lastExitCode = 1
+		return
+	}
+	if currentConfig == nil {
+		fmt.Fprintln(os.Stderr, "lash: keybind set: shell not initialized")
+		lastExitCode = 1
+		return
+	}
+	currentConfig.Keybinds[key] = action
+	if err := currentConfig.Save(); err != nil {
+		fmt.Fprintf(os.Stderr, "lash: keybind set: failed to save config: %s\n", err)
+		lastExitCode = 1
+		return
+	}
+	seq := keyNameToSequence(key)
+	if seq != "" && globalEditor != nil {
+		globalEditor.dispatchMap[seq] = action
+	}
+	lastExitCode = 0
+}
+
+func builtinKeybindList() {
+	binds := make(map[string]string)
+	for k, v := range defaultKeybinds {
+		binds[k] = v
+	}
+	if currentConfig != nil {
+		for k, v := range currentConfig.Keybinds {
+			binds[k] = v
+		}
+	}
+	for _, k := range sortedKeys(binds) {
+		marker := ""
+		if currentConfig != nil {
+			if _, isDefault := defaultKeybinds[k]; !isDefault {
+				marker = " *"
+			}
+		}
+		fmt.Printf("%-20s %s%s\n", k, binds[k], marker)
+	}
+}
+
+func builtinKeybindReset(args []string) {
+	if currentConfig == nil {
+		fmt.Fprintln(os.Stderr, "lash: keybind reset: shell not initialized")
+		lastExitCode = 1
+		return
+	}
+	if len(args) == 0 {
+		currentConfig.Keybinds = make(map[string]string)
+	} else {
+		key := strings.ToLower(args[0])
+		if !isValidKey(key) {
+			fmt.Fprintf(os.Stderr, "lash: keybind reset: '%s': unknown key\n", key)
+			lastExitCode = 1
+			return
+		}
+		delete(currentConfig.Keybinds, key)
+	}
+	if err := currentConfig.Save(); err != nil {
+		fmt.Fprintf(os.Stderr, "lash: keybind reset: failed to save config: %s\n", err)
+		lastExitCode = 1
+		return
+	}
+	if globalEditor != nil {
+		globalEditor.initDispatch()
+	}
+	lastExitCode = 0
+}
+
+func builtinKeybindDelete(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintln(os.Stderr, "lash: keybind delete: missing key")
+		fmt.Fprintln(os.Stderr, "see 'lash keybind help' for keybind usage.")
+		lastExitCode = 1
+		return
+	}
+	key := strings.ToLower(args[0])
+	if currentConfig == nil {
+		fmt.Fprintln(os.Stderr, "lash: keybind delete: shell not initialized")
+		lastExitCode = 1
+		return
+	}
+	if _, exists := currentConfig.Keybinds[key]; !exists {
+		fmt.Fprintf(os.Stderr, "lash: keybind delete: '%s': no custom binding\n", key)
+		lastExitCode = 1
+		return
+	}
+	delete(currentConfig.Keybinds, key)
+	if err := currentConfig.Save(); err != nil {
+		fmt.Fprintf(os.Stderr, "lash: keybind delete: failed to save config: %s\n", err)
+		lastExitCode = 1
+		return
+	}
+	if globalEditor != nil {
+		globalEditor.initDispatch()
+	}
+	lastExitCode = 0
+}
+
+func builtinKeybindActions() {
+	for _, a := range allActions {
+		fmt.Println(a)
+	}
 }

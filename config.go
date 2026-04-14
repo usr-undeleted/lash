@@ -29,6 +29,7 @@ type Config struct {
 	HupOnExit         bool
 	IgnoreEOF         bool
 	HashAll           bool
+	Keybinds          map[string]string
 }
 
 func configPath() string {
@@ -48,7 +49,7 @@ func themesDirPath() string {
 }
 
 func LoadConfig() *Config {
-	cfg := &Config{LogoSize: "big", HistorySize: 1000, GlobCaseSensitive: true}
+	cfg := &Config{LogoSize: "big", HistorySize: 1000, GlobCaseSensitive: true, Keybinds: make(map[string]string)}
 	path := configPath()
 	if path == "" {
 		return cfg
@@ -59,10 +60,30 @@ func LoadConfig() *Config {
 	}
 	defer f.Close()
 
+	inKeybinds := false
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if line == "[keybinds]" {
+			inKeybinds = true
+			continue
+		}
+		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
+			inKeybinds = false
+			continue
+		}
+		if inKeybinds {
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 {
+				key := strings.TrimSpace(parts[0])
+				val := strings.TrimSpace(parts[1])
+				if isValidKey(key) && isValidAction(val) {
+					cfg.Keybinds[key] = val
+				}
+			}
 			continue
 		}
 		parts := strings.SplitN(line, "=", 2)
@@ -145,6 +166,13 @@ func (c *Config) Save() error {
 	lines = append(lines, fmt.Sprintf("huponexit = %s", boolToStr(c.HupOnExit)))
 	lines = append(lines, fmt.Sprintf("ignoreeof = %s", boolToStr(c.IgnoreEOF)))
 	lines = append(lines, fmt.Sprintf("hashall = %s", boolToStr(c.HashAll)))
+	if len(c.Keybinds) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, "[keybinds]")
+		for _, k := range sortedKeys(c.Keybinds) {
+			lines = append(lines, fmt.Sprintf("%s = %s", k, c.Keybinds[k]))
+		}
+	}
 	f, err := os.Create(path)
 	if err != nil {
 		return err

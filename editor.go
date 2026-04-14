@@ -55,6 +55,14 @@ func (e *LineEditor) initDispatch() {
 			e.dispatchMap[seq] = action
 		}
 	}
+	if e.config != nil {
+		for key, action := range e.config.Keybinds {
+			seq := keyNameToSequence(key)
+			if seq != "" && isValidAction(action) {
+				e.dispatchMap[seq] = action
+			}
+		}
+	}
 }
 
 // executeAction runs a named action on the editor.

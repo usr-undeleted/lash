@@ -28,6 +28,7 @@ var stdinReader *bufio.Reader
 var pendingNotifs []string
 var notifMu sync.Mutex
 var currentConfig *Config
+var globalEditor *LineEditor
 var setErrExit bool
 var setXTrace bool
 var setPipefail bool
@@ -935,6 +936,7 @@ func initShell() *Config {
 	norc := false
 	var cmdString string
 	var themeArgs []string
+	var keybindArgs []string
 
 	args := os.Args[1:]
 	i := 0
@@ -960,6 +962,9 @@ func initShell() *Config {
 			i++
 		case "theme":
 			themeArgs = args[i:]
+			i = len(args)
+		case "keybind":
+			keybindArgs = args[i:]
 			i = len(args)
 		default:
 			if !strings.HasPrefix(args[i], "-") {
@@ -998,6 +1003,32 @@ func initShell() *Config {
 	cfg := LoadConfig()
 	currentConfig = cfg
 	applyConfigToOptions(cfg)
+
+	if len(keybindArgs) > 0 {
+		if len(keybindArgs) < 2 {
+			printKeybindHelp()
+			os.Exit(1)
+		}
+		switch keybindArgs[1] {
+		case "set":
+			builtinKeybindSet(keybindArgs[2:])
+		case "list":
+			builtinKeybindList()
+		case "reset":
+			builtinKeybindReset(keybindArgs[2:])
+		case "delete":
+			builtinKeybindDelete(keybindArgs[2:])
+		case "actions":
+			builtinKeybindActions()
+		case "help":
+			printKeybindHelp()
+		default:
+			fmt.Fprintf(os.Stderr, "lash: keybind: unknown subcommand: %s\n", keybindArgs[1])
+			fmt.Fprintln(os.Stderr, "see 'lash keybind help' for keybind usage.")
+			lastExitCode = 1
+		}
+		os.Exit(lastExitCode)
+	}
 
 	if len(themeArgs) > 0 {
 		if len(themeArgs) < 2 {
@@ -1048,13 +1079,13 @@ func main() {
 	}
 	shellInitialized = true
 
-	editor := NewLineEditor(cfg)
+	globalEditor = NewLineEditor(cfg)
 	stdinReader = bufio.NewReader(os.Stdin)
 	for {
 		reapZombies()
 		drainNotifs()
 		prompt := getPrompt()
-		line, err := editor.ReadLine(prompt)
+		line, err := globalEditor.ReadLine(prompt)
 		if err == io.EOF {
 			fmt.Println()
 			break
@@ -1077,7 +1108,7 @@ func main() {
 		}
 
 		line = preprocessHeredocs(line, func() (string, error) {
-			nextLine, err := editor.ReadLine(getPS2())
+			nextLine, err := globalEditor.ReadLine(getPS2())
 			if err != nil {
 				return "", err
 			}
