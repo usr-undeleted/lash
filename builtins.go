@@ -71,35 +71,58 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		printJobs()
 		lastExitCode = 0
 	case "fg":
-		jobSpec := ""
-		if len(args) > 1 {
-			jobSpec = args[1]
-		}
-		var job *Job
-		if jobSpec != "" {
-			var err error
-			job, err = parseJobSpec(jobSpec)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "fg: %s\n", err)
+		cont := suspendedCont
+		if cont != nil {
+			job := getMostRecentJob()
+			if job != nil && job.State == JobStopped {
+				suspendedCont = nil
+				setFgPIDs([]int{job.PID})
+				markJobRunningByPID(job.PID)
+				exitCode := waitForeground([]int{job.PID}, job.PGID, job.Command)
+				clearFgPIDs()
+				if exitCode < 0 {
+					lastExitCode = 128 + int(syscall.SIGTSTP)
+				} else {
+					lastExitCode = exitCode
+				}
+				signalInterruptFromExitCode(lastExitCode)
+				cont()
+			} else {
+				suspendedCont = nil
+				lastExitCode = 0
+				cont()
+			}
+		} else {
+			jobSpec := ""
+			if len(args) > 1 {
+				jobSpec = args[1]
+			}
+			var job *Job
+			if jobSpec != "" {
+				var err error
+				job, err = parseJobSpec(jobSpec)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "fg: %s\n", err)
+					lastExitCode = 1
+					return
+				}
+			} else {
+				job = getMostRecentJob()
+			}
+			if job == nil {
+				fmt.Fprintln(os.Stderr, "fg: current: no such job")
 				lastExitCode = 1
 				return
 			}
-		} else {
-			job = getMostRecentJob()
-		}
-		if job == nil {
-			fmt.Fprintln(os.Stderr, "fg: current: no such job")
-			lastExitCode = 1
-			return
-		}
-		setFgPIDs([]int{job.PID})
-		markJobRunningByPID(job.PID)
-		exitCode := waitForeground([]int{job.PID}, job.PGID, job.Command)
-		clearFgPIDs()
-		if exitCode < 0 {
-			lastExitCode = 128 + int(syscall.SIGTSTP)
-		} else {
-			lastExitCode = exitCode
+			setFgPIDs([]int{job.PID})
+			markJobRunningByPID(job.PID)
+			exitCode := waitForeground([]int{job.PID}, job.PGID, job.Command)
+			clearFgPIDs()
+			if exitCode < 0 {
+				lastExitCode = 128 + int(syscall.SIGTSTP)
+			} else {
+				lastExitCode = exitCode
+			}
 		}
 	case "bg":
 		jobSpec := ""

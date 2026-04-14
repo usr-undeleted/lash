@@ -22,6 +22,8 @@ var breakFlag bool
 var continueFlag bool
 var interruptFlag int32
 var interruptSignal int32
+var suspendedCont func()
+var suspendedCommand string
 var stdinReader *bufio.Reader
 var pendingNotifs []string
 var notifMu sync.Mutex
@@ -833,6 +835,10 @@ func main() {
 
 		returnFlag = false
 		interruptFlag = 0
+		if !strings.HasPrefix(line, "fg") {
+			suspendedCont = nil
+			suspendedCommand = ""
+		}
 		cmdNumber++
 		prog := Parse(line)
 		executeNode(prog, defaultContext())

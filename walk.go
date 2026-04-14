@@ -111,6 +111,22 @@ func signalInterruptFromExitCode(code int) {
 	}
 }
 
+func shouldBreakOrYield(cont func()) bool {
+	if !checkInterrupt() {
+		return false
+	}
+	sig := syscall.Signal(atomic.LoadInt32(&interruptSignal))
+	if sig == syscall.SIGTSTP && suspendedCont == nil {
+		suspendedCont = cont
+		atomic.StoreInt32(&interruptFlag, 0)
+		lastExitCode = 148
+		return true
+	}
+	lastExitCode = 128 + int(sig)
+	atomic.StoreInt32(&interruptFlag, 0)
+	return true
+}
+
 func executeProgram(prog *Program, ctx *ExecContext) {
 	for _, cmd := range prog.Commands {
 		if returnFlag || breakFlag || continueFlag || checkInterrupt() {
@@ -526,9 +542,15 @@ func executeIf(node *IfStmt, ctx *ExecContext) {
 }
 
 func executeWhile(node *WhileStmt, ctx *ExecContext) {
+	runWhileLoop(node, ctx)
+}
+
+func runWhileLoop(node *WhileStmt, ctx *ExecContext) {
 	for {
 		if returnFlag || checkInterrupt() {
-			return
+			if shouldBreakOrYield(func() { runWhileLoop(node, ctx) }) {
+				return
+			}
 		}
 		breakFlag = false
 		continueFlag = false
@@ -536,8 +558,9 @@ func executeWhile(node *WhileStmt, ctx *ExecContext) {
 		executeNode(node.Condition, ctx)
 		inCondition = false
 		if checkInterrupt() {
-			lastExitCode = 128 + clearInterrupt()
-			return
+			if shouldBreakOrYield(func() { runWhileLoop(node, ctx) }) {
+				return
+			}
 		}
 		if returnFlag {
 			return
@@ -552,8 +575,9 @@ func executeWhile(node *WhileStmt, ctx *ExecContext) {
 		}
 		executeNode(node.Body, ctx)
 		if checkInterrupt() {
-			lastExitCode = 128 + clearInterrupt()
-			return
+			if shouldBreakOrYield(func() { runWhileLoop(node, ctx) }) {
+				return
+			}
 		}
 		if returnFlag {
 			return
@@ -573,17 +597,26 @@ func executeFor(node *ForStmt, ctx *ExecContext) {
 	words = expandVariables(words)
 	words = expandGlobs(words)
 
-	for _, val := range words {
+	runForLoop(node, words, 0, ctx)
+}
+
+func runForLoop(node *ForStmt, words []string, startIdx int, ctx *ExecContext) {
+	for i := startIdx; i < len(words); i++ {
 		if returnFlag || checkInterrupt() {
-			return
+			idx := i
+			if shouldBreakOrYield(func() { runForLoop(node, words, idx, ctx) }) {
+				return
+			}
 		}
 		breakFlag = false
 		continueFlag = false
-		setVar(node.Var, val, false)
+		setVar(node.Var, words[i], false)
 		executeNode(node.Body, ctx)
 		if checkInterrupt() {
-			lastExitCode = 128 + clearInterrupt()
-			return
+			idx := i
+			if shouldBreakOrYield(func() { runForLoop(node, words, idx+1, ctx) }) {
+				return
+			}
 		}
 		if returnFlag {
 			return
@@ -602,9 +635,15 @@ func executeCStyleFor(node *CStyleForStmt, ctx *ExecContext) {
 	if node.Init != "" {
 		evalArithmetic(node.Init)
 	}
+	runCStyleForLoop(node, ctx)
+}
+
+func runCStyleForLoop(node *CStyleForStmt, ctx *ExecContext) {
 	for {
 		if returnFlag || checkInterrupt() {
-			return
+			if shouldBreakOrYield(func() { runCStyleForLoop(node, ctx) }) {
+				return
+			}
 		}
 		breakFlag = false
 		continueFlag = false
@@ -616,8 +655,9 @@ func executeCStyleFor(node *CStyleForStmt, ctx *ExecContext) {
 		}
 		executeNode(node.Body, ctx)
 		if checkInterrupt() {
-			lastExitCode = 128 + clearInterrupt()
-			return
+			if shouldBreakOrYield(func() { runCStyleForLoop(node, ctx) }) {
+				return
+			}
 		}
 		if returnFlag {
 			return
@@ -655,9 +695,15 @@ func executeSelect(node *SelectStmt, ctx *ExecContext) {
 		prompt = "#? "
 	}
 
+	runSelectLoop(node, words, reader, prompt, ctx)
+}
+
+func runSelectLoop(node *SelectStmt, words []string, reader *bufio.Reader, prompt string, ctx *ExecContext) {
 	for {
 		if returnFlag || checkInterrupt() {
-			return
+			if shouldBreakOrYield(func() { runSelectLoop(node, words, reader, prompt, ctx) }) {
+				return
+			}
 		}
 		breakFlag = false
 		continueFlag = false
@@ -684,8 +730,9 @@ func executeSelect(node *SelectStmt, ctx *ExecContext) {
 
 		executeNode(node.Body, ctx)
 		if checkInterrupt() {
-			lastExitCode = 128 + clearInterrupt()
-			return
+			if shouldBreakOrYield(func() { runSelectLoop(node, words, reader, prompt, ctx) }) {
+				return
+			}
 		}
 		if returnFlag {
 			return
