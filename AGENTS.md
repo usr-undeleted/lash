@@ -1,7 +1,7 @@
 # lash — AI Context File
 
 ## Project Overview
-lash (larp shell) is a Linux shell written in Go. It aims to be a feature-rich interactive shell with scripting support. The project is currently in Phase 3 of 12 (Variable & Expansion Engine). Version is dynamically derived from ROADMAP.md progress (currently v3.2).
+lash (larp shell) is a Linux shell written in Go. It aims to be a feature-rich interactive shell with scripting, implementing modern necessities. The current phase is determined by the earliest phase to have uncompleted objectives. Version is dynamically derived from ROADMAP.md progress.
 
 ## Tech Stack
 - **Language:** Go 1.26
@@ -21,13 +21,13 @@ All source is in the root directory, single `package main`:
 - `.lashrc` — Shell rc file (currently empty)
 
 ## Code Conventions
-- No comments in code
 - Standard Go formatting (tabs, no trailing whitespace)
 - Error messages go to stderr, prefixed with `"lash: "` for shell errors or `"builtinname: "` for builtin errors
 - Exit codes: 0 success, 1 general error, 127 command not found, 128+signal for signals, 130 for Ctrl+C
 - Uses `lastExitCode` global for `$?` tracking
 - Uses package-level globals for state (job table, foreground PIDs, config, etc.)
 - `sync.Mutex` for concurrent access to job table and notification queue
+- lash set-config should ALWAYS control all configurations.
 
 ## Supported Features (implemented)
 - REPL with custom PS1 prompt (supports `\u`, `\h`, `\H`, `\w`, `\W`, `\n`, `\t`, `\d`, `$`, `\g` for git branch, `\x` for exit status indicator, `\f` for fill alignment, ANSI colors, octal)
