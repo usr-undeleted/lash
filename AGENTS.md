@@ -18,7 +18,9 @@ All source is in the root directory, single `package main`:
 - `config.go` — Config file loading/saving (`~/.config/lash/config`), settings: `syntax-color`, `logosize`
 - `version.go` — Version derived from ROADMAP.md checkbox progress, embeds logo text files and ROADMAP.md via `//go:embed`
 - `build.sh` — Build script, computes version from ROADMAP.md, builds binary to `./lash`
-- `.lashrc` — Shell rc file (currently empty)
+- `.lashrc` — Shell rc file located at ~.
+- `.lash_profile` — Profile file located at ~.
+- `themes/` — Contains default themes shipped with lash.
 
 ## Code Conventions
 - Standard Go formatting (tabs, no trailing whitespace)
@@ -28,8 +30,9 @@ All source is in the root directory, single `package main`:
 - Uses package-level globals for state (job table, foreground PIDs, config, etc.)
 - `sync.Mutex` for concurrent access to job table and notification queue
 - lash set-config should ALWAYS control all configurations.
+- Lash subcommands should ALWAYS be lowercase, minimally worded, with no '-' or '--' at the start, using - to separate words. This applies to every naming scheme used for lash.
 
-## Supported Features (implemented)
+## Supported Features (implemented, might not include all)
 - REPL with custom PS1 prompt (supports `\u`, `\h`, `\H`, `\w`, `\W`, `\n`, `\t`, `\d`, `$`, `\g` for git branch, `\x` for exit status indicator, `\f` for fill alignment, ANSI colors, octal)
 - Command execution via fork+exec (`syscall`)
 - Builtins: `exit`, `cd`, `pwd`, `jobs`, `fg`, `bg`, `kill` (with signals), `export`, `unset`, `env`, `echo` (`-n`, `-e`), `type`, `which`, `true`, `false`, `lash` (meta-command for config/version)
