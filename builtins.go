@@ -44,7 +44,7 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			returnFlag = true
 			return
 		}
-		os.Exit(code)
+		shellExit(code)
 	case "cd":
 		dir := ""
 		if len(args) > 1 {

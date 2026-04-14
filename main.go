@@ -44,6 +44,7 @@ var inCondition bool
 var inSubshell bool
 var shellInteractive bool
 var shellLogin bool
+var shellInitialized bool
 var currentSourceFile string
 var currentSourceLine int
 var currentFuncName string
@@ -853,6 +854,29 @@ func preprocessHeredocs(line string, readNextLine func() (string, error)) string
 	return result.String()
 }
 
+func shellExit(code int) {
+	if setHupOnExit && shellInitialized {
+		jobMu.Lock()
+		var pids []int
+		for _, j := range jobTable {
+			if j.State == JobRunning || j.State == JobStopped {
+				pids = append(pids, j.PGID)
+			}
+		}
+		jobMu.Unlock()
+		if len(pids) > 0 {
+			for _, pgid := range pids {
+				syscall.Kill(-pgid, syscall.SIGHUP)
+			}
+			time.Sleep(time.Minute)
+			for _, pgid := range pids {
+				syscall.Kill(-pgid, syscall.SIGKILL)
+			}
+		}
+	}
+	os.Exit(code)
+}
+
 func handleGlobalCommand(args []string) {
 	sub := args[0]
 	switch sub {
@@ -997,16 +1021,7 @@ func initShell() *Config {
 			fmt.Fprintln(os.Stderr, "see 'lash theme help' for theme usage.")
 			lastExitCode = 1
 		}
-		os.Exit(lastExitCode)
-	}
-
-	if !norc {
-		if shellLogin {
-			sourceProfile(cfg)
-		}
-		if shellInteractive {
-			sourceLashrc(cfg)
-		}
+		shellExit(lastExitCode)
 	}
 
 	if !norc && cfg.Theme != "" {
@@ -1020,7 +1035,7 @@ func initShell() *Config {
 		prog := Parse(cmdString)
 		ctx := defaultContext()
 		executeNode(prog, ctx)
-		os.Exit(lastExitCode)
+		shellExit(lastExitCode)
 	}
 
 	return cfg
@@ -1031,6 +1046,7 @@ func main() {
 	if cfg == nil {
 		return
 	}
+	shellInitialized = true
 
 	editor := NewLineEditor(cfg)
 	stdinReader = bufio.NewReader(os.Stdin)

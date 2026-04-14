@@ -138,7 +138,7 @@ func executeProgram(prog *Program, ctx *ExecContext) {
 			return
 		}
 		if setErrExit && !inCondition && lastExitCode != 0 {
-			os.Exit(lastExitCode)
+			shellExit(lastExitCode)
 		}
 	}
 }
