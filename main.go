@@ -811,6 +811,7 @@ func initShell() *Config {
 			i++
 			if i >= len(args) {
 				fmt.Fprintln(os.Stderr, "lash: exec: option requires an argument")
+				fmt.Fprintln(os.Stderr, "see 'lash help' for shell usage.")
 				os.Exit(2)
 			}
 			cmdString = args[i]
@@ -821,6 +822,7 @@ func initShell() *Config {
 				return nil
 			}
 			fmt.Fprintf(os.Stderr, "lash: unknown option: %s\n", args[i])
+			fmt.Fprintln(os.Stderr, "see 'lash help' for shell usage.")
 			os.Exit(2)
 		}
 	}
