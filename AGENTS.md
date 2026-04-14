@@ -80,6 +80,7 @@ Remaining work: local variables, default value expansion, substring/length expan
 - Bump the version accordingly once a feature/bug fix is deemed solved.
 - Always run `git pull` or `git pull --rebase` before making any changes to ensure your branch is up to date with remote.
 - Stay organized, following the phases' progressions smoothly and properly.
+- There should be small and spare comments that explain the point of a function with as least words as possible. The comments will NOT explain everything in the function, they will only explain the end goal of the function (what feature it makes), and note what the function depends on, if not obvious. 
 - These rules are non-negotiable. Do not rationalize bypassing them.
 
 ## Key Architecture Notes
