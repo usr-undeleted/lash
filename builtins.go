@@ -285,6 +285,29 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		case "help":
 			printUsage()
 			lastExitCode = 0
+		case "theme":
+			if len(args) < 3 {
+				printThemeHelp()
+				lastExitCode = 1
+				return
+			}
+			switch args[2] {
+			case "set":
+				builtinThemeSet(args[3:], ctx)
+			case "save":
+				builtinThemeSave(args[3:])
+			case "list":
+				builtinThemeList()
+			case "delete":
+				builtinThemeDelete(args[3:])
+			case "help":
+				printThemeHelp()
+				lastExitCode = 0
+			default:
+				fmt.Fprintf(os.Stderr, "lash: theme: unknown subcommand: %s\n", args[2])
+				fmt.Fprintln(os.Stderr, "see 'lash theme help' for theme usage.")
+				lastExitCode = 1
+			}
 		default:
 			fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", args[1])
 			fmt.Fprintln(os.Stderr, "see 'lash help' for shell usage.")

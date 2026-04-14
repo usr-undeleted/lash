@@ -863,7 +863,7 @@ func handleGlobalCommand(args []string) {
 
 func printUsage() {
 	fmt.Fprintln(os.Stderr, "usage: lash [options] [command]")
-	fmt.Fprintln(os.Stderr, "       lash [version|set-config ...]")
+	fmt.Fprintln(os.Stderr, "       lash [version|set-config|theme ...]")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "options:")
 	fmt.Fprintln(os.Stderr, "  exec <string>  execute <string> and exit")
@@ -877,6 +877,7 @@ func initShell() *Config {
 	shellLogin = false
 	norc := false
 	var cmdString string
+	var themeArgs []string
 
 	args := os.Args[1:]
 	i := 0
@@ -900,6 +901,9 @@ func initShell() *Config {
 			}
 			cmdString = args[i]
 			i++
+		case "theme":
+			themeArgs = args[i:]
+			i = len(args)
 		default:
 			if !strings.HasPrefix(args[i], "-") {
 				handleGlobalCommand(args[i:])
@@ -943,6 +947,35 @@ func initShell() *Config {
 		if shellInteractive {
 			sourceLashrc(cfg)
 		}
+	}
+
+	if len(themeArgs) > 0 {
+		if len(themeArgs) < 2 {
+			printThemeHelp()
+			os.Exit(1)
+		}
+		ctx := defaultContext()
+		switch themeArgs[1] {
+		case "set":
+			builtinThemeSet(themeArgs[2:], ctx)
+		case "save":
+			builtinThemeSave(themeArgs[2:])
+		case "list":
+			builtinThemeList()
+		case "delete":
+			builtinThemeDelete(themeArgs[2:])
+		case "help":
+			printThemeHelp()
+		default:
+			fmt.Fprintf(os.Stderr, "lash: theme: unknown subcommand: %s\n", themeArgs[1])
+			fmt.Fprintln(os.Stderr, "see 'lash theme help' for theme usage.")
+			lastExitCode = 1
+		}
+		os.Exit(lastExitCode)
+	}
+
+	if !norc && cfg.Theme != "" {
+		sourceIfExists(themesDirPath()+"/"+cfg.Theme, cfg)
 	}
 
 	if cmdString != "" {

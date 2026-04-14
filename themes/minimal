@@ -1,0 +1,7 @@
+# lash theme: minimal
+# visual
+export PS1='\u:\w$ '
+export PS2='> '
+# config
+lash set-config syntax-color 0
+lash set-config logosize mini

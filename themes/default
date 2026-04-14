@@ -1,0 +1,7 @@
+# lash theme: default
+# visual
+export PS1='\033[32m\u\033[0m@\033[34m\h\033[0m:\033[34m\w\033[0m\$ '
+export PS2='> '
+# config
+lash set-config syntax-color 1
+lash set-config logosize big

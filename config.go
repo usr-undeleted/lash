@@ -16,6 +16,7 @@ type Config struct {
 	HistorySize       int
 	GlobDotfiles      bool
 	GlobCaseSensitive bool
+	Theme             string
 }
 
 func configPath() string {
@@ -24,6 +25,14 @@ func configPath() string {
 		return ""
 	}
 	return filepath.Join(home, ".config", "lash", "config")
+}
+
+func themesDirPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".config", "lash", "themes")
 }
 
 func LoadConfig() *Config {
@@ -63,6 +72,8 @@ func LoadConfig() *Config {
 			cfg.GlobDotfiles = val == "1"
 		case "glob-case-sensitivity":
 			cfg.GlobCaseSensitive = val != "0"
+		case "theme":
+			cfg.Theme = val
 		}
 	}
 	return cfg
@@ -83,6 +94,9 @@ func (c *Config) Save() error {
 	lines = append(lines, fmt.Sprintf("history-size = %d", c.HistorySize))
 	lines = append(lines, fmt.Sprintf("glob-dotfiles = %s", boolToStr(c.GlobDotfiles)))
 	lines = append(lines, fmt.Sprintf("glob-case-sensitivity = %s", boolToStr(c.GlobCaseSensitive)))
+	if c.Theme != "" {
+		lines = append(lines, fmt.Sprintf("theme = %s", c.Theme))
+	}
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -118,6 +132,9 @@ func (c *Config) Set(key, val string) bool {
 	case "glob-case-sensitivity":
 		c.GlobCaseSensitive = val != "0"
 		return true
+	case "theme":
+		c.Theme = val
+		return true
 	}
 	return false
 }
@@ -134,6 +151,7 @@ var configKeys = []configEntry{
 	{"history-size", "<int>", "max number of history entries"},
 	{"glob-dotfiles", "<0|1>", "include dotfiles in glob expansion"},
 	{"glob-case-sensitivity", "<0|1>", "case-sensitive (1) or insensitive (0) glob matching"},
+	{"theme", "<name>", "selected prompt theme name"},
 }
 
 func printConfigList() {

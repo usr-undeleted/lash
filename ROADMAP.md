@@ -91,7 +91,7 @@
 - [x] Config file loading (`~/.lashrc`, `~/.config/lash/config`)
 - [x] Prompt customization with escape sequences (`\u`, `\h`, `\w`, `\n`, colors)
 - [x] Shell prompts (PS1/PS2/PS3/PS4 with escape sequences)
-- [ ] Prompt themes (predefined themes, user-switchable)
+- [x] Prompt themes (predefined themes, user-switchable)
 - [x] Aliases (`alias ll='ls -la'`)
 - [ ] Key binding configuration
 - [ ] Shell options system (`setopt`, `shopt` style)

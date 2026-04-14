@@ -1,0 +1,7 @@
+# lash theme: powerline
+# visual
+export PS1='\n\033[34m┌─[\033[36m\u\033[34m]─[\033[36m\h\033[34m]─[\033[32m\w\033[34m]\033[0m\g{\033[33m \g\033[31m\G!\033[0m }\n\033[34m└─\033[0m❯ '
+export PS2='\033[34m└─\033[0m❯ '
+# config
+lash set-config syntax-color 1
+lash set-config logosize small
