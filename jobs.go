@@ -338,9 +338,14 @@ func handleChildReap(pid int, status syscall.WaitStatus) {
 
 	if status.Stopped() {
 		markJobStopped(pid)
-		notifMu.Lock()
-		pendingNotifs = append(pendingNotifs, fmt.Sprintf("\n[%d]+  Stopped    %s\n", job.Number, job.Command))
-		notifMu.Unlock()
+		msg := fmt.Sprintf("\n[%d]+  Stopped    %s\n", job.Number, job.Command)
+		if setNotify {
+			fmt.Print(msg)
+		} else {
+			notifMu.Lock()
+			pendingNotifs = append(pendingNotifs, msg)
+			notifMu.Unlock()
+		}
 	} else {
 		exitCode := 0
 		if status.Exited() {
@@ -349,9 +354,14 @@ func handleChildReap(pid int, status syscall.WaitStatus) {
 			exitCode = 128 + int(status.Signal())
 		}
 		markJobDone(pid, exitCode)
-		notifMu.Lock()
-		pendingNotifs = append(pendingNotifs, fmt.Sprintf("[%d]+  Done       %s\n", job.Number, job.Command))
-		notifMu.Unlock()
+		msg := fmt.Sprintf("[%d]+  Done       %s\n", job.Number, job.Command)
+		if setNotify {
+			fmt.Print(msg)
+		} else {
+			notifMu.Lock()
+			pendingNotifs = append(pendingNotifs, msg)
+			notifMu.Unlock()
+		}
 	}
 }
 
