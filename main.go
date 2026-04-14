@@ -772,7 +772,7 @@ func handleGlobalCommand(args []string) {
 		os.Exit(0)
 	default:
 		fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", sub)
-		fmt.Fprintln(os.Stderr, "usage: lash [version|set-config ...]")
+		fmt.Fprintln(os.Stderr, "see 'lash help' for shell usage.")
 		os.Exit(1)
 	}
 }

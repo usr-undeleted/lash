@@ -248,7 +248,7 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		}
 	case "lash":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "lash: usage: lash <set-config|version> [args...]")
+			fmt.Fprintln(os.Stderr, "see 'lash help' for shell usage.")
 			lastExitCode = 1
 			return
 		}
@@ -282,8 +282,12 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		case "version":
 			printVersion(ctx.Cfg.LogoSize)
 			lastExitCode = 0
+		case "help":
+			printUsage()
+			lastExitCode = 0
 		default:
 			fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", args[1])
+			fmt.Fprintln(os.Stderr, "see 'lash help' for shell usage.")
 			lastExitCode = 1
 		}
 	case "echo":
