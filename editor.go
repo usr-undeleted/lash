@@ -27,6 +27,7 @@ type LineEditor struct {
 	accepted  bool
 	keySeqs   map[string]string // terminfo extended key sequences: sequence -> action name
 	screenRow int
+	eofCount  int
 }
 
 // action constants for key sequence dispatch
@@ -312,6 +313,10 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 			continue
 		}
 
+		if b[0] != 4 {
+			e.eofCount = 0
+		}
+
 		switch b[0] {
 		case '\r', '\n':
 			os.Stdout.Write([]byte("\r\n"))
@@ -356,8 +361,16 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 
 		case 4:
 			if len(e.buf) == 0 {
+				if setIgnoreEOF {
+					e.eofCount++
+					if e.eofCount < 10 {
+						fmt.Fprintf(os.Stdout, "Use \"exit\" to leave the shell.\r\n")
+						continue
+					}
+				}
 				return "", io.EOF
 			}
+			e.eofCount = 0
 			if e.cursor < len(e.buf) {
 				e.buf = append(e.buf[:e.cursor], e.buf[e.cursor+1:]...)
 				prevW = e.redraw(prompt, prevW)
