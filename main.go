@@ -782,10 +782,10 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "       lash [version|set-config ...]")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "options:")
-	fmt.Fprintln(os.Stderr, "  -c <string>   execute <string> and exit")
-	fmt.Fprintln(os.Stderr, "  --login       start as a login shell")
-	fmt.Fprintln(os.Stderr, "  --norc        do not source rc files")
-	fmt.Fprintln(os.Stderr, "  --help        show this help")
+	fmt.Fprintln(os.Stderr, "  exec <string>  execute <string> and exit")
+	fmt.Fprintln(os.Stderr, "  login          start as a login shell")
+	fmt.Fprintln(os.Stderr, "  norc           do not source rc files")
+	fmt.Fprintln(os.Stderr, "  help           show this help")
 }
 
 func initShell() *Config {
@@ -798,19 +798,19 @@ func initShell() *Config {
 	i := 0
 	for i < len(args) {
 		switch args[i] {
-		case "--help":
+		case "help":
 			printUsage()
 			os.Exit(0)
-		case "--login":
+		case "login":
 			shellLogin = true
 			i++
-		case "--norc":
+		case "norc":
 			norc = true
 			i++
-		case "-c":
+		case "exec":
 			i++
 			if i >= len(args) {
-				fmt.Fprintln(os.Stderr, "lash: -c: option requires an argument")
+				fmt.Fprintln(os.Stderr, "lash: exec: option requires an argument")
 				os.Exit(2)
 			}
 			cmdString = args[i]
