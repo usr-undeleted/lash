@@ -18,54 +18,205 @@ import (
 )
 
 type LineEditor struct {
-	buf       []rune
-	cursor    int
-	history   []string
-	histIdx   int
-	config    *Config
-	reader    *bufio.Reader
-	accepted  bool
-	keySeqs   map[string]string // terminfo extended key sequences: sequence -> action name
-	screenRow int
-	eofCount  int
+	buf            []rune
+	cursor         int
+	history        []string
+	histIdx        int
+	config         *Config
+	reader         *bufio.Reader
+	accepted       bool
+	screenRow      int
+	eofCount       int
+	dispatchMap    map[string]string
+	termKeySeqs    map[string]string
+	savedTermState *term.State
 }
-
-// action constants for key sequence dispatch
-const (
-	actionDeleteWordBack = "delete_word_back"
-)
 
 func NewLineEditor(cfg *Config) *LineEditor {
 	e := &LineEditor{config: cfg}
 	e.initKeySequences()
+	e.initDispatch()
 	e.loadHistory()
 	return e
 }
 
-// initKeySequences queries terminfo for extended key capabilities
-// so that Ctrl+Backspace and other modified keys work across terminals.
+// initDispatch builds the dispatch map from defaults, then merges
+// terminfo sequences as lower-priority fallbacks.
+func (e *LineEditor) initDispatch() {
+	e.dispatchMap = make(map[string]string)
+	for key, action := range defaultKeybinds {
+		seq := keyNameToSequence(key)
+		if seq != "" {
+			e.dispatchMap[seq] = action
+		}
+	}
+	for seq, action := range e.termKeySeqs {
+		if _, exists := e.dispatchMap[seq]; !exists {
+			e.dispatchMap[seq] = action
+		}
+	}
+}
+
+// executeAction runs a named action on the editor.
+// Returns (line, err, true) if the action terminates input (accept, eof, interrupt).
+func (e *LineEditor) executeAction(action string, prompt string, prevW *int) (string, error, bool) {
+	switch action {
+	case actBeginningOfLine:
+		if e.cursor > 0 {
+			e.cursor = 0
+			*prevW = e.redraw(prompt, *prevW)
+		}
+	case actEndOfLine:
+		if e.cursor < len(e.buf) {
+			e.cursor = len(e.buf)
+			*prevW = e.redraw(prompt, *prevW)
+		}
+	case actKillLineStart:
+		e.buf = e.buf[e.cursor:]
+		e.cursor = 0
+		*prevW = e.redraw(prompt, *prevW)
+	case actKillLineEnd:
+		e.buf = e.buf[:e.cursor]
+		*prevW = e.redraw(prompt, *prevW)
+	case actDeleteWordBack:
+		e.deleteWordBack(prompt, prevW)
+	case actDeleteWordWSBack:
+		e.deleteWhitespaceWordBack(prompt, prevW)
+	case actDeleteChar:
+		if e.cursor < len(e.buf) {
+			e.buf = append(e.buf[:e.cursor], e.buf[e.cursor+1:]...)
+			*prevW = e.redraw(prompt, *prevW)
+		}
+	case actBackspace:
+		if e.cursor > 0 {
+			e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
+			e.cursor--
+			*prevW = e.redraw(prompt, *prevW)
+		}
+	case actClearScreen:
+		os.Stdout.Write([]byte("\x1b[2J\x1b[H"))
+		os.Stdout.Write([]byte(prompt))
+		e.screenRow = 0
+		*prevW = e.redraw(prompt, 0)
+	case actReverseSearch:
+		*prevW = e.handleReverseSearch(prompt, *prevW)
+		if e.accepted {
+			e.accepted = false
+			if e.buf == nil {
+				return "\x03", nil, true
+			}
+			return string(e.buf), nil, true
+		}
+	case actAcceptLine:
+		os.Stdout.Write([]byte("\r\n"))
+		line := string(e.buf)
+		if strings.TrimSpace(line) != "" {
+			if setHistIgnoreSpace && len(line) > 0 && line[0] == ' ' {
+				return line, nil, true
+			}
+			if setHistIgnoreDups {
+				skip := false
+				for _, h := range e.history {
+					if h == line {
+						skip = true
+						break
+					}
+				}
+				if !skip {
+					e.history = append(e.history, line)
+					e.saveHistory(line)
+				}
+			} else {
+				if len(e.history) == 0 || e.history[len(e.history)-1] != line {
+					e.history = append(e.history, line)
+					e.saveHistory(line)
+				}
+			}
+		}
+		return line, nil, true
+	case actEOF:
+		if len(e.buf) == 0 {
+			if setIgnoreEOF {
+				e.eofCount++
+				if e.eofCount < 10 {
+					os.Stdout.Write([]byte("\r\n"))
+					fmt.Fprintf(os.Stdout, "Use \"exit\" to leave the shell.\r\n")
+					os.Stdout.Write([]byte(prompt))
+					e.screenRow = 0
+					return "", nil, false
+				}
+			}
+			return "", io.EOF, true
+		}
+		e.eofCount = 0
+		if e.cursor < len(e.buf) {
+			e.buf = append(e.buf[:e.cursor], e.buf[e.cursor+1:]...)
+			*prevW = e.redraw(prompt, *prevW)
+		}
+	case actInterrupt:
+		os.Stdout.Write([]byte("^C\r\n"))
+		e.buf = nil
+		e.cursor = 0
+		return "\x03", nil, true
+	case actSuspend:
+		fd := int(os.Stdin.Fd())
+		if e.savedTermState != nil {
+			term.Restore(fd, e.savedTermState)
+		}
+		syscall.Kill(syscall.Getpid(), syscall.SIGTSTP)
+		state, err := term.MakeRaw(fd)
+		if err == nil {
+			e.savedTermState = state
+		}
+		os.Stdout.Write([]byte(prompt))
+		e.screenRow = 0
+		*prevW = e.redraw(prompt, 0)
+	case actWordBack:
+		e.moveWordBack(prompt, prevW)
+	case actWordForward:
+		e.moveWordForward(prompt, prevW)
+	case actHistoryBack:
+		if len(e.history) > 0 && e.histIdx > 0 {
+			e.histIdx--
+			e.buf = []rune(e.history[e.histIdx])
+			e.cursor = len(e.buf)
+			*prevW = e.redraw(prompt, *prevW)
+		}
+	case actHistoryForward:
+		if e.histIdx < len(e.history) {
+			e.histIdx++
+			if e.histIdx < len(e.history) {
+				e.buf = []rune(e.history[e.histIdx])
+			} else {
+				e.buf = nil
+			}
+			e.cursor = len(e.buf)
+			*prevW = e.redraw(prompt, *prevW)
+		}
+	case actComplete:
+		*prevW = e.handleTabCompletion(prompt, *prevW)
+	case actCursorLeft:
+		if e.cursor > 0 {
+			e.cursor--
+			*prevW = e.redraw(prompt, *prevW)
+		}
+	case actCursorRight:
+		if e.cursor < len(e.buf) {
+			e.cursor++
+			*prevW = e.redraw(prompt, *prevW)
+		}
+	case actNop:
+	}
+	return "", nil, false
+}
+
+// initKeySequences registers terminal-specific key sequences that vary
+// by terminal emulator. These are merged into the dispatch map as fallbacks.
 func (e *LineEditor) initKeySequences() {
-	e.keySeqs = make(map[string]string)
-
-	// Try terminfo capabilities for extended keys.
-	// The kEXT capability (extended key) maps function keys, but
-	// modified keys like Ctrl+Backspace are terminal-specific.
-	//
-	// Common sequences by terminal:
-	//   kitty/foot/wezterm: \x1b\x7f (ESC DEL) for Ctrl+Backspace
-	//   xterm:              \x1b[3;5~ (CSI 3 ; 5 ~)
-	//   tmux:               \x1b\x7f
-	//   rxvt:               \x1b[3^
-	//
-	// We register all known sequences so it works everywhere without
-	// requiring users to configure their terminal.
-
-	// kitty / foot / wezterm / tmux / alacritty (with custom binding)
-	e.keySeqs["\x1b\x7f"] = actionDeleteWordBack
-
-	// xterm-style CSI sequences for Ctrl+Backspace
-	e.keySeqs["\x1b[3;5~"] = actionDeleteWordBack
-	e.keySeqs["\x1b[3^"] = actionDeleteWordBack // rxvt
+	e.termKeySeqs = make(map[string]string)
+	e.termKeySeqs["\x1b\x7f"] = actDeleteWordWSBack
+	e.termKeySeqs["\x1b[3;5~"] = actDeleteWordWSBack
+	e.termKeySeqs["\x1b[3^"] = actDeleteWordWSBack
 }
 
 func historyPath() string {
@@ -289,6 +440,7 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 		return "", err
 	}
 	defer term.Restore(int(os.Stdin.Fd()), oldState)
+	e.savedTermState = oldState
 
 	e.buf = nil
 	e.cursor = 0
@@ -309,7 +461,9 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 		}
 
 		if b[0] == '\x1b' {
-			e.handleEscape(prompt, &prevW)
+			if result, err, handled := e.handleEscape(prompt, &prevW); handled {
+				return result, err
+			}
 			continue
 		}
 
@@ -317,119 +471,19 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 			e.eofCount = 0
 		}
 
-		switch b[0] {
-		case '\r', '\n':
-			os.Stdout.Write([]byte("\r\n"))
-			line := string(e.buf)
-			if strings.TrimSpace(line) != "" {
-				if setHistIgnoreSpace && len(line) > 0 && line[0] == ' ' {
-					return line, nil
-				}
-				if setHistIgnoreDups {
-					skip := false
-					for _, h := range e.history {
-						if h == line {
-							skip = true
-							break
-						}
-					}
-					if !skip {
-						e.history = append(e.history, line)
-						e.saveHistory(line)
-					}
-				} else {
-					if len(e.history) == 0 || e.history[len(e.history)-1] != line {
-						e.history = append(e.history, line)
-						e.saveHistory(line)
-					}
-				}
+		seq := string([]byte{b[0]})
+		if action, ok := e.dispatchMap[seq]; ok {
+			if result, err, done := e.executeAction(action, prompt, &prevW); done {
+				return result, err
 			}
-			return line, nil
+			continue
+		}
 
-		case 127, 8:
-			if e.cursor > 0 {
-				e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
-				e.cursor--
-				prevW = e.redraw(prompt, prevW)
-			}
-
-		case 3:
-			os.Stdout.Write([]byte("^C\r\n"))
-			e.buf = nil
-			e.cursor = 0
-			return "\x03", nil
-
-		case 4:
-			if len(e.buf) == 0 {
-				if setIgnoreEOF {
-					e.eofCount++
-					if e.eofCount < 10 {
-						os.Stdout.Write([]byte("\r\n"))
-						fmt.Fprintf(os.Stdout, "Use \"exit\" to leave the shell.\r\n")
-						os.Stdout.Write([]byte(prompt))
-						e.screenRow = 0
-						continue
-					}
-				}
-				return "", io.EOF
-			}
-			e.eofCount = 0
-			if e.cursor < len(e.buf) {
-				e.buf = append(e.buf[:e.cursor], e.buf[e.cursor+1:]...)
-				prevW = e.redraw(prompt, prevW)
-			}
-
-		case 23:
-			e.deleteWordBack(prompt, &prevW)
-
-		case 21:
-			e.buf = e.buf[e.cursor:]
-			e.cursor = 0
+		if b[0] >= 32 {
+			r, _ := e.readRune(b[0])
+			e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
+			e.cursor++
 			prevW = e.redraw(prompt, prevW)
-
-		case 11:
-			e.buf = e.buf[:e.cursor]
-			prevW = e.redraw(prompt, prevW)
-
-		case 1:
-			if e.cursor > 0 {
-				e.cursor = 0
-				prevW = e.redraw(prompt, prevW)
-			}
-
-		case 5:
-			if e.cursor < len(e.buf) {
-				e.cursor = len(e.buf)
-				prevW = e.redraw(prompt, prevW)
-			}
-
-		case 12:
-			os.Stdout.Write([]byte("\x1b[2J\x1b[H"))
-			os.Stdout.Write([]byte(prompt))
-			e.screenRow = 0
-			prevW = e.redraw(prompt, 0)
-
-		case 9:
-			prevW = e.handleTabCompletion(prompt, prevW)
-
-		case 18:
-			prevW = e.handleReverseSearch(prompt, prevW)
-			if e.accepted {
-				e.accepted = false
-				if e.buf == nil {
-					return "\x03", nil
-				}
-				line := string(e.buf)
-				return line, nil
-			}
-
-		default:
-			if b[0] >= 32 {
-				r, _ := e.readRune(b[0])
-				e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
-				e.cursor++
-				prevW = e.redraw(prompt, prevW)
-			}
 		}
 	}
 }
@@ -470,36 +524,24 @@ func (e *LineEditor) readRune(first byte) (rune, bool) {
 	return r, r == utf8.RuneError
 }
 
-func (e *LineEditor) handleEscape(prompt string, prevW *int) {
+func (e *LineEditor) handleEscape(prompt string, prevW *int) (string, error, bool) {
 	b2 := e.readByte()
 	if b2 == '[' {
-		e.handleCSI(prompt, prevW)
+		return e.handleCSI(prompt, prevW)
 	} else if b2 == 'O' {
-		e.handleSS3(prompt, prevW)
+		return e.handleSS3(prompt, prevW)
 	} else if b2 == '\x7f' || b2 == 8 {
-		// ESC + DEL/BS = Ctrl+Backspace on many terminals
 		e.deleteWhitespaceWordBack(prompt, prevW)
+		return "", nil, false
 	}
+	fullSeq := "\x1b" + string([]byte{b2})
+	if action, ok := e.dispatchMap[fullSeq]; ok {
+		return e.executeAction(action, prompt, prevW)
+	}
+	return "", nil, false
 }
 
-// lookupKeyAction checks if a given byte sequence matches a known
-// terminfo-based key binding and executes the corresponding action.
-// Returns true if the sequence was handled.
-func (e *LineEditor) lookupKeyAction(prompt string, prevW *int, seq string) bool {
-	action, ok := e.keySeqs[seq]
-	if !ok {
-		return false
-	}
-	switch action {
-	case actionDeleteWordBack:
-		e.deleteWhitespaceWordBack(prompt, prevW)
-	default:
-		return false
-	}
-	return true
-}
-
-func (e *LineEditor) handleCSI(prompt string, prevW *int) {
+func (e *LineEditor) handleCSI(prompt string, prevW *int) (string, error, bool) {
 	var params []int
 	var current int
 	var seqBuf strings.Builder
@@ -512,9 +554,17 @@ func (e *LineEditor) handleCSI(prompt string, prevW *int) {
 		} else {
 			params = append(params, current)
 			current = 0
-			switch b {
-			case ';':
+			if b == ';' {
 				continue
+			}
+			fullSeq := "\x1b" + seqBuf.String()
+			if action, ok := e.dispatchMap[fullSeq]; ok {
+				if result, err, done := e.executeAction(action, prompt, prevW); done {
+					return result, err, true
+				}
+				return "", nil, false
+			}
+			switch b {
 			case 'A':
 				if len(e.history) > 0 && e.histIdx > 0 {
 					e.histIdx--
@@ -583,19 +633,21 @@ func (e *LineEditor) handleCSI(prompt string, prevW *int) {
 						*prevW = e.redraw(prompt, *prevW)
 					}
 				}
-			default:
-				// Check terminfo key sequences for unrecognized CSI keys
-				if e.lookupKeyAction(prompt, prevW, "\x1b"+seqBuf.String()) {
-					return
-				}
 			}
-			return
+			return "", nil, false
 		}
 	}
 }
 
-func (e *LineEditor) handleSS3(prompt string, prevW *int) {
+func (e *LineEditor) handleSS3(prompt string, prevW *int) (string, error, bool) {
 	b := e.readByte()
+	fullSeq := "\x1bO" + string([]byte{b})
+	if action, ok := e.dispatchMap[fullSeq]; ok {
+		if result, err, done := e.executeAction(action, prompt, prevW); done {
+			return result, err, true
+		}
+		return "", nil, false
+	}
 	switch b {
 	case 'A':
 		if len(e.history) > 0 && e.histIdx > 0 {
@@ -632,6 +684,7 @@ func (e *LineEditor) handleSS3(prompt string, prevW *int) {
 		e.cursor = len(e.buf)
 		*prevW = e.redraw(prompt, *prevW)
 	}
+	return "", nil, false
 }
 
 func (e *LineEditor) handleReverseSearch(prompt string, prevBufW int) int {
