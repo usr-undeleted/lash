@@ -33,6 +33,8 @@ var setXTrace bool
 var setPipefail bool
 var inCondition bool
 var inSubshell bool
+var shellInteractive bool
+var shellLogin bool
 
 var heredocMap map[string]*heredocInfo
 var heredocCount int
@@ -775,9 +777,59 @@ func handleGlobalCommand(args []string) {
 	}
 }
 
-func main() {
-	if len(os.Args) > 1 {
-		handleGlobalCommand(os.Args[1:])
+func printUsage() {
+	fmt.Fprintln(os.Stderr, "usage: lash [options] [command]")
+	fmt.Fprintln(os.Stderr, "       lash [version|set-config ...]")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "options:")
+	fmt.Fprintln(os.Stderr, "  -c <string>   execute <string> and exit")
+	fmt.Fprintln(os.Stderr, "  --login       start as a login shell")
+	fmt.Fprintln(os.Stderr, "  --norc        do not source rc files")
+	fmt.Fprintln(os.Stderr, "  --help        show this help")
+}
+
+func initShell() *Config {
+	shellInteractive = isTerminal()
+	shellLogin = false
+	norc := false
+	var cmdString string
+
+	args := os.Args[1:]
+	i := 0
+	for i < len(args) {
+		switch args[i] {
+		case "--help":
+			printUsage()
+			os.Exit(0)
+		case "--login":
+			shellLogin = true
+			i++
+		case "--norc":
+			norc = true
+			i++
+		case "-c":
+			i++
+			if i >= len(args) {
+				fmt.Fprintln(os.Stderr, "lash: -c: option requires an argument")
+				os.Exit(2)
+			}
+			cmdString = args[i]
+			i++
+		default:
+			if !strings.HasPrefix(args[i], "-") {
+				handleGlobalCommand(args[i:])
+				return nil
+			}
+			fmt.Fprintf(os.Stderr, "lash: unknown option: %s\n", args[i])
+			os.Exit(2)
+		}
+	}
+
+	if !shellLogin {
+		argv0 := filepath.Base(os.Args[0])
+		if strings.HasPrefix(argv0, "-") {
+			shellLogin = true
+		}
 	}
 
 	initJobControl()
@@ -788,9 +840,38 @@ func main() {
 	os.Setenv("PS1", defaultPS1)
 	setVar("PS1", defaultPS1, true)
 
+	if shellInteractive {
+		os.Setenv("LASH_INTERACTIVE", "1")
+	}
+	if shellLogin {
+		os.Setenv("LASH_LOGIN", "1")
+	}
+
 	cfg := LoadConfig()
 	currentConfig = cfg
-	sourceLashrc(cfg)
+
+	if shellInteractive && !norc {
+		sourceLashrc(cfg)
+	}
+
+	if cmdString != "" {
+		stdinReader = bufio.NewReader(os.Stdin)
+		returnFlag = false
+		prog := Parse(cmdString)
+		ctx := defaultContext()
+		executeNode(prog, ctx)
+		os.Exit(lastExitCode)
+	}
+
+	return cfg
+}
+
+func main() {
+	cfg := initShell()
+	if cfg == nil {
+		return
+	}
+
 	editor := NewLineEditor(cfg)
 	stdinReader = bufio.NewReader(os.Stdin)
 	for {

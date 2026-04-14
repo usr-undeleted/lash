@@ -95,7 +95,7 @@
 - [x] Aliases (`alias ll='ls -la'`)
 - [ ] Key binding configuration
 - [ ] Shell options system (`setopt`, `shopt` style)
-- [ ] Login shell vs non-login shell vs interactive detection
+- [x] Login shell vs non-login shell vs interactive detection
 - [ ] Profile files (`~/.lash_profile`, `/etc/lash_profile`)
 - [ ] `PATH` management helpers
 - [ ] Colored output support (LS_COLORS, GREP_COLORS integration)
