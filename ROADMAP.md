@@ -82,7 +82,7 @@
 - [x] Conditional expressions in `[[ ]]` and `[ ]`
 - [x] String comparisons and pattern matching in conditionals
 - [x] Array support (indexed: `arr=(a b c)`, associative: `declare -A map`)
-- [ ] Array slicing and iteration
+- [x] Array slicing and iteration
 - [x] Subshell execution (`(cmd)`)
 - [x] Command grouping (`{ cmd1; cmd2; }`)
 
@@ -121,6 +121,8 @@
 - [ ] Notification on long-running command completion
 
 ## Phase 8: Performance & Architecture
+
+- [ ] Array append operator (`arr+=(elems)`)
 
 - [ ] Startup time benchmarking and optimization (target: <100ms)
 - [ ] Lazy-loaded builtins

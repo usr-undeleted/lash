@@ -1458,6 +1458,8 @@ var procSubstEntries []procSubstEntry
 var procSubstCount int
 var procSubstMap map[string]*os.File
 
+var arraySliceCount int
+
 func init() {
 	procSubstMap = make(map[string]*os.File)
 }
@@ -1489,7 +1491,7 @@ func resolveProcSubstArgs(args []string) ([]string, []*os.File) {
 	return resolved, extraFiles
 }
 
-func expandArraySlice(varName string, operand string) string {
+func computeArraySlice(varName string, operand string) []string {
 	operand = expandString(strings.TrimSpace(operand))
 	colon := strings.Index(operand, ":")
 	var offsetStr, lengthStr string
@@ -1504,7 +1506,7 @@ func expandArraySlice(varName string, operand string) string {
 
 	offset, err := strconv.Atoi(offsetStr)
 	if err != nil {
-		return ""
+		return nil
 	}
 
 	if offset < 0 {
@@ -1514,34 +1516,57 @@ func expandArraySlice(varName string, operand string) string {
 		}
 	}
 	if offset > len(elements) {
-		return ""
+		return nil
 	}
 
 	if lengthStr != "" {
 		length, err := strconv.Atoi(lengthStr)
 		if err != nil {
-			return strings.Join(elements[offset:], " ")
+			return elements[offset:]
 		}
 		if length < 0 {
 			end := len(elements) + length
 			if end <= offset {
-				return ""
+				return nil
 			}
-			return strings.Join(elements[offset:end], " ")
+			return elements[offset:end]
 		}
 		end := offset + length
 		if end > len(elements) {
 			end = len(elements)
 		}
-		return strings.Join(elements[offset:end], " ")
+		return elements[offset:end]
 	}
 
-	return strings.Join(elements[offset:], " ")
+	return elements[offset:]
+}
+
+func storeTempSlice(elements []string) string {
+	if len(elements) == 0 {
+		return ""
+	}
+	name := "__lash_slice_" + strconv.Itoa(arraySliceCount)
+	arraySliceCount++
+	arr := &ArrayVar{Indexed: elements, IsIndexed: true}
+	arrayTable[name] = arr
+	return arrayAtSentinel + name + arrayAtSentinel
+}
+
+func expandArraySlice(varName string, operand string) string {
+	elements := computeArraySlice(varName, operand)
+	if len(elements) == 0 {
+		return ""
+	}
+	return storeTempSlice(elements)
 }
 
 func expandArraySliceWithIndex(varName string, index string, operand string) string {
 	if index == "@" || index == "*" {
-		return expandArraySlice(varName, operand)
+		elements := computeArraySlice(varName, operand)
+		if len(elements) == 0 {
+			return ""
+		}
+		return storeTempSlice(elements)
 	}
 	return getArrayElement(varName, index)
 }
@@ -1619,5 +1644,10 @@ func waitProcSubst() {
 	procSubstEntries = nil
 	for k := range procSubstMap {
 		delete(procSubstMap, k)
+	}
+	for k := range arrayTable {
+		if strings.HasPrefix(k, "__lash_slice_") {
+			delete(arrayTable, k)
+		}
 	}
 }

@@ -17,7 +17,7 @@ var allBuiltins = []string{
 	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
 	"source", ".", "return", "local", "shift", "read", "set", "fetch", "trap",
-	"test", "[", "declare",
+	"test", "[", "declare", "mapfile", "readarray",
 }
 
 func isBuiltin(cmd string) bool {
@@ -647,6 +647,7 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		maxChars := 0
 		timeout := 0
 		delim := "\n"
+		readArray := ""
 		var varNames []string
 
 		i := 1
@@ -699,6 +700,14 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				}
 				i++
 				delim = args[i]
+			case "-a":
+				if i+1 >= len(args) {
+					fmt.Fprintln(os.Stderr, "lash: read: -a: option requires an argument")
+					lastExitCode = 2
+					return
+				}
+				i++
+				readArray = args[i]
 			default:
 				fmt.Fprintf(os.Stderr, "lash: read: %s: invalid option\n", args[i])
 				lastExitCode = 2
@@ -709,7 +718,9 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		varNames = args[i:]
 
 		var reader *bufio.Reader
-		if stdinReader != nil {
+		if ctx.Stdin != os.Stdin {
+			reader = bufio.NewReader(ctx.Stdin)
+		} else if stdinReader != nil {
 			reader = stdinReader
 		} else {
 			reader = bufio.NewReader(ctx.Stdin)
@@ -777,7 +788,13 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		if readErr != nil {
 			if readErr == io.EOF && len(input) > 0 {
 				setVar("REPLY", input, false)
-				assignReadVars(varNames, input)
+				if readArray != "" {
+					fields := strings.Fields(input)
+					arr := &ArrayVar{Indexed: fields, IsIndexed: true}
+					setArray(readArray, arr)
+				} else {
+					assignReadVars(varNames, input)
+				}
 				lastExitCode = 0
 				return
 			}
@@ -795,7 +812,17 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		}
 
 		setVar("REPLY", input, false)
-		assignReadVars(varNames, input)
+		if readArray != "" {
+			ifs := getVar("IFS")
+			if ifs == "" {
+				ifs = " \t\n"
+			}
+			fields := strings.Fields(input)
+			arr := &ArrayVar{Indexed: fields, IsIndexed: true}
+			setArray(readArray, arr)
+		} else {
+			assignReadVars(varNames, input)
+		}
 		lastExitCode = 0
 	case "fetch":
 		builtinFetch(args, ctx)
@@ -883,6 +910,8 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		lastExitCode = 0
 	case "declare":
 		builtinDeclare(args)
+	case "mapfile", "readarray":
+		builtinMapfile(args, ctx)
 	}
 }
 
@@ -1166,5 +1195,122 @@ func builtinDeclare(args []string) {
 			}
 		}
 	}
+	lastExitCode = 0
+}
+
+func builtinMapfile(args []string, ctx *ExecContext) {
+	stripNewline := false
+	maxLines := 0
+	origin := 0
+	arrayName := "MAPFILE"
+	filePath := ""
+
+	i := 1
+	for i < len(args) {
+		if args[i] == "-t" {
+			stripNewline = true
+			i++
+			continue
+		}
+		if args[i] == "-n" {
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "mapfile: -n: option requires an argument")
+				lastExitCode = 2
+				return
+			}
+			i++
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 0 {
+				fmt.Fprintf(os.Stderr, "mapfile: %s: invalid number\n", args[i])
+				lastExitCode = 2
+				return
+			}
+			maxLines = n
+			i++
+			continue
+		}
+		if args[i] == "-O" {
+			if i+1 >= len(args) {
+				fmt.Fprintln(os.Stderr, "mapfile: -O: option requires an argument")
+				lastExitCode = 2
+				return
+			}
+			i++
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n < 0 {
+				fmt.Fprintf(os.Stderr, "mapfile: %s: invalid number\n", args[i])
+				lastExitCode = 2
+				return
+			}
+			origin = n
+			i++
+			continue
+		}
+		if len(args[i]) > 0 && args[i][0] == '-' && args[i] != "-" {
+			fmt.Fprintf(os.Stderr, "mapfile: %s: invalid option\n", args[i])
+			lastExitCode = 2
+			return
+		}
+		break
+	}
+
+	remaining := args[i:]
+	if len(remaining) >= 1 && remaining[0] != "-" {
+		arrayName = remaining[0]
+		if len(remaining) >= 2 {
+			filePath = remaining[1]
+		}
+	}
+
+	var reader *bufio.Reader
+	if filePath != "" {
+		f, err := os.Open(filePath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "mapfile: %s: %s\n", filePath, err)
+			lastExitCode = 1
+			return
+		}
+		defer f.Close()
+		reader = bufio.NewReader(f)
+	} else if ctx.Stdin != os.Stdin {
+		reader = bufio.NewReader(ctx.Stdin)
+	} else if stdinReader != nil {
+		reader = stdinReader
+	} else {
+		reader = bufio.NewReader(ctx.Stdin)
+	}
+
+	var elements []string
+	for origin > 0 {
+		elements = append(elements, "")
+		origin--
+	}
+
+	count := 0
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil && err != io.EOF {
+			break
+		}
+		if err == io.EOF && line == "" {
+			break
+		}
+		if stripNewline {
+			line = strings.TrimRight(line, "\r\n")
+		} else {
+			line = strings.TrimRight(line, "\r")
+		}
+		elements = append(elements, line)
+		count++
+		if maxLines > 0 && count >= maxLines {
+			break
+		}
+		if err == io.EOF {
+			break
+		}
+	}
+
+	arr := &ArrayVar{Indexed: elements, IsIndexed: true}
+	setArray(arrayName, arr)
 	lastExitCode = 0
 }

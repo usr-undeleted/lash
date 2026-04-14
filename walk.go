@@ -237,7 +237,7 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 				index := a.Name[bracketIdx+1 : len(a.Name)-1]
 				setArrayElement(arrName, index, val)
 			}
-			executeBuiltin(expanded, ctx)
+			executeBuiltin(expanded, redirCtx)
 			for name := range prefixEnv {
 				unsetVar(name)
 			}
@@ -247,7 +247,7 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 				unsetArray(arrName)
 			}
 		} else {
-			executeBuiltin(expanded, ctx)
+			executeBuiltin(expanded, redirCtx)
 		}
 		waitProcSubst()
 		return
