@@ -96,6 +96,26 @@ func getVar(name string) string {
 	if val, ok := varTable[name]; ok {
 		return val
 	}
+	envVal := os.Getenv(name)
+	if setNoUnset && envVal == "" {
+		fmt.Fprintf(os.Stderr, "lash: %s: unbound variable\n", name)
+		expandError = true
+		return ""
+	}
+	return envVal
+}
+
+func getVarQuiet(name string) string {
+	varMu.Lock()
+	defer varMu.Unlock()
+	for i := len(scopeStack) - 1; i >= 0; i-- {
+		if val, ok := scopeStack[i][name]; ok {
+			return val
+		}
+	}
+	if val, ok := varTable[name]; ok {
+		return val
+	}
 	return os.Getenv(name)
 }
 

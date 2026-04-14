@@ -74,6 +74,13 @@ func expandArrayAtSentinel(expanded string, result []string) []string {
 }
 
 func expandGlobs(tokens []string) []string {
+	if setNoGlob {
+		var result []string
+		for _, t := range tokens {
+			result = append(result, restoreGlobMarkers(t))
+		}
+		return result
+	}
 	var result []string
 	for _, t := range tokens {
 		if hasExtGlob(t) {

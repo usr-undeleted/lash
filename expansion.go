@@ -268,7 +268,7 @@ func expandDollar(s string, pos int, inDouble bool) (string, int) {
 
 		varName, operand, op := parseBraceExpansion(inner)
 		if op != "" {
-			val := getVar(varName)
+			val := getVarQuiet(varName)
 			switch op {
 			case ":-":
 				if val == "" {
