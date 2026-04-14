@@ -953,6 +953,7 @@ func initShell() *Config {
 
 	cfg := LoadConfig()
 	currentConfig = cfg
+	applyConfigToOptions(cfg)
 
 	if len(themeArgs) > 0 {
 		if len(themeArgs) < 2 {

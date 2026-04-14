@@ -17,6 +17,18 @@ type Config struct {
 	GlobDotfiles      bool
 	GlobCaseSensitive bool
 	Theme             string
+	ErrExit           bool
+	XTrace            bool
+	Pipefail          bool
+	NoClobber         bool
+	NoUnset           bool
+	NoGlob            bool
+	Notify            bool
+	HistIgnoreDups    bool
+	HistIgnoreSpace   bool
+	HupOnExit         bool
+	IgnoreEOF         bool
+	HashAll           bool
 }
 
 func configPath() string {
@@ -74,6 +86,30 @@ func LoadConfig() *Config {
 			cfg.GlobCaseSensitive = val != "0"
 		case "theme":
 			cfg.Theme = val
+		case "errexit":
+			cfg.ErrExit = val == "1"
+		case "xtrace":
+			cfg.XTrace = val == "1"
+		case "pipefail":
+			cfg.Pipefail = val == "1"
+		case "noclobber":
+			cfg.NoClobber = val == "1"
+		case "nounset":
+			cfg.NoUnset = val == "1"
+		case "noglob":
+			cfg.NoGlob = val == "1"
+		case "notify":
+			cfg.Notify = val == "1"
+		case "hist-ignore-dups":
+			cfg.HistIgnoreDups = val == "1"
+		case "hist-ignore-space":
+			cfg.HistIgnoreSpace = val == "1"
+		case "huponexit":
+			cfg.HupOnExit = val == "1"
+		case "ignoreeof":
+			cfg.IgnoreEOF = val == "1"
+		case "hashall":
+			cfg.HashAll = val == "1"
 		}
 	}
 	return cfg
@@ -97,6 +133,18 @@ func (c *Config) Save() error {
 	if c.Theme != "" {
 		lines = append(lines, fmt.Sprintf("theme = %s", c.Theme))
 	}
+	lines = append(lines, fmt.Sprintf("errexit = %s", boolToStr(c.ErrExit)))
+	lines = append(lines, fmt.Sprintf("xtrace = %s", boolToStr(c.XTrace)))
+	lines = append(lines, fmt.Sprintf("pipefail = %s", boolToStr(c.Pipefail)))
+	lines = append(lines, fmt.Sprintf("noclobber = %s", boolToStr(c.NoClobber)))
+	lines = append(lines, fmt.Sprintf("nounset = %s", boolToStr(c.NoUnset)))
+	lines = append(lines, fmt.Sprintf("noglob = %s", boolToStr(c.NoGlob)))
+	lines = append(lines, fmt.Sprintf("notify = %s", boolToStr(c.Notify)))
+	lines = append(lines, fmt.Sprintf("hist-ignore-dups = %s", boolToStr(c.HistIgnoreDups)))
+	lines = append(lines, fmt.Sprintf("hist-ignore-space = %s", boolToStr(c.HistIgnoreSpace)))
+	lines = append(lines, fmt.Sprintf("huponexit = %s", boolToStr(c.HupOnExit)))
+	lines = append(lines, fmt.Sprintf("ignoreeof = %s", boolToStr(c.IgnoreEOF)))
+	lines = append(lines, fmt.Sprintf("hashall = %s", boolToStr(c.HashAll)))
 	f, err := os.Create(path)
 	if err != nil {
 		return err
@@ -132,6 +180,42 @@ func (c *Config) Set(key, val string) bool {
 	case "glob-case-sensitivity":
 		c.GlobCaseSensitive = val != "0"
 		return true
+	case "errexit":
+		c.ErrExit = val == "1"
+		return true
+	case "xtrace":
+		c.XTrace = val == "1"
+		return true
+	case "pipefail":
+		c.Pipefail = val == "1"
+		return true
+	case "noclobber":
+		c.NoClobber = val == "1"
+		return true
+	case "nounset":
+		c.NoUnset = val == "1"
+		return true
+	case "noglob":
+		c.NoGlob = val == "1"
+		return true
+	case "notify":
+		c.Notify = val == "1"
+		return true
+	case "hist-ignore-dups":
+		c.HistIgnoreDups = val == "1"
+		return true
+	case "hist-ignore-space":
+		c.HistIgnoreSpace = val == "1"
+		return true
+	case "huponexit":
+		c.HupOnExit = val == "1"
+		return true
+	case "ignoreeof":
+		c.IgnoreEOF = val == "1"
+		return true
+	case "hashall":
+		c.HashAll = val == "1"
+		return true
 	}
 	return false
 }
@@ -148,6 +232,18 @@ var configKeys = []configEntry{
 	{"history-size", "<int>", "max number of history entries"},
 	{"glob-dotfiles", "<0|1>", "include dotfiles in glob expansion"},
 	{"glob-case-sensitivity", "<0|1>", "case-sensitive (1) or insensitive (0) glob matching"},
+	{"errexit", "<0|1>", "exit immediately if a command exits non-zero"},
+	{"xtrace", "<0|1>", "print commands before execution"},
+	{"pipefail", "<0|1>", "pipeline fails if any command in it fails"},
+	{"noclobber", "<0|1>", "refuse > on existing files (use >| to force)"},
+	{"nounset", "<0|1>", "error on unset variable expansion"},
+	{"noglob", "<0|1>", "disable glob expansion"},
+	{"notify", "<0|1>", "report background job status immediately"},
+	{"hist-ignore-dups", "<0|1>", "skip duplicate consecutive history entries"},
+	{"hist-ignore-space", "<0|1>", "skip history entries starting with space"},
+	{"huponexit", "<0|1>", "send SIGHUP to all jobs when shell exits"},
+	{"ignoreeof", "<0|1>", "require 10 Ctrl-D presses to exit"},
+	{"hashall", "<0|1>", "hash command paths"},
 }
 
 func printConfigList() {

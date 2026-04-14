@@ -17,7 +17,7 @@ var allBuiltins = []string{
 	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
 	"source", ".", "return", "local", "shift", "read", "set", "fetch", "trap",
-	"test", "[", "declare", "mapfile", "readarray", "setopt", "unsetopt",
+	"test", "[", "declare", "mapfile", "readarray",
 }
 
 func isBuiltin(cmd string) bool {
@@ -272,6 +272,7 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				lastExitCode = 1
 				return
 			}
+			applyConfigToOptions(ctx.Cfg)
 			if err := ctx.Cfg.Save(); err != nil {
 				fmt.Fprintf(os.Stderr, "lash: failed to save config: %s\n", err)
 				lastExitCode = 1
@@ -419,74 +420,13 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			return
 		}
 		i := 1
-		for i < len(args) && len(args[i]) > 0 && (args[i][0] == '-' || args[i][0] == '+') {
-			if len(args[i]) < 2 {
-				break
-			}
-			enable := args[i][0] == '-'
-			flag := args[i][1:]
-			switch flag {
-			case "e", "x", "u", "f", "C":
-				if ok := setOption(flag, enable); !ok {
-					fmt.Fprintf(os.Stderr, "set: %s: invalid option\n", args[i])
-					lastExitCode = 2
-					return
-				}
-			case "-":
-				i++
-				positionalParams = args[i:]
-				lastExitCode = 0
-				return
-			case "o":
-				enableO := args[i][0] == '-'
-				if i+1 >= len(args) {
-					if enableO {
-						listOptions()
-					} else {
-						listOptionsRestore()
-					}
-					lastExitCode = 0
-					return
-				}
-				next := args[i+1]
-				if next[0] == '-' || next[0] == '+' {
-					listOptionsRestore()
-					lastExitCode = 0
-					i++
-					goto nextArg
-				}
-				optName := next
-				if ok := setOption(optName, enableO); !ok {
-					fmt.Fprintf(os.Stderr, "set: -o: %s: invalid option\n", optName)
-					if hint := didYouMeanOption(optName); hint != "" {
-						fmt.Fprintf(os.Stderr, "set: did you mean: %s\n", hint)
-					}
-					lastExitCode = 2
-					return
-				}
-				i += 2
-				continue
-			default:
-				if enable {
-					positionalParams = args[i:]
-					lastExitCode = 0
-					return
-				}
-				fmt.Fprintf(os.Stderr, "set: %s: invalid option\n", args[i])
-				lastExitCode = 2
-				return
-			}
-		nextArg:
+		for i < len(args) && len(args[i]) > 0 && args[i] == "--" {
 			i++
 		}
 		if i < len(args) {
 			positionalParams = args[i:]
 		}
 		lastExitCode = 0
-	case "setopt":
-		builtinSetopt(args)
-	case "unsetopt":
-		builtinUnsetopt(args)
 	case "env":
 		varMu.Lock()
 		var envVars []string
