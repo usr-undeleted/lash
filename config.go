@@ -132,9 +132,6 @@ func (c *Config) Set(key, val string) bool {
 	case "glob-case-sensitivity":
 		c.GlobCaseSensitive = val != "0"
 		return true
-	case "theme":
-		c.Theme = val
-		return true
 	}
 	return false
 }
@@ -151,7 +148,6 @@ var configKeys = []configEntry{
 	{"history-size", "<int>", "max number of history entries"},
 	{"glob-dotfiles", "<0|1>", "include dotfiles in glob expansion"},
 	{"glob-case-sensitivity", "<0|1>", "case-sensitive (1) or insensitive (0) glob matching"},
-	{"theme", "<name>", "selected prompt theme name"},
 }
 
 func printConfigList() {
