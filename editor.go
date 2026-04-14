@@ -365,6 +365,8 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 					e.eofCount++
 					if e.eofCount < 10 {
 						fmt.Fprintf(os.Stdout, "Use \"exit\" to leave the shell.\r\n")
+						os.Stdout.Write([]byte(prompt))
+						e.screenRow = 0
 						continue
 					}
 				}
