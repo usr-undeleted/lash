@@ -168,7 +168,11 @@ func globRecursive(pattern string) []string {
 
 	baseDir := prefix
 	if baseDir == "" {
-		baseDir = "."
+		if strings.HasPrefix(pattern, "/") {
+			baseDir = "/"
+		} else {
+			baseDir = "."
+		}
 	}
 
 	if len(suffixParts) == 0 {
