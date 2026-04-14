@@ -852,7 +852,6 @@ func handleGlobalCommand(args []string) {
 			fmt.Fprintf(os.Stderr, "lash: failed to save config: %s\n", err)
 			os.Exit(1)
 		}
-		fmt.Printf("lash: set %s = %s\n", key, val)
 		os.Exit(0)
 	default:
 		fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", sub)

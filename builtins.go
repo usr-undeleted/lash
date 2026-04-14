@@ -277,7 +277,6 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				lastExitCode = 1
 				return
 			}
-			fmt.Printf("lash: set %s = %s\n", key, val)
 			lastExitCode = 0
 		case "version":
 			printVersion(ctx.Cfg.LogoSize)
