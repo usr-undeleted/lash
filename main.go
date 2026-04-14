@@ -31,6 +31,15 @@ var currentConfig *Config
 var setErrExit bool
 var setXTrace bool
 var setPipefail bool
+var setNoClobber bool
+var setNoUnset bool
+var setNoGlob bool
+var setNotify bool
+var setHistIgnoreDups bool
+var setHistIgnoreSpace bool
+var setHupOnExit bool
+var setIgnoreEOF bool
+var setHashAll bool
 var inCondition bool
 var inSubshell bool
 var shellInteractive bool
@@ -931,6 +940,7 @@ func initShell() *Config {
 	initAliases()
 	initVarTable()
 	initArrayTable()
+	initOptions()
 	os.Setenv("PS1", defaultPS1)
 	setVar("PS1", defaultPS1, true)
 

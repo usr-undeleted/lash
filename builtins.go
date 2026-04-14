@@ -17,7 +17,7 @@ var allBuiltins = []string{
 	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
 	"source", ".", "return", "local", "shift", "read", "set", "fetch", "trap",
-	"test", "[", "declare", "mapfile", "readarray",
+	"test", "[", "declare", "mapfile", "readarray", "setopt", "unsetopt",
 }
 
 func isBuiltin(cmd string) bool {
@@ -426,31 +426,46 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			enable := args[i][0] == '-'
 			flag := args[i][1:]
 			switch flag {
-			case "e":
-				setErrExit = enable
-			case "x":
-				setXTrace = enable
+			case "e", "x", "u", "f", "C":
+				if ok := setOption(flag, enable); !ok {
+					fmt.Fprintf(os.Stderr, "set: %s: invalid option\n", args[i])
+					lastExitCode = 2
+					return
+				}
 			case "-":
 				i++
 				positionalParams = args[i:]
 				lastExitCode = 0
 				return
 			case "o":
-				i++
-				if i >= len(args) {
-					fmt.Fprintln(os.Stderr, "set: -o: option requires an argument")
+				enableO := args[i][0] == '-'
+				if i+1 >= len(args) {
+					if enableO {
+						listOptions()
+					} else {
+						listOptionsRestore()
+					}
+					lastExitCode = 0
+					return
+				}
+				next := args[i+1]
+				if next[0] == '-' || next[0] == '+' {
+					listOptionsRestore()
+					lastExitCode = 0
+					i++
+					goto nextArg
+				}
+				optName := next
+				if ok := setOption(optName, enableO); !ok {
+					fmt.Fprintf(os.Stderr, "set: -o: %s: invalid option\n", optName)
+					if hint := didYouMeanOption(optName); hint != "" {
+						fmt.Fprintf(os.Stderr, "set: did you mean: %s\n", hint)
+					}
 					lastExitCode = 2
 					return
 				}
-				opt := args[i]
-				switch opt {
-				case "pipefail":
-					setPipefail = enable
-				default:
-					fmt.Fprintf(os.Stderr, "set: -o: %s: invalid option\n", opt)
-					lastExitCode = 2
-					return
-				}
+				i += 2
+				continue
 			default:
 				if enable {
 					positionalParams = args[i:]
@@ -461,12 +476,17 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				lastExitCode = 2
 				return
 			}
+		nextArg:
 			i++
 		}
 		if i < len(args) {
 			positionalParams = args[i:]
 		}
 		lastExitCode = 0
+	case "setopt":
+		builtinSetopt(args)
+	case "unsetopt":
+		builtinUnsetopt(args)
 	case "env":
 		varMu.Lock()
 		var envVars []string
