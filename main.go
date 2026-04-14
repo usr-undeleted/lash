@@ -35,6 +35,10 @@ var inCondition bool
 var inSubshell bool
 var shellInteractive bool
 var shellLogin bool
+var currentSourceFile string
+var currentSourceLine int
+var currentFuncName string
+var callDepth int
 
 var heredocMap map[string]*heredocInfo
 var heredocCount int
@@ -245,6 +249,60 @@ func getPrompt() string {
 		ps1 = defaultPS1
 	}
 	return expandPS1(ps1)
+}
+
+func getPS2() string {
+	ps2 := getVar("PS2")
+	if ps2 == "" {
+		ps2 = "> "
+	}
+	return expandPS1(ps2)
+}
+
+func getPS4() string {
+	ps4 := getVar("PS4")
+	if ps4 == "" {
+		ps4 = "+ "
+	}
+	expanded := expandPS1(ps4)
+	expanded = expandPS4Escapes(expanded)
+	return expanded
+}
+
+func expandPS4Escapes(s string) string {
+	var b strings.Builder
+	runes := []rune(s)
+	for i := 0; i < len(runes); i++ {
+		if runes[i] != '\\' {
+			b.WriteRune(runes[i])
+			continue
+		}
+		i++
+		if i >= len(runes) {
+			b.WriteByte('\\')
+			break
+		}
+		switch runes[i] {
+		case 's':
+			if currentSourceFile != "" {
+				b.WriteString(currentSourceFile)
+			}
+		case 'S':
+			if currentFuncName != "" {
+				b.WriteString(currentFuncName)
+			} else if currentSourceFile != "" {
+				b.WriteString(currentSourceFile)
+			}
+		case 'N':
+			b.WriteString(strconv.Itoa(callDepth))
+		case 'L':
+			b.WriteString(strconv.Itoa(currentSourceLine))
+		default:
+			b.WriteByte('\\')
+			b.WriteRune(runes[i])
+		}
+	}
+	return b.String()
 }
 
 func expandPS1(ps1 string) string {
@@ -642,7 +700,11 @@ func sourceFile(path string, cfg *Config) int {
 		return line + "\n", nil
 	}
 
+	savedSourceFile := currentSourceFile
+	savedSourceLine := currentSourceLine
+	currentSourceFile = path
 	for lineIdx < len(allLines) {
+		currentSourceLine = lineIdx + 1
 		line := allLines[lineIdx]
 		lineIdx++
 		trimmed := strings.TrimSpace(line)
@@ -665,6 +727,8 @@ func sourceFile(path string, cfg *Config) int {
 		executeNode(prog, ctx)
 	}
 
+	currentSourceFile = savedSourceFile
+	currentSourceLine = savedSourceLine
 	return lastExitCode
 }
 
@@ -884,6 +948,7 @@ func initShell() *Config {
 	if cmdString != "" {
 		stdinReader = bufio.NewReader(os.Stdin)
 		returnFlag = false
+		currentSourceLine = 1
 		prog := Parse(cmdString)
 		ctx := defaultContext()
 		executeNode(prog, ctx)
@@ -928,7 +993,7 @@ func main() {
 		}
 
 		line = preprocessHeredocs(line, func() (string, error) {
-			nextLine, err := editor.ReadLine("> ")
+			nextLine, err := editor.ReadLine(getPS2())
 			if err != nil {
 				return "", err
 			}
@@ -948,6 +1013,7 @@ func main() {
 			suspendedCommand = ""
 		}
 		cmdNumber++
+		currentSourceLine = cmdNumber
 		prog := Parse(line)
 		executeNode(prog, defaultContext())
 	}

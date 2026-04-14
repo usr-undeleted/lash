@@ -185,7 +185,7 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 	}
 
 	if setXTrace {
-		fmt.Fprintf(ctx.Stderr, "+ %s\n", strings.Join(expanded, " "))
+		fmt.Fprintf(ctx.Stderr, "%s%s\n", getPS4(), strings.Join(expanded, " "))
 	}
 
 	prefixEnv := make(map[string]string)
@@ -216,7 +216,12 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 		positionalParams = expanded[1:]
 		setVar("0", expanded[0], false)
 		returnFlag = false
+		savedFuncName := currentFuncName
+		currentFuncName = expanded[0]
+		callDepth++
 		executeNode(fn.Body, ctx)
+		callDepth--
+		currentFuncName = savedFuncName
 		returnFlag = false
 		popArrayScope()
 		popScope()
@@ -694,6 +699,7 @@ func executeSelect(node *SelectStmt, ctx *ExecContext) {
 	if prompt == "" {
 		prompt = "#? "
 	}
+	prompt = expandPS1(prompt)
 
 	runSelectLoop(node, words, reader, prompt, ctx)
 }
@@ -1027,8 +1033,11 @@ func executeSubshell(node *Subshell, ctx *ExecContext) {
 
 	oldInSubshell := inSubshell
 	inSubshell = true
+	callDepth++
 
 	executeNode(node.Body, ctx)
+
+	callDepth--
 
 	os.Stdout = savedStdout
 	w.Close()
