@@ -317,9 +317,26 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 			os.Stdout.Write([]byte("\r\n"))
 			line := string(e.buf)
 			if strings.TrimSpace(line) != "" {
-				if len(e.history) == 0 || e.history[len(e.history)-1] != line {
-					e.history = append(e.history, line)
-					e.saveHistory(line)
+				if setHistIgnoreSpace && len(line) > 0 && line[0] == ' ' {
+					return line, nil
+				}
+				if setHistIgnoreDups {
+					skip := false
+					for _, h := range e.history {
+						if h == line {
+							skip = true
+							break
+						}
+					}
+					if !skip {
+						e.history = append(e.history, line)
+						e.saveHistory(line)
+					}
+				} else {
+					if len(e.history) == 0 || e.history[len(e.history)-1] != line {
+						e.history = append(e.history, line)
+						e.saveHistory(line)
+					}
 				}
 			}
 			return line, nil
@@ -650,9 +667,27 @@ func (e *LineEditor) handleReverseSearch(prompt string, prevBufW int) int {
 			os.Stdout.Write([]byte("\r\n"))
 			line := string(e.buf)
 			if strings.TrimSpace(line) != "" {
-				if len(e.history) == 0 || e.history[len(e.history)-1] != line {
-					e.history = append(e.history, line)
-					e.saveHistory(line)
+				if setHistIgnoreSpace && len(line) > 0 && line[0] == ' ' {
+					e.accepted = true
+					return bufWidth(e.buf)
+				}
+				if setHistIgnoreDups {
+					skip := false
+					for _, h := range e.history {
+						if h == line {
+							skip = true
+							break
+						}
+					}
+					if !skip {
+						e.history = append(e.history, line)
+						e.saveHistory(line)
+					}
+				} else {
+					if len(e.history) == 0 || e.history[len(e.history)-1] != line {
+						e.history = append(e.history, line)
+						e.saveHistory(line)
+					}
 				}
 			}
 			e.accepted = true
