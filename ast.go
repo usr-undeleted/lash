@@ -343,7 +343,7 @@ func (p *parser) parseSimpleCommand() Node {
 			break
 		}
 
-		if t == ">" || t == ">>" || t == "<" || t == "<<" || t == "<<-" || t == "<<<" {
+		if t == ">" || t == ">>" || t == ">|" || t == "<" || t == "<<" || t == "<<-" || t == "<<<" {
 			op := p.advance()
 			target := p.advance()
 			if target == "" || target == ";" || target == "&&" || target == "||" || target == "|" || target == ")" || target == "}" {

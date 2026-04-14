@@ -234,6 +234,10 @@ func tokenize(line string) []string {
 				flushCurrent()
 				tokens = append(tokens, ">>")
 				i++
+			} else if i+1 < len(bytes) && bytes[i+1] == '|' {
+				flushCurrent()
+				tokens = append(tokens, ">|")
+				i++
 			} else if i+1 < len(bytes) && bytes[i+1] == '(' {
 				flushCurrent()
 				procSubstDepth = 1

@@ -381,6 +381,35 @@ func executePipelineNode(pipe *Pipeline, ctx *ExecContext) {
 				if f := resolveProcSubstFile(redir.Target); f != nil {
 					c.Stdout = f
 				} else {
+					if setNoClobber {
+						if _, err := os.Stat(redir.Target); err == nil {
+							fmt.Fprintf(os.Stderr, "lash: %s: file exists\n", redir.Target)
+							lastExitCode = 1
+							for _, p := range pipes {
+								p.r.Close()
+								p.w.Close()
+							}
+							return
+						}
+					}
+					flag := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+					f, err := os.OpenFile(redir.Target, flag, 0644)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+						lastExitCode = 1
+						for _, p := range pipes {
+							p.r.Close()
+							p.w.Close()
+						}
+						return
+					}
+					defer f.Close()
+					c.Stdout = f
+				}
+			case ">|":
+				if f := resolveProcSubstFile(redir.Target); f != nil {
+					c.Stdout = f
+				} else {
 					flag := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
 					f, err := os.OpenFile(redir.Target, flag, 0644)
 					if err != nil {
@@ -898,6 +927,35 @@ func applyRedirections(redirs []Redir, ctx *ExecContext) (*ExecContext, func(), 
 				newCtx = newCtx.withOverrides(f, nil, nil)
 			}
 		case ">":
+			if f := resolveProcSubstFile(r.Target); f != nil {
+				newCtx = newCtx.withOverrides(nil, f, nil)
+			} else {
+				if setNoClobber {
+					if _, err := os.Stat(r.Target); err == nil {
+						fmt.Fprintf(os.Stderr, "lash: %s: file exists\n", r.Target)
+						lastExitCode = 1
+						return ctx, func() {
+							for _, of := range opened {
+								of.Close()
+							}
+						}, true
+					}
+				}
+				flag := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+				f, err := os.OpenFile(r.Target, flag, 0644)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
+					lastExitCode = 1
+					return ctx, func() {
+						for _, of := range opened {
+							of.Close()
+						}
+					}, true
+				}
+				opened = append(opened, f)
+				newCtx = newCtx.withOverrides(nil, f, nil)
+			}
+		case ">|":
 			if f := resolveProcSubstFile(r.Target); f != nil {
 				newCtx = newCtx.withOverrides(nil, f, nil)
 			} else {
