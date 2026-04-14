@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"strconv"
 	"strings"
 )
 
@@ -73,6 +75,18 @@ func expandArrayAtSentinel(expanded string, result []string) []string {
 	return result
 }
 
+func getArgMax() int {
+	data, err := os.ReadFile("/proc/sys/kernel/arg_max")
+	if err != nil {
+		return 2097152
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || n <= 0 {
+		return 2097152
+	}
+	return n
+}
+
 func expandGlobs(tokens []string) []string {
 	if setNoGlob {
 		var result []string
@@ -81,31 +95,33 @@ func expandGlobs(tokens []string) []string {
 		}
 		return result
 	}
+	safeMax := getArgMax() / 2
 	var result []string
+	totalSize := 0
 	for _, t := range tokens {
+		var expanded []string
 		if hasExtGlob(t) {
-			matches := matchExtGlob(t)
-			if len(matches) > 0 {
-				result = append(result, matches...)
-			} else {
-				result = append(result, restoreGlobMarkers(t))
-			}
+			expanded = matchExtGlob(t)
 		} else if hasDoubleStar(t) {
-			matches := globRecursive(t)
-			if len(matches) > 0 {
-				result = append(result, matches...)
-			} else {
-				result = append(result, restoreGlobMarkers(t))
-			}
+			expanded = globRecursive(t)
 		} else if strings.ContainsAny(t, "*?[") {
-			matches, err := customGlob(t)
-			if err == nil && len(matches) > 0 {
-				result = append(result, matches...)
-			} else {
-				result = append(result, restoreGlobMarkers(t))
-			}
-		} else {
+			expanded, _ = customGlob(t)
+		}
+		if len(expanded) == 0 {
+			literal := restoreGlobMarkers(t)
+			result = append(result, literal)
+			totalSize += len(literal) + 1
+			continue
+		}
+		expSize := 0
+		for _, e := range expanded {
+			expSize += len(e) + 1
+		}
+		if totalSize+expSize > safeMax {
 			result = append(result, restoreGlobMarkers(t))
+		} else {
+			result = append(result, expanded...)
+			totalSize += expSize
 		}
 	}
 	return result
