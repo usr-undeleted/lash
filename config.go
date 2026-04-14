@@ -252,6 +252,26 @@ func printConfigList() {
 	}
 }
 
+func printConfigShow(c *Config) {
+	fmt.Printf("%-22s %s\n", "syntax-color", boolToStr(c.SyntaxColor))
+	fmt.Printf("%-22s %s\n", "logosize", c.LogoSize)
+	fmt.Printf("%-22s %d\n", "history-size", c.HistorySize)
+	fmt.Printf("%-22s %s\n", "glob-dotfiles", boolToStr(c.GlobDotfiles))
+	fmt.Printf("%-22s %s\n", "glob-case-sensitivity", boolToStr(c.GlobCaseSensitive))
+	fmt.Printf("%-22s %s\n", "errexit", boolToStr(c.ErrExit))
+	fmt.Printf("%-22s %s\n", "xtrace", boolToStr(c.XTrace))
+	fmt.Printf("%-22s %s\n", "pipefail", boolToStr(c.Pipefail))
+	fmt.Printf("%-22s %s\n", "noclobber", boolToStr(c.NoClobber))
+	fmt.Printf("%-22s %s\n", "nounset", boolToStr(c.NoUnset))
+	fmt.Printf("%-22s %s\n", "noglob", boolToStr(c.NoGlob))
+	fmt.Printf("%-22s %s\n", "notify", boolToStr(c.Notify))
+	fmt.Printf("%-22s %s\n", "hist-ignore-dups", boolToStr(c.HistIgnoreDups))
+	fmt.Printf("%-22s %s\n", "hist-ignore-space", boolToStr(c.HistIgnoreSpace))
+	fmt.Printf("%-22s %s\n", "huponexit", boolToStr(c.HupOnExit))
+	fmt.Printf("%-22s %s\n", "ignoreeof", boolToStr(c.IgnoreEOF))
+	fmt.Printf("%-22s %s\n", "hashall", boolToStr(c.HashAll))
+}
+
 func boolToStr(b bool) string {
 	if b {
 		return "1"

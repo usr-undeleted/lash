@@ -259,6 +259,11 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				lastExitCode = 0
 				return
 			}
+			if len(args) == 3 && args[2] == "show" {
+				printConfigShow(ctx.Cfg)
+				lastExitCode = 0
+				return
+			}
 			if len(args) < 4 {
 				fmt.Fprintln(os.Stderr, "lash: usage: lash set-config <key> <value>")
 				fmt.Fprintln(os.Stderr, "       lash set-config list")
