@@ -328,6 +328,13 @@ func executePipelineNode(pipe *Pipeline, ctx *ExecContext) {
 
 		resolvedArgs, extraFiles := resolveProcSubstArgs(expanded)
 
+		exePath := resolvedArgs[0]
+		if !strings.Contains(exePath, "/") {
+			if cached, ok := hashLookup(exePath); ok {
+				exePath = cached
+			}
+		}
+
 		var env []string
 		if len(cmdNode.Assignments) > 0 {
 			prefixEnv := make(map[string]string)
@@ -338,7 +345,7 @@ func executePipelineNode(pipe *Pipeline, ctx *ExecContext) {
 			env = buildEnvWithPrefix(prefixEnv)
 		}
 
-		c := exec.Command(resolvedArgs[0], resolvedArgs[1:]...)
+		c := exec.Command(exePath, resolvedArgs[1:]...)
 		c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 		c.Stderr = ctx.Stderr
 		if len(extraFiles) > 0 {
@@ -1007,7 +1014,14 @@ func applyRedirections(redirs []Redir, ctx *ExecContext) (*ExecContext, func(), 
 func executeForeground(args []string, ctx *ExecContext, prefixEnv map[string]string) {
 	resolvedArgs, extraFiles := resolveProcSubstArgs(args)
 
-	cmd := exec.Command(resolvedArgs[0], resolvedArgs[1:]...)
+	exePath := resolvedArgs[0]
+	if !strings.Contains(exePath, "/") {
+		if cached, ok := hashLookup(exePath); ok {
+			exePath = cached
+		}
+	}
+
+	cmd := exec.Command(exePath, resolvedArgs[1:]...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = ctx.Stdin
 	cmd.Stdout = ctx.Stdout
@@ -1038,13 +1052,21 @@ func executeForeground(args []string, ctx *ExecContext, prefixEnv map[string]str
 	} else {
 		lastExitCode = exitCode
 	}
+	setVar("COMMAND_PATH", exePath, false)
 	signalInterruptFromExitCode(lastExitCode)
 }
 
 func executeBackground(args []string, ctx *ExecContext, prefixEnv map[string]string) {
 	resolvedArgs, extraFiles := resolveProcSubstArgs(args)
 
-	cmd := exec.Command(resolvedArgs[0], resolvedArgs[1:]...)
+	exePath := resolvedArgs[0]
+	if !strings.Contains(exePath, "/") {
+		if cached, ok := hashLookup(exePath); ok {
+			exePath = cached
+		}
+	}
+
+	cmd := exec.Command(exePath, resolvedArgs[1:]...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdin = ctx.Stdin
 	cmd.Stdout = ctx.Stdout
@@ -1072,6 +1094,7 @@ func executeBackground(args []string, ctx *ExecContext, prefixEnv map[string]str
 	commandStr := strings.Join(resolvedArgs, " ")
 	job := addJob(pid, pid, JobRunning, commandStr)
 	fmt.Printf("[%d] %d\n", job.Number, pid)
+	setVar("COMMAND_PATH", exePath, false)
 	lastExitCode = 0
 }
 

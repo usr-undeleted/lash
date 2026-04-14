@@ -1323,34 +1323,19 @@ func (e *LineEditor) completeCommand(partial string) []string {
 		}
 	}
 
-	path := os.Getenv("PATH")
-	if path != "" {
-		seen := make(map[string]bool)
-		for _, dir := range filepath.SplitList(path) {
-			entries, err := os.ReadDir(dir)
-			if err != nil {
-				continue
-			}
-			for _, entry := range entries {
-				name := entry.Name()
-				if !strings.HasPrefix(name, partial) {
-					continue
-				}
-				if seen[name] {
-					continue
-				}
-				seen[name] = true
-				fullPath := filepath.Join(dir, name)
-				info, err := os.Stat(fullPath)
-				if err != nil {
-					continue
-				}
-				if info.Mode()&0111 != 0 && !info.IsDir() {
-					matches = append(matches, name)
-				}
-			}
+	hashScanPath()
+	hashMu.RLock()
+	seen := make(map[string]bool)
+	for name := range hashTable {
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		if strings.HasPrefix(name, partial) {
+			matches = append(matches, name)
 		}
 	}
+	hashMu.RUnlock()
 
 	sort.Strings(matches)
 	return matches

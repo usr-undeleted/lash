@@ -1438,8 +1438,14 @@ func builtinHash(args []string) {
 		if !ok {
 			fmt.Fprintf(os.Stderr, "hash: %s: not found\n", name)
 			lastExitCode = 1
+			continue
 		}
-		_ = resolved
+		hashMu.Lock()
+		hashTable[name] = resolved
+		if _, exists := hashHits[name]; !exists {
+			hashHits[name] = 0
+		}
+		hashMu.Unlock()
 	}
 	lastExitCode = 0
 }
