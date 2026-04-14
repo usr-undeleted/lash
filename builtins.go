@@ -17,7 +17,7 @@ var allBuiltins = []string{
 	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
 	"source", ".", "return", "local", "shift", "read", "set", "fetch", "trap",
-	"test", "[", "declare", "mapfile", "readarray",
+	"test", "[", "declare", "mapfile", "readarray", "hash",
 }
 
 func isBuiltin(cmd string) bool {
@@ -244,6 +244,9 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				val = val[1 : len(val)-1]
 			}
 			setVar(key, val, true)
+			if key == "PATH" {
+				hashClear()
+			}
 			lastExitCode = 0
 		}
 	case "lash":
@@ -930,6 +933,8 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		builtinDeclare(args)
 	case "mapfile", "readarray":
 		builtinMapfile(args, ctx)
+	case "hash":
+		builtinHash(args)
 	}
 }
 
@@ -1330,5 +1335,111 @@ func builtinMapfile(args []string, ctx *ExecContext) {
 
 	arr := &ArrayVar{Indexed: elements, IsIndexed: true}
 	setArray(arrayName, arr)
+	lastExitCode = 0
+}
+
+func builtinHash(args []string) {
+	if len(args) == 1 {
+		names := hashNames()
+		if len(names) == 0 {
+			lastExitCode = 0
+			return
+		}
+		hashMu.RLock()
+		for _, name := range names {
+			fmt.Printf("%4d  %s\n", hashHits[name], hashTable[name])
+		}
+		hashMu.RUnlock()
+		lastExitCode = 0
+		return
+	}
+
+	i := 1
+	clearAll := false
+	deleteMode := false
+	listMode := false
+	var manualPath, manualName string
+
+	for i < len(args) && len(args[i]) > 0 && args[i][0] == '-' {
+		switch args[i] {
+		case "-r":
+			clearAll = true
+		case "-d":
+			deleteMode = true
+		case "-l":
+			listMode = true
+		case "-p":
+			if i+2 >= len(args) {
+				fmt.Fprintln(os.Stderr, "hash: -p: requires path and name arguments")
+				lastExitCode = 2
+				return
+			}
+			manualPath = args[i+1]
+			manualName = args[i+2]
+			i += 2
+		default:
+			fmt.Fprintf(os.Stderr, "hash: %s: invalid option\n", args[i])
+			lastExitCode = 2
+			return
+		}
+		i++
+	}
+
+	if clearAll {
+		hashClear()
+		lastExitCode = 0
+		return
+	}
+
+	if manualPath != "" {
+		if !hashRegister(manualPath, manualName) {
+			fmt.Fprintf(os.Stderr, "hash: %s: not found\n", manualPath)
+			lastExitCode = 1
+			return
+		}
+		lastExitCode = 0
+		return
+	}
+
+	if listMode {
+		names := hashNames()
+		if len(names) == 0 {
+			lastExitCode = 0
+			return
+		}
+		hashMu.RLock()
+		for _, name := range names {
+			fmt.Printf("builtin hash -p %s %s\n", hashTable[name], name)
+		}
+		hashMu.RUnlock()
+		lastExitCode = 0
+		return
+	}
+
+	if deleteMode {
+		if i >= len(args) {
+			fmt.Fprintln(os.Stderr, "hash: -d: requires name arguments")
+			lastExitCode = 2
+			return
+		}
+		hashDelete(args[i:])
+		lastExitCode = 0
+		return
+	}
+
+	if i >= len(args) {
+		fmt.Fprintln(os.Stderr, "hash: usage: hash [-rdl] [-p path name] [name ...]")
+		lastExitCode = 2
+		return
+	}
+
+	for _, name := range args[i:] {
+		resolved, ok := hashLookup(name)
+		if !ok {
+			fmt.Fprintf(os.Stderr, "hash: %s: not found\n", name)
+			lastExitCode = 1
+		}
+		_ = resolved
+	}
 	lastExitCode = 0
 }

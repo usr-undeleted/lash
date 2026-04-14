@@ -77,6 +77,7 @@ func initVarTable() {
 	exportedVars = make(map[string]bool)
 	funcTable = make(map[string]*FuncDef)
 	heredocMap = make(map[string]*heredocInfo)
+	initHashTable()
 	for _, env := range os.Environ() {
 		if idx := strings.Index(env, "="); idx >= 0 {
 			key := env[:idx]

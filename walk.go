@@ -198,6 +198,9 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 			} else {
 				val := expandString(a.Value)
 				prefixEnv[a.Name] = val
+				if a.Name == "PATH" {
+					hashClear()
+				}
 			}
 		}
 	}
