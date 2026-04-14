@@ -134,7 +134,7 @@ func splitPathComponents(pattern string) []string {
 	return strings.Split(pattern, "/")
 }
 
-func globRecursive(pattern string) []string {
+func globRecursive(pattern string, maxBytes, maxCount int) []string {
 	parts := splitPathComponents(pattern)
 
 	dsIndex := -1
@@ -157,13 +157,18 @@ func globRecursive(pattern string) []string {
 
 	var result []string
 	seen := make(map[string]bool)
+	totalBytes := 0
+	count := 0
 
-	addMatch := func(p string) {
+	addMatch := func(p string) bool {
 		clean := filepath.Clean(p)
 		if !seen[clean] {
 			seen[clean] = true
 			result = append(result, clean)
+			totalBytes += len(clean) + 1
+			count++
 		}
+		return totalBytes < maxBytes && count < maxCount
 	}
 
 	baseDir := prefix
@@ -181,7 +186,9 @@ func globRecursive(pattern string) []string {
 				return nil
 			}
 			if includeDotfile(d.Name()) {
-				addMatch(path)
+				if !addMatch(path) {
+					return filepath.SkipAll
+				}
 			}
 			return nil
 		})
@@ -194,12 +201,14 @@ func globRecursive(pattern string) []string {
 	return result
 }
 
-func collectGlobMatches(dir string, suffixPattern string, addMatch func(string)) {
+func collectGlobMatches(dir string, suffixPattern string, addMatch func(string) bool) {
 	fullPattern := filepath.Join(dir, suffixPattern)
 	matches, err := customGlob(fullPattern)
 	if err == nil {
 		for _, m := range matches {
-			addMatch(m)
+			if !addMatch(m) {
+				return
+			}
 		}
 	}
 

@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+const maxRecursiveGlobEntries = 10000
 const atSentinel = "\x00LASH_AT\x00"
 const arrayAtSentinel = "\x00LASH_ARRAY_AT\x00"
 
@@ -100,10 +101,17 @@ func expandGlobs(tokens []string) []string {
 	totalSize := 0
 	for _, t := range tokens {
 		var expanded []string
+		isRecursive := false
 		if hasExtGlob(t) {
 			expanded = matchExtGlob(t)
 		} else if hasDoubleStar(t) {
-			expanded = globRecursive(t)
+			remaining := safeMax - totalSize
+			budget := remaining
+			if budget > 262144 {
+				budget = 262144
+			}
+			expanded = globRecursive(t, budget, maxRecursiveGlobEntries)
+			isRecursive = true
 		} else if strings.ContainsAny(t, "*?[") {
 			expanded, _ = customGlob(t)
 		}
@@ -111,6 +119,11 @@ func expandGlobs(tokens []string) []string {
 			literal := restoreGlobMarkers(t)
 			result = append(result, literal)
 			totalSize += len(literal) + 1
+			continue
+		}
+		if isRecursive {
+			result = append(result, expanded...)
+			totalSize = safeMax
 			continue
 		}
 		expSize := 0
