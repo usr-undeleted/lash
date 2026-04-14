@@ -870,6 +870,11 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  login          start as a login shell")
 	fmt.Fprintln(os.Stderr, "  norc           do not source rc files")
 	fmt.Fprintln(os.Stderr, "  help           show this help")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "commands:")
+	fmt.Fprintln(os.Stderr, "  version                    show version info")
+	fmt.Fprintln(os.Stderr, "  set-config <key> <value>   set a config option")
+	fmt.Fprintln(os.Stderr, "  theme <set|save|list|delete>  manage prompt themes")
 }
 
 func initShell() *Config {
@@ -940,15 +945,6 @@ func initShell() *Config {
 	cfg := LoadConfig()
 	currentConfig = cfg
 
-	if !norc {
-		if shellLogin {
-			sourceProfile(cfg)
-		}
-		if shellInteractive {
-			sourceLashrc(cfg)
-		}
-	}
-
 	if len(themeArgs) > 0 {
 		if len(themeArgs) < 2 {
 			printThemeHelp()
@@ -972,6 +968,15 @@ func initShell() *Config {
 			lastExitCode = 1
 		}
 		os.Exit(lastExitCode)
+	}
+
+	if !norc {
+		if shellLogin {
+			sourceProfile(cfg)
+		}
+		if shellInteractive {
+			sourceLashrc(cfg)
+		}
 	}
 
 	if !norc && cfg.Theme != "" {
