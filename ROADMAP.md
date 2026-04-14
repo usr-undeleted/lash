@@ -96,7 +96,7 @@
 - [ ] Key binding configuration
 - [ ] Shell options system (`setopt`, `shopt` style)
 - [x] Login shell vs non-login shell vs interactive detection
-- [ ] Profile files (`~/.lash_profile`, `/etc/lash_profile`)
+- [x] Profile files (`~/.lash_profile`, `/etc/lash_profile`)
 - [ ] `PATH` management helpers
 - [ ] Colored output support (LS_COLORS, GREP_COLORS integration)
 - [ ] Per-directory local config (`.lashenv`)

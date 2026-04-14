@@ -682,6 +682,26 @@ func sourceLashrc(cfg *Config) {
 	sourceFile(path, cfg)
 }
 
+func sourceIfExists(path string, cfg *Config) {
+	f, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	f.Close()
+	sourceFile(path, cfg)
+}
+
+func sourceProfile(cfg *Config) {
+	// /etc/lash_profile — system-wide login profile, does not exist by default
+	sourceIfExists("/etc/lash_profile", cfg)
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+	sourceIfExists(filepath.Join(home, ".lash_profile"), cfg)
+}
+
 func preprocessHeredocs(line string, readNextLine func() (string, error)) string {
 	tokens := tokenize(line)
 	var result strings.Builder
@@ -852,8 +872,13 @@ func initShell() *Config {
 	cfg := LoadConfig()
 	currentConfig = cfg
 
-	if shellInteractive && !norc {
-		sourceLashrc(cfg)
+	if !norc {
+		if shellLogin {
+			sourceProfile(cfg)
+		}
+		if shellInteractive {
+			sourceLashrc(cfg)
+		}
 	}
 
 	if cmdString != "" {
