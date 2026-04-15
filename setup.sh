@@ -444,12 +444,22 @@ setup_config() {
     hist_dups=$(ask_config "hist-ignore-dups" "skip duplicate consecutive history entries" "0")
     hist_space=$(ask_config "hist-ignore-space" "skip commands starting with space from history" "0")
 
+    local hist_size=""
+    while true; do
+        hist_size=$(ask_choice "History size? (max number of history entries)" "1000")
+        if [[ "$hist_size" =~ ^[0-9]+$ ]] && [ "$hist_size" -gt 0 ] 2>/dev/null; then
+            break
+        fi
+        c "$YELLOW" >&2; printf '      must be a positive number\n' >&2; c "$RESET" >&2
+    done
+
     echo "noclobber=$noclobber" >> "$PREFS_FILE.tmp"
     echo "lashenv=$lashenv" >> "$PREFS_FILE.tmp"
     echo "ignoreeof=$ignoreeof" >> "$PREFS_FILE.tmp"
     echo "notify=$notify" >> "$PREFS_FILE.tmp"
     echo "hist-ignore-dups=$hist_dups" >> "$PREFS_FILE.tmp"
     echo "hist-ignore-space=$hist_space" >> "$PREFS_FILE.tmp"
+    echo "history-size=$hist_size" >> "$PREFS_FILE.tmp"
 
     printf '\n'
     c "$DIM"; desc "Applying configuration..."; c "$RESET"
@@ -463,6 +473,7 @@ setup_config() {
         "$SCRIPT_DIR/lash" set-config notify "$notify" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config hist-ignore-dups "$hist_dups" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config hist-ignore-space "$hist_space" 2>/dev/null || true
+        "$SCRIPT_DIR/lash" set-config history-size "$hist_size" 2>/dev/null || true
         success "Configuration applied"
     else
         warn "Could not apply config — binary not found"
@@ -493,7 +504,7 @@ setup_themes() {
     done
     success "Copied ${#theme_list[@]} themes to $THEMES_DIR/"
 
-    printf '  Available themes:\n\n'
+    printf '  Defaults themes:\n\n'
     local i=1
     for t in "${theme_list[@]}"; do
         printf '    [%d] %s\n' "$i" "$t"
