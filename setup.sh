@@ -276,19 +276,20 @@ setup_rc_files() {
     if [ -f "$HOME/.lashrc" ]; then
         info "~/.lashrc already exists, skipping"
     else
-        cat > "$HOME/.lashrc" << 'RCEOF'
+        local editor="${EDITOR:-vi}"
+        cat > "$HOME/.lashrc" << RCEOF
 # lash startup configuration
 # Lines starting with # are comments
 
 # Environment variables
-# export EDITOR="vim"
-# export PATH="$PATH:/custom/path"
+export EDITOR="$editor"
+# export PATH="\$PATH:/custom/path"
 
 # Source other rc files
 # source ~/.lash_aliases
 
 # Aliases
-# alias ll {ALL} { ls -la $@ ; }
+# alias ll {ALL} { ls -la \$@ ; }
 RCEOF
         success "Created ~/.lashrc"
         created_rc=1
