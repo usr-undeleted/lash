@@ -124,17 +124,9 @@ func (e *LineEditor) executeAction(action string, prompt string, prevW *int) (st
 				return line, nil, true
 			}
 			if setHistIgnoreDups {
-				skip := false
-				for _, h := range e.history {
-					if h == line {
-						skip = true
-						break
-					}
-				}
-				if !skip {
-					e.history = append(e.history, line)
-					e.saveHistory(line)
-				}
+				e.removeHistoryDup(line)
+				e.history = append(e.history, line)
+				e.saveHistory(line)
 			} else {
 				if len(e.history) == 0 || e.history[len(e.history)-1] != line {
 					e.history = append(e.history, line)
@@ -296,6 +288,31 @@ func (e *LineEditor) saveHistory(command string) {
 	if len(e.history) > e.config.HistorySize {
 		e.trimHistoryFile()
 	}
+}
+
+func (e *LineEditor) removeHistoryDup(line string) {
+	for i, h := range e.history {
+		if h == line {
+			e.history = append(e.history[:i], e.history[i+1:]...)
+			e.rewriteHistoryFile()
+			break
+		}
+	}
+}
+
+func (e *LineEditor) rewriteHistoryFile() {
+	path := historyPath()
+	if path == "" {
+		return
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return
+	}
+	for _, h := range e.history {
+		fmt.Fprintf(f, "#%d %s\n", time.Now().Unix(), h)
+	}
+	f.Close()
 }
 
 func (e *LineEditor) trimHistoryFile() {
@@ -750,17 +767,9 @@ func (e *LineEditor) handleReverseSearch(prompt string, prevBufW int) int {
 					return bufWidth(e.buf)
 				}
 				if setHistIgnoreDups {
-					skip := false
-					for _, h := range e.history {
-						if h == line {
-							skip = true
-							break
-						}
-					}
-					if !skip {
-						e.history = append(e.history, line)
-						e.saveHistory(line)
-					}
+					e.removeHistoryDup(line)
+					e.history = append(e.history, line)
+					e.saveHistory(line)
 				} else {
 					if len(e.history) == 0 || e.history[len(e.history)-1] != line {
 						e.history = append(e.history, line)
