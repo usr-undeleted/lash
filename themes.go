@@ -13,13 +13,14 @@ func printThemeHelp() {
 	fmt.Fprintln(os.Stderr, "usage: lash theme <command> [args]")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "commands:")
-	fmt.Fprintln(os.Stderr, "  set <name>    apply a theme by sourcing its file")
+	fmt.Fprintln(os.Stderr, "  set <name>    apply a theme by name or file path")
 	fmt.Fprintln(os.Stderr, "  save <name>   save current visual settings as a theme")
 	fmt.Fprintln(os.Stderr, "  list          list available themes")
 	fmt.Fprintln(os.Stderr, "  delete <name> remove a theme file")
 	fmt.Fprintln(os.Stderr, "  help          show this help")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "themes are stored in ~/.config/lash/themes/")
+	fmt.Fprintln(os.Stderr, "file paths are sourced for the current session only")
 }
 
 func builtinThemeSet(args []string, ctx *ExecContext) {
@@ -30,6 +31,25 @@ func builtinThemeSet(args []string, ctx *ExecContext) {
 		return
 	}
 	name := args[0]
+
+	// if arg looks like a file path, source it directly without persisting
+	if strings.Contains(name, "/") || strings.HasPrefix(name, "~") {
+		expanded := name
+		if strings.HasPrefix(name, "~/") {
+			if home, err := os.UserHomeDir(); err == nil {
+				expanded = filepath.Join(home, name[2:])
+			}
+		}
+		if _, err := os.Stat(expanded); err != nil {
+			fmt.Fprintf(os.Stderr, "lash: theme set: '%s': %s\n", name, err)
+			lastExitCode = 1
+			return
+		}
+		sourceFile(expanded, ctx.Cfg)
+		lastExitCode = 0
+		return
+	}
+
 	if !isValidThemeName(name) {
 		fmt.Fprintf(os.Stderr, "lash: theme set: '%s': invalid theme name\n", name)
 		lastExitCode = 1
