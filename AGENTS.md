@@ -18,6 +18,7 @@ All source is in the root directory, single `package main`:
 - `config.go` — Config file loading/saving (`~/.config/lash/config`), settings: `syntax-color`, `logosize`
 - `version.go` — Version derived from ROADMAP.md checkbox progress, embeds logo text files and ROADMAP.md via `//go:embed`
 - `build.sh` — Build script, computes version from ROADMAP.md, builds binary to `./lash`
+- `setup.sh` — User friendly, interactive bash script that guides the user on installing/re-installing lash to their system.
 - `.lashrc` — Shell rc file located at ~.
 - `.lash_profile` — Profile file located at ~.
 - `themes/` — Contains default themes shipped with lash.
@@ -31,6 +32,7 @@ All source is in the root directory, single `package main`:
 - `sync.Mutex` for concurrent access to job table and notification queue
 - lash set-config should ALWAYS control all configurations.
 - Lash subcommands should ALWAYS be lowercase, minimally worded, with no '-' or '--' at the start, using - to separate words. This applies to every naming scheme used for lash.
+- After a new important feature is added (for example, a set-config that greatly changes the lash experience, or a new feature that can be edited to preference), it NEEDS to be seamlessly added to setup.sh.
 
 ## Supported Features (implemented, might not include all)
 - REPL with custom PS1 prompt (supports `\u`, `\h`, `\H`, `\w`, `\W`, `\n`, `\t`, `\d`, `$`, `\g` for git branch, `\x` for exit status indicator, `\f` for fill alignment, ANSI colors, octal)
