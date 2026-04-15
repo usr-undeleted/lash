@@ -1031,7 +1031,13 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	cursorW := bufWidth(e.buf[:e.cursor])
 
 	targetPos := typingCol + cursorW
-	e.screenRow = targetPos / termW
+	atEnd := e.cursor == len(e.buf)
+	atExactEdge := atEnd && targetPos > 0 && targetPos%termW == 0
+	if atExactEdge {
+		e.screenRow = targetPos/termW - 1
+	} else {
+		e.screenRow = targetPos / termW
+	}
 
 	endPos := typingCol + newW
 	var endRow int
@@ -1044,13 +1050,16 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	rowsDiff := endRow - e.screenRow
 	if rowsDiff > 0 {
 		buf.WriteString(fmt.Sprintf("\033[%dA", rowsDiff))
-	} else if rowsDiff < 0 {
+	} else if rowsDiff < 0 && !atExactEdge {
 		buf.WriteString(fmt.Sprintf("\033[%dB", -rowsDiff))
 	}
-	buf.WriteString("\r")
-	targetCol := targetPos % termW
-	if targetCol > 0 {
-		buf.WriteString(fmt.Sprintf("\033[%dC", targetCol))
+	if atExactEdge && rowsDiff == 0 {
+	} else {
+		buf.WriteString("\r")
+		targetCol := targetPos % termW
+		if targetCol > 0 {
+			buf.WriteString(fmt.Sprintf("\033[%dC", targetCol))
+		}
 	}
 	buf.WriteString("\033[?25h")
 	os.Stdout.WriteString(buf.String())
