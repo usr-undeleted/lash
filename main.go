@@ -41,6 +41,7 @@ var setHistIgnoreSpace bool
 var setHupOnExit bool
 var setIgnoreEOF bool
 var setHashAll bool
+var setLashenv bool
 var inCondition bool
 var inSubshell bool
 var shellInteractive bool
@@ -917,7 +918,7 @@ func handleGlobalCommand(args []string) {
 
 func printUsage() {
 	fmt.Fprintln(os.Stderr, "usage: lash [options] [command]")
-	fmt.Fprintln(os.Stderr, "       lash [version|set-config|theme ...]")
+	fmt.Fprintln(os.Stderr, "       lash [version|set-config|theme|keybind|env ...]")
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "options:")
 	fmt.Fprintln(os.Stderr, "  exec <string>  execute <string> and exit")
@@ -929,6 +930,8 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  version                    show version info")
 	fmt.Fprintln(os.Stderr, "  set-config <key> <value>   set a config option")
 	fmt.Fprintln(os.Stderr, "  theme <set|save|list|delete>  manage prompt themes")
+	fmt.Fprintln(os.Stderr, "  keybind <set|list|reset|delete|actions>  manage key bindings")
+	fmt.Fprintln(os.Stderr, "  env <refresh|allow|deny|trusted>  manage .lashenv trust")
 }
 
 func initShell() *Config {
@@ -938,6 +941,7 @@ func initShell() *Config {
 	var cmdString string
 	var themeArgs []string
 	var keybindArgs []string
+	var envArgs []string
 
 	args := os.Args[1:]
 	i := 0
@@ -966,6 +970,9 @@ func initShell() *Config {
 			i = len(args)
 		case "keybind":
 			keybindArgs = args[i:]
+			i = len(args)
+		case "env":
+			envArgs = args[i:]
 			i = len(args)
 		default:
 			if !strings.HasPrefix(args[i], "-") {
@@ -1056,6 +1063,33 @@ func initShell() *Config {
 		shellExit(lastExitCode)
 	}
 
+	if len(envArgs) > 0 {
+		if len(envArgs) < 2 {
+			printEnvHelp()
+			os.Exit(1)
+		}
+		cfg := LoadConfig()
+		currentConfig = cfg
+		applyConfigToOptions(cfg)
+		switch envArgs[1] {
+		case "refresh":
+			builtinEnvRefresh(cfg)
+		case "allow":
+			builtinEnvAllow(envArgs[2:])
+		case "deny":
+			builtinEnvDeny(envArgs[2:])
+		case "trusted":
+			builtinEnvTrusted()
+		case "help":
+			printEnvHelp()
+		default:
+			fmt.Fprintf(os.Stderr, "lash: env: unknown subcommand: %s\n", envArgs[1])
+			fmt.Fprintln(os.Stderr, "see 'lash env help' for env usage.")
+			lastExitCode = 1
+		}
+		os.Exit(lastExitCode)
+	}
+
 	if !norc && cfg.Theme != "" {
 		sourceIfExists(themesDirPath()+"/"+cfg.Theme, cfg)
 	}
@@ -1079,6 +1113,10 @@ func main() {
 		return
 	}
 	shellInitialized = true
+
+	if setLashenv {
+		tryLoadLashenv(cfg)
+	}
 
 	globalEditor = NewLineEditor(cfg)
 	stdinReader = bufio.NewReader(os.Stdin)

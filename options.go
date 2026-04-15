@@ -13,6 +13,7 @@ func initOptions() {
 	setHupOnExit = false
 	setIgnoreEOF = false
 	setHashAll = true
+	setLashenv = false
 }
 
 func applyConfigToOptions(cfg *Config) {
@@ -28,4 +29,5 @@ func applyConfigToOptions(cfg *Config) {
 	setHupOnExit = cfg.HupOnExit
 	setIgnoreEOF = cfg.IgnoreEOF
 	setHashAll = cfg.HashAll
+	setLashenv = cfg.Lashenv
 }

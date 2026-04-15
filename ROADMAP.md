@@ -99,7 +99,7 @@
 - [x] Profile files (`~/.lash_profile`, `/etc/lash_profile`)
 - [x] `PATH` management helpers
 - [ ] Colored output support (LS_COLORS, GREP_COLORS integration)
-- [ ] Per-directory local config (`.lashenv`)
+- [x] Per-directory local config (`.lashenv`)
 
 ## Phase 7: Advanced Interactive Features
 

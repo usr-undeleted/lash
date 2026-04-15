@@ -29,6 +29,7 @@ type Config struct {
 	HupOnExit         bool
 	IgnoreEOF         bool
 	HashAll           bool
+	Lashenv           bool
 	Keybinds          map[string]string
 }
 
@@ -131,6 +132,8 @@ func LoadConfig() *Config {
 			cfg.IgnoreEOF = val == "1"
 		case "hashall":
 			cfg.HashAll = val == "1"
+		case "lashenv":
+			cfg.Lashenv = val == "1"
 		}
 	}
 	return cfg
@@ -166,6 +169,7 @@ func (c *Config) Save() error {
 	lines = append(lines, fmt.Sprintf("huponexit = %s", boolToStr(c.HupOnExit)))
 	lines = append(lines, fmt.Sprintf("ignoreeof = %s", boolToStr(c.IgnoreEOF)))
 	lines = append(lines, fmt.Sprintf("hashall = %s", boolToStr(c.HashAll)))
+	lines = append(lines, fmt.Sprintf("lashenv = %s", boolToStr(c.Lashenv)))
 	if len(c.Keybinds) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "[keybinds]")
@@ -244,6 +248,9 @@ func (c *Config) Set(key, val string) bool {
 	case "hashall":
 		c.HashAll = val == "1"
 		return true
+	case "lashenv":
+		c.Lashenv = val == "1"
+		return true
 	}
 	return false
 }
@@ -272,6 +279,7 @@ var configKeys = []configEntry{
 	{"huponexit", "<0|1>", "send SIGHUP to all jobs when shell exits"},
 	{"ignoreeof", "<0|1>", "require 10 Ctrl-D presses to exit"},
 	{"hashall", "<0|1>", "hash command paths"},
+	{"lashenv", "<0|1>", "load per-directory .lashenv on cd"},
 }
 
 func printConfigList() {
@@ -298,6 +306,7 @@ func printConfigShow(c *Config) {
 	fmt.Printf("%-22s %s\n", "huponexit", boolToStr(c.HupOnExit))
 	fmt.Printf("%-22s %s\n", "ignoreeof", boolToStr(c.IgnoreEOF))
 	fmt.Printf("%-22s %s\n", "hashall", boolToStr(c.HashAll))
+	fmt.Printf("%-22s %s\n", "lashenv", boolToStr(c.Lashenv))
 }
 
 func boolToStr(b bool) string {

@@ -57,6 +57,9 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			lastExitCode = 1
 		} else {
 			lastExitCode = 0
+			if setLashenv {
+				tryLoadLashenv(ctx.Cfg)
+			}
 		}
 	case "pwd":
 		dir, err := os.Getwd()
@@ -341,6 +344,29 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			default:
 				fmt.Fprintf(os.Stderr, "lash: keybind: unknown subcommand: %s\n", args[2])
 				fmt.Fprintln(os.Stderr, "see 'lash keybind help' for keybind usage.")
+				lastExitCode = 1
+			}
+		case "env":
+			if len(args) < 3 {
+				printEnvHelp()
+				lastExitCode = 1
+				return
+			}
+			switch args[2] {
+			case "refresh":
+				builtinEnvRefresh(ctx.Cfg)
+			case "allow":
+				builtinEnvAllow(args[3:])
+			case "deny":
+				builtinEnvDeny(args[3:])
+			case "trusted":
+				builtinEnvTrusted()
+			case "help":
+				printEnvHelp()
+				lastExitCode = 0
+			default:
+				fmt.Fprintf(os.Stderr, "lash: env: unknown subcommand: %s\n", args[2])
+				fmt.Fprintln(os.Stderr, "see 'lash env help' for env usage.")
 				lastExitCode = 1
 			}
 		default:
