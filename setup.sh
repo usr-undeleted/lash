@@ -413,6 +413,25 @@ PROFEOF
 
 setup_config() {
     header "Configuration"
+
+    if config_exists_and_valid "$CONFIG_DIR/config" "config"; then
+        c "$DIM"; desc "Existing config detected."; c "$RESET"
+        local val
+        val=$(ask_yn "Reconfigure settings?" "0")
+        if [ "$val" = "0" ]; then
+            info "Keeping existing config"
+            echo "noclobber=0" >> "$PREFS_FILE.tmp"
+            echo "lashenv=0" >> "$PREFS_FILE.tmp"
+            echo "ignoreeof=0" >> "$PREFS_FILE.tmp"
+            echo "notify=0" >> "$PREFS_FILE.tmp"
+            echo "hist-ignore-dups=0" >> "$PREFS_FILE.tmp"
+            echo "hist-ignore-space=0" >> "$PREFS_FILE.tmp"
+            echo "history-size=1000" >> "$PREFS_FILE.tmp"
+            return 0
+        fi
+        printf '\n'
+    fi
+
     c "$DIM"; desc "Answer each question, or press Enter to keep the default value."; c "$RESET"
     printf '\n'
 
@@ -662,8 +681,8 @@ full_setup() {
     build_lash
 
     c "$BOLD"; c "$CYAN"; printf '\n  ╭──────────────────────────────────────╮\n'
-    printf '  │          Welcome to lash            │\n'
-    printf '  │   A Linux shell written in Go       │\n'
+    printf '  │          Welcome to lash             │\n'
+    printf '  │   A Linux shell written in Go        │\n'
     printf '  ╰──────────────────────────────────────╯\n'
     c "$RESET"
     printf '\n'
