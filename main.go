@@ -1166,7 +1166,9 @@ func main() {
 			if last != "|" && last != ">" && last != ">>" && last != ">|" && last != "<" && last != "<<" && last != "<<-" && last != "<<<" && last != ";" && last != "&&" && last != "||" {
 				break
 			}
+			globalEditor.continuation = true
 			nextLine, err := globalEditor.ReadLine(getPS2())
+			globalEditor.continuation = false
 			if err != nil {
 				break
 			}
@@ -1185,7 +1187,9 @@ func main() {
 		}
 
 		line = preprocessHeredocs(line, func() (string, error) {
+			globalEditor.continuation = true
 			nextLine, err := globalEditor.ReadLine(getPS2())
+			globalEditor.continuation = false
 			if err != nil {
 				return "", err
 			}

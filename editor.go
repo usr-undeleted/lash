@@ -30,6 +30,7 @@ type LineEditor struct {
 	dispatchMap    map[string]string
 	termKeySeqs    map[string]string
 	savedTermState *term.State
+	continuation   bool
 }
 
 func NewLineEditor(cfg *Config) *LineEditor {
@@ -1051,7 +1052,7 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 func (e *LineEditor) syntaxHighlight() string {
 	text := string(e.buf)
 	tokens := tokenize(text)
-	if len(tokens) == 0 {
+	if len(tokens) == 0 || e.continuation {
 		return text
 	}
 
