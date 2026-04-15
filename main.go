@@ -1159,7 +1159,11 @@ func main() {
 
 		for {
 			tks := tokenize(line)
-			if len(tks) == 0 || tks[len(tks)-1] != "|" {
+			if len(tks) == 0 {
+				break
+			}
+			last := tks[len(tks)-1]
+			if last != "|" && last != ">" && last != ">>" && last != ">|" && last != "<" && last != "<<" && last != "<<-" && last != "<<<" && last != ";" && last != "&&" && last != "||" {
 				break
 			}
 			nextLine, err := globalEditor.ReadLine(getPS2())
@@ -1169,6 +1173,9 @@ func main() {
 			if nextLine == "\x03" {
 				lastExitCode = 130
 				line = ""
+				break
+			}
+			if nextLine == "" {
 				break
 			}
 			line = line + " " + nextLine
