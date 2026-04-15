@@ -12,8 +12,8 @@ lash (larp shell) is a Linux shell written in Go. It aims to be a feature-rich i
 
 ## Project Structure
 All source is in the root directory, single `package main`:
-- `main.go` — REPL loop, tokenizer, command execution, pipelines, redirections, builtins, variable expansion, glob expansion, PS1/prompt handling
-- `editor.go` — Raw terminal line editor with history, keybindings (emacs-style), tab completion (commands + paths), reverse search (Ctrl+R), syntax highlighting
+- `main.go` — REPL loop, tokenizer, command execution, pipelines, redirections, builtins, variable expansion, glob expansion, PS1/prompt handling, PS2 continuation for incomplete operators
+- `editor.go` — Raw terminal line editor with history, keybindings (emacs-style), tab completion (commands + paths), reverse search (Ctrl+R), syntax highlighting, hist-ignore-dups (removes old duplicate, appends new)
 - `jobs.go` — Job control (background `&`, `fg`, `bg`, `jobs`, `kill`, Ctrl+Z suspension, terminal ownership via `tcsetpgrp`)
 - `config.go` — Config file loading/saving (`~/.config/lash/config`), settings: `syntax-color`, `logosize`
 - `version.go` — Version derived from ROADMAP.md checkbox progress, embeds logo text files and ROADMAP.md via `//go:embed`
@@ -33,12 +33,16 @@ All source is in the root directory, single `package main`:
 - lash set-config should ALWAYS control all configurations.
 - Lash subcommands should ALWAYS be lowercase, minimally worded, with no '-' or '--' at the start, using - to separate words. This applies to every naming scheme used for lash.
 - After a new important feature is added (for example, a set-config that greatly changes the lash experience, or a new feature that can be edited to preference), it NEEDS to be seamlessly added to setup.sh.
+- After updating lash, you will bump the version (xx.yy.zz) , by:
+  - If a phase is completed, bump the first number (xx).
+  - If a new feature (from the phase or not) is added, bump the second number (yy).
+  - If it's a bug fix or cleaning up code, bump the last number (zz).
 
 ## Supported Features (implemented, might not include all)
 - REPL with custom PS1 prompt (supports `\u`, `\h`, `\H`, `\w`, `\W`, `\n`, `\t`, `\d`, `$`, `\g` for git branch, `\x` for exit status indicator, `\f` for fill alignment, ANSI colors, octal)
 - Command execution via fork+exec (`syscall`)
 - Builtins: `exit`, `cd`, `pwd`, `jobs`, `fg`, `bg`, `kill` (with signals), `export`, `unset`, `env`, `echo` (`-n`, `-e`), `type`, `which`, `true`, `false`, `lash` (meta-command for config/version)
-- Pipes (`|`), I/O redirection (`>`, `>>`, `<`)
+- Pipes (`|`), I/O redirection (`>`, `>>`, `<`), multi-file output redirection (tee-like: `echo hello > file1 file2`)
 - Background processes (`&`), job control with `fg`/`bg`/`jobs`
 - Ctrl+Z (suspend), Ctrl+C (interrupt), proper signal forwarding
 - Command chaining (`&&`, `||`, `;`)
