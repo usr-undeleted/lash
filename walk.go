@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 )
@@ -866,6 +867,7 @@ func applyRedirections(redirs []Redir, ctx *ExecContext) (*ExecContext, func(), 
 
 	var opened []*os.File
 	newCtx := ctx
+	var wg sync.WaitGroup
 
 	for _, r := range redirs {
 		switch r.Op {
@@ -875,6 +877,7 @@ func applyRedirections(redirs []Redir, ctx *ExecContext) (*ExecContext, func(), 
 				fmt.Fprintf(os.Stderr, "lash: heredoc: content not found\n")
 				lastExitCode = 1
 				return ctx, func() {
+					wg.Wait()
 					for _, of := range opened {
 						of.Close()
 					}
@@ -889,6 +892,7 @@ func applyRedirections(redirs []Redir, ctx *ExecContext) (*ExecContext, func(), 
 				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
 				lastExitCode = 1
 				return ctx, func() {
+					wg.Wait()
 					for _, of := range opened {
 						of.Close()
 					}
@@ -907,6 +911,7 @@ func applyRedirections(redirs []Redir, ctx *ExecContext) (*ExecContext, func(), 
 				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
 				lastExitCode = 1
 				return ctx, func() {
+					wg.Wait()
 					for _, of := range opened {
 						of.Close()
 					}
@@ -928,6 +933,7 @@ func applyRedirections(redirs []Redir, ctx *ExecContext) (*ExecContext, func(), 
 					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
 					lastExitCode = 1
 					return ctx, func() {
+						wg.Wait()
 						for _, of := range opened {
 							of.Close()
 						}
@@ -936,75 +942,98 @@ func applyRedirections(redirs []Redir, ctx *ExecContext) (*ExecContext, func(), 
 				opened = append(opened, f)
 				newCtx = newCtx.withOverrides(f, nil, nil)
 			}
-		case ">":
-			if f := resolveProcSubstFile(r.Target); f != nil {
-				newCtx = newCtx.withOverrides(nil, f, nil)
-			} else {
-				if setNoClobber {
-					if _, err := os.Stat(r.Target); err == nil {
-						fmt.Fprintf(os.Stderr, "lash: %s: file exists\n", r.Target)
+		case ">", ">>", ">|":
+			var targets []string
+			targets = append(targets, r.Target)
+			targets = append(targets, r.ExtraTargets...)
+
+			var files []*os.File
+			for _, tgt := range targets {
+				if f := resolveProcSubstFile(tgt); f != nil {
+					files = append(files, f)
+				} else {
+					if r.Op == ">" && setNoClobber {
+						if _, err := os.Stat(tgt); err == nil {
+							fmt.Fprintf(os.Stderr, "lash: %s: file exists\n", tgt)
+							lastExitCode = 1
+							for _, ff := range files {
+								ff.Close()
+							}
+							return ctx, func() {
+								wg.Wait()
+								for _, of := range opened {
+									of.Close()
+								}
+							}, true
+						}
+					}
+					var flag int
+					switch r.Op {
+					case ">":
+						flag = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+					case ">|":
+						flag = os.O_CREATE | os.O_WRONLY | os.O_TRUNC
+					case ">>":
+						flag = os.O_CREATE | os.O_WRONLY | os.O_APPEND
+					}
+					f, err := os.OpenFile(tgt, flag, 0644)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "lash: %s\n", err)
 						lastExitCode = 1
+						for _, ff := range files {
+							ff.Close()
+						}
 						return ctx, func() {
+							wg.Wait()
 							for _, of := range opened {
 								of.Close()
 							}
 						}, true
 					}
+					opened = append(opened, f)
+					files = append(files, f)
 				}
-				flag := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
-				f, err := os.OpenFile(r.Target, flag, 0644)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-					lastExitCode = 1
-					return ctx, func() {
-						for _, of := range opened {
-							of.Close()
-						}
-					}, true
-				}
-				opened = append(opened, f)
-				newCtx = newCtx.withOverrides(nil, f, nil)
 			}
-		case ">|":
-			if f := resolveProcSubstFile(r.Target); f != nil {
-				newCtx = newCtx.withOverrides(nil, f, nil)
+
+			if len(files) == 1 {
+				newCtx = newCtx.withOverrides(nil, files[0], nil)
 			} else {
-				flag := os.O_CREATE | os.O_WRONLY | os.O_TRUNC
-				f, err := os.OpenFile(r.Target, flag, 0644)
+				pr, pw, err := os.Pipe()
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
 					lastExitCode = 1
 					return ctx, func() {
+						wg.Wait()
 						for _, of := range opened {
 							of.Close()
 						}
 					}, true
 				}
-				opened = append(opened, f)
-				newCtx = newCtx.withOverrides(nil, f, nil)
-			}
-		case ">>":
-			if f := resolveProcSubstFile(r.Target); f != nil {
-				newCtx = newCtx.withOverrides(nil, f, nil)
-			} else {
-				flag := os.O_CREATE | os.O_WRONLY | os.O_APPEND
-				f, err := os.OpenFile(r.Target, flag, 0644)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "lash: %s\n", err)
-					lastExitCode = 1
-					return ctx, func() {
-						for _, of := range opened {
-							of.Close()
+				opened = append(opened, pr, pw)
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					buf := make([]byte, 4096)
+					for {
+						n, readErr := pr.Read(buf)
+						if n > 0 {
+							for _, w := range files {
+								w.Write(buf[:n])
+							}
 						}
-					}, true
-				}
-				opened = append(opened, f)
-				newCtx = newCtx.withOverrides(nil, f, nil)
+						if readErr != nil {
+							break
+						}
+					}
+					pr.Close()
+				}()
+				newCtx = newCtx.withOverrides(nil, pw, nil)
 			}
 		}
 	}
 
 	return newCtx, func() {
+		wg.Wait()
 		for _, f := range opened {
 			f.Close()
 		}

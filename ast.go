@@ -146,8 +146,9 @@ type Assignment struct {
 }
 
 type Redir struct {
-	Op     string
-	Target string
+	Op           string
+	Target       string
+	ExtraTargets []string
 }
 
 type parser struct {
@@ -360,7 +361,17 @@ func (p *parser) parseSimpleCommand() Node {
 				cmd.Args = append(cmd.Args, op)
 				continue
 			}
-			cmd.Redirections = append(cmd.Redirections, Redir{Op: op, Target: target})
+			redir := Redir{Op: op, Target: target}
+			if op == ">" || op == ">>" || op == ">|" {
+				for p.pos < len(p.tokens) {
+					next := p.peek()
+					if next == "" || next == ";" || next == "&&" || next == "||" || next == "|" || next == "&" || next == ")" || next == "}" || next == ">" || next == ">>" || next == ">|" || next == "<" || next == "<<" || next == "<<-" || next == "<<<" {
+						break
+					}
+					redir.ExtraTargets = append(redir.ExtraTargets, p.advance())
+				}
+			}
+			cmd.Redirections = append(cmd.Redirections, redir)
 			continue
 		}
 
