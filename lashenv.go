@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -100,7 +101,17 @@ func saveTrustDB(db map[string]trustEntry) error {
 	for p, entry := range db {
 		lines = append(lines, fmt.Sprintf("%s %s %s", entry.status, p, entry.hash))
 	}
-	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	if err != nil {
+		return err
+	}
+	makeImmutable(path)
+	return nil
+}
+
+func makeImmutable(path string) {
+	cmd := exec.Command("chattr", "+i", path)
+	cmd.Run()
 }
 
 func checkTrust(path string, hash string, db map[string]trustEntry) trustStatus {
