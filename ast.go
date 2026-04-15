@@ -1,6 +1,10 @@
 package main
 
-import "strings"
+import (
+	"fmt"
+	"os"
+	"strings"
+)
 
 type Node interface {
 	nodeType() string
@@ -265,7 +269,12 @@ func (p *parser) parsePipeline() Node {
 		p.advance()
 		next := p.parseCommand()
 		if next == nil {
-			break
+			fmt.Fprintln(os.Stderr, "lash: syntax error near unexpected token `|'")
+			return nil
+		}
+		if c, ok := next.(*Command); ok && len(c.Args) == 0 && len(c.Assignments) == 0 && len(c.Redirections) == 0 && !c.Background {
+			fmt.Fprintln(os.Stderr, "lash: syntax error near unexpected token `|'")
+			return nil
 		}
 		cmds = append(cmds, next)
 	}
@@ -757,7 +766,7 @@ func (p *parser) parseCondExpr() Node {
 
 func (p *parser) isArrayAssign() bool {
 	t := p.peek()
-	if !isAlphaOrUnderscore(byte(t[0])) {
+	if t == "" || !isAlphaOrUnderscore(byte(t[0])) {
 		return false
 	}
 	eqIdx := strings.Index(t, "=")

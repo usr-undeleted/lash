@@ -123,24 +123,35 @@ func getVarQuiet(name string) string {
 	return os.Getenv(name)
 }
 
+func getVarLocked(name string) (string, bool) {
+	for i := len(scopeStack) - 1; i >= 0; i-- {
+		if val, ok := scopeStack[i][name]; ok {
+			return val, true
+		}
+	}
+	val, ok := varTable[name]
+	return val, ok
+}
+
 func setVar(name, value string, exported bool) {
 	varMu.Lock()
 	defer varMu.Unlock()
+	inScope := false
 	for i := len(scopeStack) - 1; i >= 0; i-- {
 		if _, ok := scopeStack[i][name]; ok {
 			scopeStack[i][name] = value
-			return
+			inScope = true
+			break
 		}
 	}
-	varTable[name] = value
+	if !inScope {
+		varTable[name] = value
+	}
 	if exported {
 		exportedVars[name] = true
 		os.Setenv(name, value)
-	}
-	if !exported {
-		if exportedVars[name] {
-			os.Setenv(name, value)
-		}
+	} else if exportedVars[name] {
+		os.Setenv(name, value)
 	}
 }
 
@@ -1142,6 +1153,26 @@ func main() {
 			continue
 		}
 		line = expandAliasLine(line)
+		if line == "" {
+			continue
+		}
+
+		for {
+			tks := tokenize(line)
+			if len(tks) == 0 || tks[len(tks)-1] != "|" {
+				break
+			}
+			nextLine, err := globalEditor.ReadLine(getPS2())
+			if err != nil {
+				break
+			}
+			if nextLine == "\x03" {
+				lastExitCode = 130
+				line = ""
+				break
+			}
+			line = line + " " + nextLine
+		}
 		if line == "" {
 			continue
 		}

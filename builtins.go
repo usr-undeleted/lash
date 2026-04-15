@@ -232,9 +232,7 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 					varMu.Lock()
 					exportedVars[a] = true
 					varMu.Unlock()
-					if val, ok := varTable[a]; ok {
-						os.Setenv(a, val)
-					}
+					os.Setenv(a, getVarQuiet(a))
 					lastExitCode = 0
 				} else {
 					lastExitCode = 1

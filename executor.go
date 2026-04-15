@@ -150,7 +150,7 @@ func buildEnvWithPrefix(prefix map[string]string) []string {
 	}
 	for key := range exportedVars {
 		if !seen[key] {
-			if val, ok := varTable[key]; ok {
+			if val, ok := getVarLocked(key); ok {
 				env = append(env, key+"="+val)
 			}
 		}

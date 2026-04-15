@@ -1099,7 +1099,7 @@ func executeBackground(args []string, ctx *ExecContext, prefixEnv map[string]str
 }
 
 func executeSubshell(node *Subshell, ctx *ExecContext) {
-	savedVars := snapshotVars()
+	savedVars, savedExported := snapshotVars()
 	savedArrs := snapshotArrays()
 	savedDir, _ := os.Getwd()
 	savedParams := make([]string, len(positionalParams))
@@ -1129,27 +1129,35 @@ func executeSubshell(node *Subshell, ctx *ExecContext) {
 	r.Close()
 
 	inSubshell = oldInSubshell
-	restoreVars(savedVars)
+	restoreVars(savedVars, savedExported)
 	restoreArrays(savedArrs)
 	positionalParams = savedParams
 	os.Chdir(savedDir)
 }
 
-func snapshotVars() map[string]string {
+func snapshotVars() (map[string]string, map[string]bool) {
 	varMu.Lock()
 	defer varMu.Unlock()
 	s := make(map[string]string, len(varTable))
 	for k, v := range varTable {
 		s[k] = v
 	}
-	return s
+	e := make(map[string]bool, len(exportedVars))
+	for k, v := range exportedVars {
+		e[k] = v
+	}
+	return s, e
 }
 
-func restoreVars(saved map[string]string) {
+func restoreVars(saved map[string]string, savedExported map[string]bool) {
 	varMu.Lock()
 	defer varMu.Unlock()
 	varTable = make(map[string]string, len(saved))
 	for k, v := range saved {
 		varTable[k] = v
+	}
+	exportedVars = make(map[string]bool, len(savedExported))
+	for k, v := range savedExported {
+		exportedVars[k] = v
 	}
 }
