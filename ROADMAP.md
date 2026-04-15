@@ -93,8 +93,8 @@
 - [x] Shell prompts (PS1/PS2/PS3/PS4 with escape sequences)
 - [x] Prompt themes (predefined themes, user-switchable)
 - [x] Aliases (`alias ll='ls -la'`)
-- [ ] Key binding configuration
-- [ ] Shell options system (`setopt`, `shopt` style)
+- [x] Key binding configuration
+- [x] Shell options system
 - [x] Login shell vs non-login shell vs interactive detection
 - [x] Profile files (`~/.lash_profile`, `/etc/lash_profile`)
 - [x] `PATH` management helpers
