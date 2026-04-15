@@ -1,6 +1,6 @@
 # lash theme: minimal
 # visual
-export PS1='\u:\w$ '
+export PS1='\u@\h \w $ '
 export PS2='> '
 # config
 lash set-config syntax-color 0

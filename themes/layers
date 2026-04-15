@@ -1,0 +1,7 @@
+# lash theme: layers
+# visual
+export PS1='\x{\c{\033[31m\033[41m\033[0m\033[41m\X!\033[0m\033[31m\033[0m\n}}\033[41m \u@\h \033[42m\033[31m\033[0m\033[42m \w \033[43m\033[32m\033[0m\033[43m \t \033[0m\033[33m█\033[0m '
+export PS2='> '
+# config
+lash set-config syntax-color 1
+lash set-config logosize big

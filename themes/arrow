@@ -1,0 +1,7 @@
+# lash theme: arrow
+# visual
+export PS1='\n[\t - \T{%dd/%mm/%yy}\g{ - \g\G!}\x{ - \X}]\n\033[45m█ \u@\h \033[44m█ \w \033[0m█ '
+export PS2='> '
+# config
+lash set-config syntax-color 1
+lash set-config logosize big

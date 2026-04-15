@@ -1,0 +1,7 @@
+# lash theme: slim
+# visual
+export PS1='\c{\033[34m\t\033[0m - \033[34m\T{%dd/%mm/%yyyy}\033[0m - \033[36m\w\033[0m \g{- \033[33m‹\g›\033[0m\G{\033[31m!\033[0m}}}\n\033[36m❯\033[0m \l \033[32m\u@\h\033[0m \033[36m❯ \033[0m$ '
+export PS2='> '
+# config
+lash set-config syntax-color 1
+lash set-config logosize big
