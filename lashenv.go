@@ -296,9 +296,13 @@ func builtinEnvDeny(args []string) {
 	}
 	hash, err := sha256File(abs)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "lash: env deny: %s\n", err)
-		lastExitCode = 1
-		return
+		db := loadTrustDB()
+		if _, exists := db[abs]; !exists {
+			fmt.Fprintf(os.Stderr, "lash: env deny: %s\n", err)
+			lastExitCode = 1
+			return
+		}
+		hash = ""
 	}
 	db := loadTrustDB()
 	db[abs] = trustEntry{status: "deny", hash: hash}
