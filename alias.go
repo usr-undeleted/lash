@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"sort"
 	"strings"
 	"sync"
@@ -337,43 +336,4 @@ func removeAlias(name string) bool {
 	}
 	delete(aliasTable, name)
 	return true
-}
-
-func initColorAliases() {
-	if !shellInteractive || !setColorAliases {
-		return
-	}
-	type colorAlias struct {
-		name string
-		cmd  string
-		args []string
-	}
-	aliases := []colorAlias{
-		{"ls", "ls", []string{"--color=auto"}},
-		{"grep", "grep", []string{"--color=auto"}},
-		{"egrep", "egrep", []string{"--color=auto"}},
-		{"fgrep", "fgrep", []string{"--color=auto"}},
-		{"dir", "dir", []string{"--color=auto"}},
-		{"vdir", "vdir", []string{"--color=auto"}},
-	}
-	aliasMu.Lock()
-	defer aliasMu.Unlock()
-	for _, a := range aliases {
-		if _, exists := aliasTable[a.name]; exists {
-			continue
-		}
-		if _, err := exec.LookPath(a.name); err != nil {
-			continue
-		}
-		aliasTable[a.name] = &Alias{
-			Name: a.name,
-			Raw:  a.cmd + " " + strings.Join(a.args, " ") + " {ALL}",
-			Segments: []AliasSegment{
-				{
-					Command: a.cmd,
-					Args:    ArgSpec{All: true},
-				},
-			},
-		}
-	}
 }

@@ -29,7 +29,6 @@ type Config struct {
 	HupOnExit         bool
 	IgnoreEOF         bool
 	HashAll           bool
-	ColorAliases      bool
 	Keybinds          map[string]string
 }
 
@@ -132,8 +131,6 @@ func LoadConfig() *Config {
 			cfg.IgnoreEOF = val == "1"
 		case "hashall":
 			cfg.HashAll = val == "1"
-		case "color-aliases":
-			cfg.ColorAliases = val != "0"
 		}
 	}
 	return cfg
@@ -169,7 +166,6 @@ func (c *Config) Save() error {
 	lines = append(lines, fmt.Sprintf("huponexit = %s", boolToStr(c.HupOnExit)))
 	lines = append(lines, fmt.Sprintf("ignoreeof = %s", boolToStr(c.IgnoreEOF)))
 	lines = append(lines, fmt.Sprintf("hashall = %s", boolToStr(c.HashAll)))
-	lines = append(lines, fmt.Sprintf("color-aliases = %s", boolToStr(c.ColorAliases)))
 	if len(c.Keybinds) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "[keybinds]")
@@ -248,9 +244,6 @@ func (c *Config) Set(key, val string) bool {
 	case "hashall":
 		c.HashAll = val == "1"
 		return true
-	case "color-aliases":
-		c.ColorAliases = val != "0"
-		return true
 	}
 	return false
 }
@@ -279,7 +272,6 @@ var configKeys = []configEntry{
 	{"huponexit", "<0|1>", "send SIGHUP to all jobs when shell exits"},
 	{"ignoreeof", "<0|1>", "require 10 Ctrl-D presses to exit"},
 	{"hashall", "<0|1>", "hash command paths"},
-	{"color-aliases", "<0|1>", "auto-alias ls/grep with --color=auto"},
 }
 
 func printConfigList() {
@@ -306,7 +298,6 @@ func printConfigShow(c *Config) {
 	fmt.Printf("%-22s %s\n", "huponexit", boolToStr(c.HupOnExit))
 	fmt.Printf("%-22s %s\n", "ignoreeof", boolToStr(c.IgnoreEOF))
 	fmt.Printf("%-22s %s\n", "hashall", boolToStr(c.HashAll))
-	fmt.Printf("%-22s %s\n", "color-aliases", boolToStr(c.ColorAliases))
 }
 
 func boolToStr(b bool) string {

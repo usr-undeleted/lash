@@ -17,11 +17,6 @@ import (
 	"golang.org/x/term"
 )
 
-type completionEntry struct {
-	Name    string
-	Display string
-}
-
 type LineEditor struct {
 	buf            []rune
 	cursor         int
@@ -1191,7 +1186,18 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 	if inSpace && tokenIdx >= 0 {
 		candidates := e.completePath("")
 		if len(candidates) > 0 {
-			e.displayCompletions(prompt, candidates)
+			os.Stdout.Write([]byte("\r\n"))
+			for i, c := range candidates {
+				if i > 0 && i%6 == 0 {
+					os.Stdout.Write([]byte("\r\n"))
+				} else if i > 0 {
+					os.Stdout.Write([]byte("  "))
+				}
+				os.Stdout.Write([]byte(c))
+			}
+			os.Stdout.Write([]byte("\r\n"))
+			os.Stdout.Write([]byte(prompt))
+			e.screenRow = 0
 			return e.redraw(prompt, 0)
 		}
 		return prevBufW
@@ -1207,7 +1213,7 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 		}
 	}
 
-	var candidates []completionEntry
+	var candidates []string
 	if isFirstToken {
 		candidates = e.completeCommand(partial)
 	} else {
@@ -1218,23 +1224,19 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 		return prevBufW
 	}
 
-	names := make([]string, len(candidates))
-	for i, c := range candidates {
-		names[i] = c.Name
-	}
-
-	common := names[0]
-	for _, n := range names[1:] {
-		nRunes := []rune(n)
+	// Find common prefix (case-insensitive)
+	common := candidates[0]
+	for _, c := range candidates[1:] {
+		cRunes := []rune(c)
 		commonRunes := []rune(common)
-		for len(commonRunes) > 0 && !strings.EqualFold(string(nRunes[:min(len(commonRunes), len(nRunes))]), string(commonRunes[:min(len(commonRunes), len(nRunes))])) {
+		for len(commonRunes) > 0 && !strings.EqualFold(string(cRunes[:min(len(commonRunes), len(cRunes))]), string(commonRunes[:min(len(commonRunes), len(cRunes))])) {
 			commonRunes = commonRunes[:len(commonRunes)-1]
 		}
 		common = string(commonRunes)
 	}
 
 	if len(candidates) == 1 {
-		completion := candidates[0].Name
+		completion := candidates[0]
 		if !isFirstToken {
 			info, err := os.Stat(e.resolvePartialPath(completion))
 			if err == nil && info.IsDir() {
@@ -1259,11 +1261,12 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 		return e.redraw(prompt, prevBufW)
 	}
 
+	// Multiple matches
 	if common != partial {
 		var commonActual string
 		commonRunes := []rune(common)
 		for _, c := range candidates {
-			cRunes := []rune(c.Name)
+			cRunes := []rune(c)
 			if len(cRunes) >= len(commonRunes) && strings.EqualFold(string(cRunes[:len(commonRunes)]), common) {
 				commonActual = string(cRunes[:len(commonRunes)])
 				break
@@ -1283,48 +1286,40 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 		}
 	}
 
-	e.displayCompletions(prompt, candidates)
-	return e.redraw(prompt, 0)
-}
-
-func (e *LineEditor) displayCompletions(prompt string, candidates []completionEntry) {
+	// Show all candidates
 	os.Stdout.Write([]byte("\r\n"))
-	col := 0
-	for _, c := range candidates {
-		w := bufWidth([]rune(c.Name))
-		if col > 0 && col+w+2 > 80 {
+	for i, c := range candidates {
+		if i > 0 && i%6 == 0 {
 			os.Stdout.Write([]byte("\r\n"))
-			col = 0
-		} else if col > 0 {
+		} else if i > 0 {
 			os.Stdout.Write([]byte("  "))
-			col += 2
 		}
-		os.Stdout.Write([]byte(c.Display))
-		col += w
+		os.Stdout.Write([]byte(c))
 	}
 	os.Stdout.Write([]byte("\r\n"))
 	os.Stdout.Write([]byte(prompt))
 	e.screenRow = 0
+	return e.redraw(prompt, 0)
 }
 
-func (e *LineEditor) completeCommand(partial string) []completionEntry {
-	var entries []completionEntry
+func (e *LineEditor) completeCommand(partial string) []string {
+	var matches []string
 
 	for _, cmd := range allBuiltins {
 		if strings.HasPrefix(cmd, partial) {
-			entries = append(entries, completionEntry{Name: cmd, Display: colorBold + colorGreen + cmd + colorReset})
+			matches = append(matches, cmd)
 		}
 	}
 
 	for _, kw := range allKeywords {
 		if strings.HasPrefix(kw, partial) {
-			entries = append(entries, completionEntry{Name: kw, Display: colorBold + colorYellow + kw + colorReset})
+			matches = append(matches, kw)
 		}
 	}
 
 	for _, name := range allAliasNames() {
 		if strings.HasPrefix(name, partial) {
-			entries = append(entries, completionEntry{Name: name, Display: colorBold + colorMagenta + name + colorReset})
+			matches = append(matches, name)
 		}
 	}
 
@@ -1337,19 +1332,20 @@ func (e *LineEditor) completeCommand(partial string) []completionEntry {
 		}
 		seen[name] = true
 		if strings.HasPrefix(name, partial) {
-			entries = append(entries, completionEntry{Name: name, Display: name})
+			matches = append(matches, name)
 		}
 	}
 	hashMu.RUnlock()
 
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
-	return entries
+	sort.Strings(matches)
+	return matches
 }
 
-func (e *LineEditor) completePath(partial string) []completionEntry {
+func (e *LineEditor) completePath(partial string) []string {
 	dir := "."
 	prefix := partial
 
+	// Handle tilde
 	if strings.HasPrefix(partial, "~/") {
 		home := os.Getenv("HOME")
 		if home != "" {
@@ -1359,7 +1355,7 @@ func (e *LineEditor) completePath(partial string) []completionEntry {
 	} else if partial == "~" {
 		home := os.Getenv("HOME")
 		if home != "" {
-			return []completionEntry{{Name: "~/", Display: "~/"}}
+			return []string{"~/"}
 		}
 		return nil
 	} else if strings.Contains(partial, "/") {
@@ -1371,15 +1367,12 @@ func (e *LineEditor) completePath(partial string) []completionEntry {
 		prefix = partial[idx+1:]
 	}
 
-	var results []completionEntry
-	dirEntries, err := os.ReadDir(dir)
+	var matches []string
+	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
 	}
-
-	lsColorsRefresh()
-
-	for _, entry := range dirEntries {
+	for _, entry := range entries {
 		name := entry.Name()
 		if !strings.EqualFold(name[:min(len(prefix), len(name))], prefix) || len(name) < len(prefix) {
 			continue
@@ -1395,42 +1388,25 @@ func (e *LineEditor) completePath(partial string) []completionEntry {
 		if err != nil {
 			continue
 		}
-
-		displayName := name
 		if info.IsDir() {
-			displayName += "/"
 			name += "/"
 		}
 
-		symlinkTarget := ""
-		if info.Mode()&os.ModeSymlink != 0 {
-			resolved, err := filepath.EvalSymlinks(filepath.Join(dir, entry.Name()))
-			if err != nil {
-				symlinkTarget = ""
-			} else {
-				symlinkTarget = resolved
-			}
-		}
-
-		colored := colorizeEntry(displayName, info.Mode(), symlinkTarget)
-
+		// Reconstruct full match relative to what user typed
 		if strings.Contains(partial, "/") {
 			idx := strings.LastIndex(partial, "/")
 			name = partial[:idx+1] + name
-			colored = partial[:idx+1] + colored
 		} else if strings.HasPrefix(partial, "~/") {
 			name = "~/" + name
-			colored = "~/" + colored
 		} else if partial == "~" {
 			name = "~/" + name
-			colored = "~/" + colored
 		}
 
-		results = append(results, completionEntry{Name: name, Display: colored})
+		matches = append(matches, name)
 	}
 
-	sort.Slice(results, func(i, j int) bool { return results[i].Name < results[j].Name })
-	return results
+	sort.Strings(matches)
+	return matches
 }
 
 func (e *LineEditor) resolvePartialPath(s string) string {

@@ -41,7 +41,6 @@ var setHistIgnoreSpace bool
 var setHupOnExit bool
 var setIgnoreEOF bool
 var setHashAll bool
-var setColorAliases bool
 var inCondition bool
 var inSubshell bool
 var shellInteractive bool
@@ -79,7 +78,6 @@ func initVarTable() {
 	funcTable = make(map[string]*FuncDef)
 	heredocMap = make(map[string]*heredocInfo)
 	initHashTable()
-	initLSColors()
 	for _, env := range os.Environ() {
 		if idx := strings.Index(env, "="); idx >= 0 {
 			key := env[:idx]
@@ -1061,8 +1059,6 @@ func initShell() *Config {
 	if !norc && cfg.Theme != "" {
 		sourceIfExists(themesDirPath()+"/"+cfg.Theme, cfg)
 	}
-
-	initColorAliases()
 
 	if cmdString != "" {
 		stdinReader = bufio.NewReader(os.Stdin)
