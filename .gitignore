@@ -57,6 +57,9 @@ dkms.conf
 # Shell binary
 /lash
 
+# Install script preferences
+.install_prefs
+
 # Go module
 !go.mod
 !go.sum
