@@ -267,14 +267,88 @@ remove_old_binary() {
     fi
 }
 
+config_exists_and_valid() {
+    local file="$1" type="$2"
+    if [ ! -f "$file" ]; then
+        return 1
+    fi
+    if [ ! -s "$file" ]; then
+        return 1
+    fi
+    if [ "$type" = "rc" ]; then
+        if grep -qv '^[[:space:]]*$\|^[[:space:]]*#' "$file" 2>/dev/null; then
+            return 0
+        fi
+        return 1
+    fi
+    if [ "$type" = "config" ]; then
+        if grep -qE '^[a-z].*=' "$file" 2>/dev/null; then
+            return 0
+        fi
+        return 1
+    fi
+    return 0
+}
+
+ask_overwrite() {
+    local file="$1"
+    local val
+    val=$(ask_yn "Overwrite $file?" "0")
+    if [ "$val" = "1" ]; then
+        return 0
+    fi
+    return 1
+}
+
 setup_rc_files() {
     header "RC & Profile Files"
 
     local created_rc=0
     local created_profile=0
+    local any_config=0
 
-    if [ -f "$HOME/.lashrc" ]; then
-        info "~/.lashrc already exists, skipping"
+    if config_exists_and_valid "$HOME/.lashrc" "rc"; then
+        any_config=1
+        if ask_overwrite "~/.lashrc"; then
+            local editor="${EDITOR:-vi}"
+            cat > "$HOME/.lashrc" << RCEOF
+# lash startup configuration
+# Lines starting with # are comments
+
+# Environment variables
+export EDITOR="$editor"
+# export PATH="\$PATH:/custom/path"
+
+# Source other rc files
+# source ~/.lash_aliases
+
+# Aliases
+# alias ll {ALL} { ls -la \$@ ; }
+RCEOF
+            success "Overwrote ~/.lashrc"
+            created_rc=1
+        else
+            info "~/.lashrc kept"
+        fi
+    elif [ -f "$HOME/.lashrc" ]; then
+        warn "~/.lashrc exists but appears empty/invalid — overwriting"
+        local editor="${EDITOR:-vi}"
+        cat > "$HOME/.lashrc" << RCEOF
+# lash startup configuration
+# Lines starting with # are comments
+
+# Environment variables
+export EDITOR="$editor"
+# export PATH="\$PATH:/custom/path"
+
+# Source other rc files
+# source ~/.lash_aliases
+
+# Aliases
+# alias ll {ALL} { ls -la \$@ ; }
+RCEOF
+        success "Created ~/.lashrc"
+        created_rc=1
     else
         local editor="${EDITOR:-vi}"
         cat > "$HOME/.lashrc" << RCEOF
@@ -295,8 +369,32 @@ RCEOF
         created_rc=1
     fi
 
-    if [ -f "$HOME/.lash_profile" ]; then
-        info "~/.lash_profile already exists, skipping"
+    if config_exists_and_valid "$HOME/.lash_profile" "rc"; then
+        any_config=1
+        if ask_overwrite "~/.lash_profile"; then
+            cat > "$HOME/.lash_profile" << 'PROFEOF'
+# lash login shell configuration
+# Sourced only for login shells (lash login)
+# Use this for environment setup that should run once
+
+# export PATH="$HOME/bin:$PATH"
+PROFEOF
+            success "Overwrote ~/.lash_profile"
+            created_profile=1
+        else
+            info "~/.lash_profile kept"
+        fi
+    elif [ -f "$HOME/.lash_profile" ]; then
+        warn "~/.lash_profile exists but appears empty/invalid — overwriting"
+        cat > "$HOME/.lash_profile" << 'PROFEOF'
+# lash login shell configuration
+# Sourced only for login shells (lash login)
+# Use this for environment setup that should run once
+
+# export PATH="$HOME/bin:$PATH"
+PROFEOF
+        success "Created ~/.lash_profile"
+        created_profile=1
     else
         cat > "$HOME/.lash_profile" << 'PROFEOF'
 # lash login shell configuration
