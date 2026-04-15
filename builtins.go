@@ -398,9 +398,9 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			output = interpretEscapeSequences(output)
 		}
 		if noNewline {
-			fmt.Print(output)
+			ctx.Stdout.Write([]byte(output))
 		} else {
-			fmt.Println(output)
+			ctx.Stdout.Write([]byte(output + "\n"))
 		}
 		lastExitCode = 0
 	case "true":
