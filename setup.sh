@@ -365,10 +365,15 @@ setup_themes() {
     fi
 
     if [ ${#theme_list[@]} -eq 0 ]; then
-        info "No themes found"
+        info "No themes found in source"
         echo "theme=" >> "$PREFS_FILE.tmp"
         return 0
     fi
+
+    for t in "${theme_list[@]}"; do
+        cp "$REPO_THEMES/$t" "$THEMES_DIR/$t"
+    done
+    success "Copied ${#theme_list[@]} themes to $THEMES_DIR/"
 
     printf '  Available themes:\n\n'
     local i=1
@@ -395,9 +400,6 @@ setup_themes() {
     fi
 
     local selected="${theme_list[$((choice-1))]}"
-
-    cp "$REPO_THEMES/$selected" "$THEMES_DIR/$selected"
-    success "Copied theme '$selected' to $THEMES_DIR/"
 
     if [ -f "$SCRIPT_DIR/lash" ]; then
         "$SCRIPT_DIR/lash" theme set "$selected" 2>/dev/null || true
@@ -441,6 +443,62 @@ show_done() {
     printf '\n'
 }
 
+uninstall() {
+    header "Uninstall lash"
+
+    local install_path=""
+    if [ -f "$PREFS_FILE" ]; then
+        install_path=$(grep '^install_path=' "$PREFS_FILE" | cut -d= -f2- || true)
+    fi
+
+    if [ -z "$install_path" ] || [ ! -f "$install_path" ]; then
+        warn "No installed binary found"
+    else
+        if [ -w "$(dirname "$install_path")" ]; then
+            rm -f "$install_path"
+        else
+            sudo rm -f "$install_path"
+        fi
+        success "Removed binary at $install_path"
+    fi
+
+    c "$BOLD"; printf '  Remove configuration files?\n'; c "$RESET"
+    printf '    [1] Remove config only (~/.config/lash/config)\n'
+    printf '    [2] Remove config + themes (~/.config/lash/)\n'
+    printf '    [3] Remove config + themes + rc files (~/.lashrc, ~/.lash_profile)\n'
+    printf '    [4] Keep all config files\n\n'
+
+    local choice
+    choice=$(ask_choice "Choice" "4")
+
+    case "$choice" in
+        1)
+            rm -f "$CONFIG_DIR/config"
+            success "Removed config"
+            ;;
+        2)
+            rm -rf "$CONFIG_DIR"
+            success "Removed ~/.config/lash/"
+            ;;
+        3)
+            rm -rf "$CONFIG_DIR"
+            rm -f "$HOME/.lashrc"
+            rm -f "$HOME/.lash_profile"
+            success "Removed config, themes, rc, and profile files"
+            ;;
+        4)
+            info "Config files kept"
+            ;;
+        *)
+            error "Invalid choice"
+            exit 1
+            ;;
+    esac
+
+    rm -f "$PREFS_FILE"
+    success "Uninstall complete"
+}
+
 reinstall() {
     local old_path
     old_path=$(grep '^install_path=' "$PREFS_FILE" | cut -d= -f2- || true)
@@ -450,7 +508,8 @@ reinstall() {
     printf '\n'
     printf '  [1] Re-install (build + copy binary, keep config)\n'
     printf '  [2] Full setup (remove old binary, reconfigure everything)\n'
-    printf '  [3] Cancel\n\n'
+    printf '  [3] Uninstall\n'
+    printf '  [4] Cancel\n\n'
 
     local choice
     choice=$(ask_choice "Choice" "1")
@@ -485,6 +544,10 @@ reinstall() {
             show_done
             ;;
         3)
+            uninstall
+            exit 0
+            ;;
+        4)
             info "Cancelled"
             exit 0
             ;;
