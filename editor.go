@@ -1031,13 +1031,7 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	cursorW := bufWidth(e.buf[:e.cursor])
 
 	targetPos := typingCol + cursorW
-	atEnd := e.cursor == len(e.buf)
-	atExactEdge := atEnd && targetPos > 0 && targetPos%termW == 0
-	if atExactEdge {
-		e.screenRow = targetPos/termW - 1
-	} else {
-		e.screenRow = targetPos / termW
-	}
+	e.screenRow = targetPos / termW
 
 	endPos := typingCol + newW
 	var endRow int
@@ -1047,13 +1041,16 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 		endRow = endPos / termW
 	}
 
+	atExactEdge := e.cursor == len(e.buf) && targetPos > 0 && targetPos%termW == 0
+
 	rowsDiff := endRow - e.screenRow
 	if rowsDiff > 0 {
 		buf.WriteString(fmt.Sprintf("\033[%dA", rowsDiff))
 	} else if rowsDiff < 0 && !atExactEdge {
 		buf.WriteString(fmt.Sprintf("\033[%dB", -rowsDiff))
 	}
-	if atExactEdge && rowsDiff == 0 {
+	if atExactEdge {
+		buf.WriteString("\r\n")
 	} else {
 		buf.WriteString("\r")
 		targetCol := targetPos % termW
