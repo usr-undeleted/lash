@@ -1023,6 +1023,13 @@ func initShell() *Config {
 	currentConfig = cfg
 	applyConfigToOptions(cfg)
 
+	if shellLogin {
+		sourceProfile(cfg)
+	}
+	if shellInteractive && !norc {
+		sourceLashrc(cfg)
+	}
+
 	if len(keybindArgs) > 0 {
 		if len(keybindArgs) < 2 {
 			printKeybindHelp()
