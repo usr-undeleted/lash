@@ -987,6 +987,11 @@ func initShell() *Config {
 			i = len(args)
 		default:
 			if !strings.HasPrefix(args[i], "-") {
+				// skip if it looks like a file path (e.g. Android/termux passing binary path as arg)
+				if strings.Contains(args[i], "/") {
+					i++
+					continue
+				}
 				handleGlobalCommand(args[i:])
 				return nil
 			}
