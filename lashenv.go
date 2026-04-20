@@ -27,6 +27,10 @@ type trustEntry struct {
 
 var lastLashenvPath string
 var lastLashenvHash string
+var lastLashenvSnapVars map[string]string
+var lastLashenvSnapExported map[string]bool
+var lastLashenvSnapArrays map[string]*ArrayVar
+var lastLashenvSnapAliases map[string]*Alias
 
 func trustedEnvsPath() string {
 	home, err := os.UserHomeDir()
@@ -140,6 +144,26 @@ func tryLoadLashenv(cfg *Config) int {
 
 	envPath, found := findLashenv(dir)
 	if !found {
+		if lastLashenvSnapVars != nil {
+			liveExported, _ := snapshotVars()
+			restoreVars(lastLashenvSnapVars, lastLashenvSnapExported)
+			restoreArrays(lastLashenvSnapArrays)
+			restoreAliases(lastLashenvSnapAliases)
+			for k := range liveExported {
+				if _, ok := lastLashenvSnapExported[k]; !ok {
+					os.Unsetenv(k)
+				}
+			}
+			for k, v := range lastLashenvSnapVars {
+				if lastLashenvSnapExported[k] {
+					os.Setenv(k, v)
+				}
+			}
+			lastLashenvSnapVars = nil
+			lastLashenvSnapExported = nil
+			lastLashenvSnapArrays = nil
+			lastLashenvSnapAliases = nil
+		}
 		lastLashenvPath = ""
 		lastLashenvHash = ""
 		return 0
@@ -161,6 +185,9 @@ func tryLoadLashenv(cfg *Config) int {
 	case trustAllowed:
 		lastLashenvPath = envPath
 		lastLashenvHash = hash
+		lastLashenvSnapVars, lastLashenvSnapExported = snapshotVars()
+		lastLashenvSnapArrays = snapshotArrays()
+		lastLashenvSnapAliases = snapshotAliases()
 		return loadLashenvFile(envPath, cfg)
 	case trustChanged:
 		fmt.Fprintf(os.Stderr, "lash: .lashenv at %s changed since approval — run 'lash env allow' to re-approve\n", envPath)
@@ -194,6 +221,26 @@ func printEnvHelp() {
 func builtinEnvRefresh(cfg *Config) {
 	lastLashenvPath = ""
 	lastLashenvHash = ""
+	if lastLashenvSnapVars != nil {
+		liveExported, _ := snapshotVars()
+		restoreVars(lastLashenvSnapVars, lastLashenvSnapExported)
+		restoreArrays(lastLashenvSnapArrays)
+		restoreAliases(lastLashenvSnapAliases)
+		for k := range liveExported {
+			if _, ok := lastLashenvSnapExported[k]; !ok {
+				os.Unsetenv(k)
+			}
+		}
+		for k, v := range lastLashenvSnapVars {
+			if lastLashenvSnapExported[k] {
+				os.Setenv(k, v)
+			}
+		}
+		lastLashenvSnapVars = nil
+		lastLashenvSnapExported = nil
+		lastLashenvSnapArrays = nil
+		lastLashenvSnapAliases = nil
+	}
 	dir, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "lash: env refresh: %s\n", err)

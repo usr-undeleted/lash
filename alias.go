@@ -337,3 +337,22 @@ func removeAlias(name string) bool {
 	delete(aliasTable, name)
 	return true
 }
+
+func snapshotAliases() map[string]*Alias {
+	aliasMu.RLock()
+	defer aliasMu.RUnlock()
+	s := make(map[string]*Alias, len(aliasTable))
+	for k, v := range aliasTable {
+		s[k] = v
+	}
+	return s
+}
+
+func restoreAliases(saved map[string]*Alias) {
+	aliasMu.Lock()
+	defer aliasMu.Unlock()
+	aliasTable = make(map[string]*Alias, len(saved))
+	for k, v := range saved {
+		aliasTable[k] = v
+	}
+}
