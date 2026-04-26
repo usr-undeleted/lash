@@ -4,7 +4,12 @@ import (
 	"bufio"
 	_ "embed"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
 //go:embed logo/lash.txt
@@ -106,4 +111,57 @@ func getLogo(size string) string {
 func printVersion(size string) {
 	fmt.Print(getLogo(size))
 	fmt.Printf("\n              lash %s\n\n", getVersion())
+}
+
+func checkForUpdates(cfg *Config) {
+	if cfg.UpdateSource == "" {
+		return
+	}
+
+	cacheFile := filepath.Join(filepath.Dir(configPath()), "update-check")
+	if data, err := os.ReadFile(cacheFile); err == nil {
+		if t, err := time.Parse(time.RFC3339, strings.TrimSpace(string(data))); err == nil {
+			if time.Since(t) < 24*time.Hour {
+				return
+			}
+		}
+	}
+
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+	if err := os.Chdir(cfg.UpdateSource); err != nil {
+		return
+	}
+
+	fetch := exec.Command("git", "fetch", "origin")
+	done := make(chan struct{})
+	go func() {
+		fetch.Run()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		return
+	}
+
+	countOut, err := exec.Command("git", "rev-list", "HEAD..origin/main", "--count").Output()
+	if err != nil {
+		return
+	}
+	count, err := strconv.Atoi(strings.TrimSpace(string(countOut)))
+	if err != nil || count <= 0 {
+		os.MkdirAll(filepath.Dir(cacheFile), 0755)
+		os.WriteFile(cacheFile, []byte(time.Now().Format(time.RFC3339)), 0644)
+		return
+	}
+
+	os.MkdirAll(filepath.Dir(cacheFile), 0755)
+	os.WriteFile(cacheFile, []byte(time.Now().Format(time.RFC3339)), 0644)
+
+	if count == 1 {
+		fmt.Fprintf(os.Stderr, "lash: update available — run lash update\n")
+	} else {
+		fmt.Fprintf(os.Stderr, "lash: update available (%d commits behind) — run lash update\n", count)
+	}
 }

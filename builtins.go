@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -394,6 +395,14 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				fmt.Fprintln(os.Stderr, "see 'lash env help' for env usage.")
 				lastExitCode = 1
 			}
+		case "update":
+			if ctx.Cfg.UpdateSource == "" {
+				fmt.Fprintln(os.Stderr, "lash: update-source not set — configure with:")
+				fmt.Fprintln(os.Stderr, "  lash set-config update-source /path/to/lash/source")
+				lastExitCode = 1
+				return
+			}
+			builtinUpdate(ctx)
 		default:
 			fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", args[1])
 			fmt.Fprintln(os.Stderr, "see 'lash help' for shell usage.")
@@ -1498,5 +1507,63 @@ func builtinHash(args []string) {
 		}
 		hashMu.Unlock()
 	}
+	lastExitCode = 0
+}
+
+func builtinUpdate(ctx *ExecContext) {
+	origDir, _ := os.Getwd()
+	defer os.Chdir(origDir)
+
+	if err := os.Chdir(ctx.Cfg.UpdateSource); err != nil {
+		fmt.Fprintf(os.Stderr, "lash: %s: %s\n", ctx.Cfg.UpdateSource, err)
+		lastExitCode = 1
+		return
+	}
+
+	pull := exec.Command("git", "pull", "--rebase")
+	pull.Stdout = os.Stdout
+	pull.Stderr = os.Stderr
+	if err := pull.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "lash: git pull failed: %s\n", err)
+		lastExitCode = 1
+		return
+	}
+
+	build := exec.Command("bash", "./build.sh")
+	build.Stdout = os.Stdout
+	build.Stderr = os.Stderr
+	if err := build.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "lash: build failed: %s\n", err)
+		lastExitCode = 1
+		return
+	}
+
+	self, err := os.Executable()
+	if err != nil || self == "" {
+		fmt.Fprintln(os.Stderr, "lash: cannot determine current binary path")
+		lastExitCode = 1
+		return
+	}
+
+	srcBin := filepath.Join(ctx.Cfg.UpdateSource, "lash")
+	data, err := os.ReadFile(srcBin)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "lash: cannot read built binary: %s\n", err)
+		lastExitCode = 1
+		return
+	}
+
+	if err := os.WriteFile(self, data, 0755); err != nil {
+		sudo := exec.Command("sudo", "install", "-m", "0755", srcBin, self)
+		sudo.Stdout = os.Stdout
+		sudo.Stderr = os.Stderr
+		if err := sudo.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "lash: install failed: %s\n", err)
+			lastExitCode = 1
+			return
+		}
+	}
+
+	fmt.Printf("Updated to %s — restart your shell\n", getVersion())
 	lastExitCode = 0
 }

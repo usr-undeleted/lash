@@ -944,6 +944,7 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  theme <set|save|list|delete>  manage prompt themes")
 	fmt.Fprintln(os.Stderr, "  keybind <set|list|reset|delete|actions>  manage key bindings")
 	fmt.Fprintln(os.Stderr, "  env <refresh|allow|deny|trusted>  manage .lashenv trust")
+	fmt.Fprintln(os.Stderr, "  update                    pull, build, and install latest lash")
 }
 
 func initShell() *Config {
@@ -1142,6 +1143,8 @@ func main() {
 	if setLashenv {
 		tryLoadLashenv(cfg)
 	}
+
+	checkForUpdates(cfg)
 
 	globalEditor = NewLineEditor(cfg)
 	stdinReader = bufio.NewReader(os.Stdin)

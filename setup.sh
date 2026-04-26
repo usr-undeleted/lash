@@ -491,6 +491,7 @@ setup_config() {
         "$SCRIPT_DIR/lash" set-config history-size "$hist_size" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config colored-output "$colored_output" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config auto-suggest "$auto_suggest" 2>/dev/null || true
+        "$SCRIPT_DIR/lash" set-config update-source "$SCRIPT_DIR" 2>/dev/null || true
         success "Configuration applied"
     else
         warn "Could not apply config — binary not found"
