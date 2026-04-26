@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"sort"
 	"strings"
 )
 
@@ -193,4 +194,51 @@ func damerauLevenshtein(a, b string) int {
 		}
 	}
 	return d[n][m]
+}
+
+type fuzzyEntry struct {
+	name string
+	dist int
+}
+
+func FuzzyCompletions(partial string, threshold int, autocd bool) []completionEntry {
+	if len(partial) == 0 {
+		return nil
+	}
+
+	partialLower := strings.ToLower(partial)
+	first := rune(partialLower[0])
+
+	candidates := collectCandidates(autocd, first)
+
+	var results []fuzzyEntry
+	for _, c := range candidates {
+		cLower := strings.ToLower(c)
+		if strings.HasPrefix(cLower, partialLower) {
+			continue // exact prefix matches should be found by normal completion
+		}
+		dist := damerauLevenshtein(partialLower, cLower)
+		if dist <= threshold {
+			results = append(results, fuzzyEntry{name: c, dist: dist})
+		}
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].dist != results[j].dist {
+			return results[i].dist < results[j].dist
+		}
+		return strings.ToLower(results[i].name) < strings.ToLower(results[j].name)
+	})
+
+	seen := make(map[string]bool)
+	var entries []completionEntry
+	for _, r := range results {
+		if seen[r.name] {
+			continue
+		}
+		seen[r.name] = true
+		desc := getDesc(r.name)
+		entries = append(entries, completionEntry{name: r.name, desc: desc})
+	}
+	return entries
 }
