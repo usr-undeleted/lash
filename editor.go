@@ -31,6 +31,7 @@ type LineEditor struct {
 	termKeySeqs    map[string]string
 	savedTermState *term.State
 	continuation   bool
+	suggestion    string
 }
 
 func NewLineEditor(cfg *Config) *LineEditor {
@@ -78,36 +79,50 @@ func (e *LineEditor) executeAction(action string, prompt string, prevW *int) (st
 	case actEndOfLine:
 		if e.cursor < len(e.buf) {
 			e.cursor = len(e.buf)
+			e.clearSuggestion()
+			*prevW = e.redraw(prompt, *prevW)
+		} else if e.suggestion != "" {
+			e.buf = append(e.buf, []rune(e.suggestion)...)
+			e.cursor = len(e.buf)
+			e.clearSuggestion()
 			*prevW = e.redraw(prompt, *prevW)
 		}
 	case actKillLineStart:
 		e.buf = e.buf[e.cursor:]
 		e.cursor = 0
+		e.updateSuggestion()
 		*prevW = e.redraw(prompt, *prevW)
 	case actKillLineEnd:
 		e.buf = e.buf[:e.cursor]
+		e.updateSuggestion()
 		*prevW = e.redraw(prompt, *prevW)
 	case actDeleteWordBack:
 		e.deleteWordBack(prompt, prevW)
+		e.updateSuggestion()
 	case actDeleteWordWSBack:
 		e.deleteWhitespaceWordBack(prompt, prevW)
+		e.updateSuggestion()
 	case actDeleteChar:
 		if e.cursor < len(e.buf) {
 			e.buf = append(e.buf[:e.cursor], e.buf[e.cursor+1:]...)
+			e.updateSuggestion()
 			*prevW = e.redraw(prompt, *prevW)
 		}
 	case actBackspace:
 		if e.cursor > 0 {
 			e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
 			e.cursor--
+			e.updateSuggestion()
 			*prevW = e.redraw(prompt, *prevW)
 		}
 	case actClearScreen:
+		e.clearSuggestion()
 		os.Stdout.Write([]byte("\x1b[2J\x1b[H"))
 		os.Stdout.Write([]byte(prompt))
 		e.screenRow = 0
 		*prevW = e.redraw(prompt, 0)
 	case actReverseSearch:
+		e.clearSuggestion()
 		*prevW = e.handleReverseSearch(prompt, *prevW)
 		if e.accepted {
 			e.accepted = false
@@ -117,6 +132,7 @@ func (e *LineEditor) executeAction(action string, prompt string, prevW *int) (st
 			return string(e.buf), nil, true
 		}
 	case actAcceptLine:
+		e.clearSuggestion()
 		os.Stdout.Write([]byte("\r\n"))
 		line := string(e.buf)
 		if strings.TrimSpace(line) != "" {
@@ -152,14 +168,17 @@ func (e *LineEditor) executeAction(action string, prompt string, prevW *int) (st
 		e.eofCount = 0
 		if e.cursor < len(e.buf) {
 			e.buf = append(e.buf[:e.cursor], e.buf[e.cursor+1:]...)
+			e.updateSuggestion()
 			*prevW = e.redraw(prompt, *prevW)
 		}
 	case actInterrupt:
+		e.clearSuggestion()
 		os.Stdout.Write([]byte("^C\r\n"))
 		e.buf = nil
 		e.cursor = 0
 		return "\x03", nil, true
 	case actSuspend:
+		e.clearSuggestion()
 		fd := int(os.Stdin.Fd())
 		if e.savedTermState != nil {
 			term.Restore(fd, e.savedTermState)
@@ -181,6 +200,7 @@ func (e *LineEditor) executeAction(action string, prompt string, prevW *int) (st
 			e.histIdx--
 			e.buf = []rune(e.history[e.histIdx])
 			e.cursor = len(e.buf)
+			e.clearSuggestion()
 			*prevW = e.redraw(prompt, *prevW)
 		}
 	case actHistoryForward:
@@ -192,9 +212,11 @@ func (e *LineEditor) executeAction(action string, prompt string, prevW *int) (st
 				e.buf = nil
 			}
 			e.cursor = len(e.buf)
+			e.clearSuggestion()
 			*prevW = e.redraw(prompt, *prevW)
 		}
 	case actComplete:
+		e.clearSuggestion()
 		*prevW = e.handleTabCompletion(prompt, *prevW)
 	case actCursorLeft:
 		if e.cursor > 0 {
@@ -204,6 +226,14 @@ func (e *LineEditor) executeAction(action string, prompt string, prevW *int) (st
 	case actCursorRight:
 		if e.cursor < len(e.buf) {
 			e.cursor++
+			e.clearSuggestion()
+			*prevW = e.redraw(prompt, *prevW)
+		} else if e.suggestion != "" {
+			runes := []rune(e.suggestion)
+			e.buf = append(e.buf, runes[0])
+			e.cursor++
+			e.suggestion = string(runes[1:])
+			e.updateSuggestion()
 			*prevW = e.redraw(prompt, *prevW)
 		}
 	case actNop:
@@ -467,6 +497,7 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 	}
 	defer term.Restore(int(os.Stdin.Fd()), oldState)
 	e.savedTermState = oldState
+	e.clearSuggestion()
 
 	e.buf = nil
 	e.cursor = 0
@@ -509,6 +540,7 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 			r, _ := e.readRune(b[0])
 			e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
 			e.cursor++
+			e.updateSuggestion()
 			prevW = e.redraw(prompt, prevW)
 		}
 	}
@@ -615,6 +647,14 @@ func (e *LineEditor) handleCSI(prompt string, prevW *int) (string, error, bool) 
 				} else {
 					if e.cursor < len(e.buf) {
 						e.cursor++
+						e.clearSuggestion()
+						*prevW = e.redraw(prompt, *prevW)
+					} else if e.suggestion != "" {
+						runes := []rune(e.suggestion)
+						e.buf = append(e.buf, runes[0])
+						e.cursor++
+						e.suggestion = string(runes[1:])
+						e.updateSuggestion()
 						*prevW = e.redraw(prompt, *prevW)
 					}
 				}
@@ -638,8 +678,16 @@ func (e *LineEditor) handleCSI(prompt string, prevW *int) (string, error, bool) 
 				if len(params) >= 2 && params[1] == 5 {
 					e.moveWordForward(prompt, prevW)
 				} else {
-					e.cursor = len(e.buf)
-					*prevW = e.redraw(prompt, *prevW)
+					if e.cursor < len(e.buf) {
+						e.cursor = len(e.buf)
+						e.clearSuggestion()
+						*prevW = e.redraw(prompt, *prevW)
+					} else if e.suggestion != "" {
+						e.buf = append(e.buf, []rune(e.suggestion)...)
+						e.cursor = len(e.buf)
+						e.clearSuggestion()
+						*prevW = e.redraw(prompt, *prevW)
+					}
 				}
 			case '~':
 				if len(params) > 0 {
@@ -655,8 +703,16 @@ func (e *LineEditor) handleCSI(prompt string, prevW *int) (string, error, bool) 
 							*prevW = e.redraw(prompt, *prevW)
 						}
 					case 4:
-						e.cursor = len(e.buf)
-						*prevW = e.redraw(prompt, *prevW)
+						if e.cursor < len(e.buf) {
+							e.cursor = len(e.buf)
+							e.clearSuggestion()
+							*prevW = e.redraw(prompt, *prevW)
+						} else if e.suggestion != "" {
+							e.buf = append(e.buf, []rune(e.suggestion)...)
+							e.cursor = len(e.buf)
+							e.clearSuggestion()
+							*prevW = e.redraw(prompt, *prevW)
+						}
 					}
 				}
 			}
@@ -1026,6 +1082,11 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	}
 	buf.WriteString("\033[?25l")
 	buf.WriteString(display)
+	if e.suggestion != "" {
+		buf.WriteString(colorDarkGrey)
+		buf.WriteString(e.suggestion)
+		buf.WriteString(colorReset)
+	}
 
 	newW := bufWidth(e.buf)
 	cursorW := bufWidth(e.buf[:e.cursor])
@@ -1062,6 +1123,73 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	os.Stdout.WriteString(buf.String())
 
 	return newW
+}
+
+func (e *LineEditor) clearSuggestion() {
+	e.suggestion = ""
+}
+
+func (e *LineEditor) updateSuggestion() {
+	if e.config == nil || !e.config.AutoSuggest {
+		e.suggestion = ""
+		return
+	}
+	text := string(e.buf)
+	tokens := tokenize(text)
+	if len(tokens) == 0 {
+		e.suggestion = ""
+		return
+	}
+
+	tokenIdx := -1
+	inSpace := true
+	for i, r := range e.buf {
+		if i >= e.cursor {
+			break
+		}
+		if r == ' ' || r == '\t' {
+			inSpace = true
+		} else if inSpace {
+			inSpace = false
+			tokenIdx++
+		}
+	}
+
+	isFirstToken := tokenIdx == 0
+
+	var partial string
+	if inSpace && tokenIdx >= 0 {
+		e.suggestion = ""
+		return
+	}
+
+	if isFirstToken {
+		if tokenIdx < len(tokens) {
+			partial = tokens[tokenIdx]
+		}
+	} else {
+		if tokenIdx >= 0 && tokenIdx < len(tokens) {
+			partial = tokens[tokenIdx]
+		}
+	}
+
+	if partial == "" {
+		e.suggestion = ""
+		return
+	}
+
+	var candidates []string
+	if isFirstToken {
+		candidates = e.completeCommand(partial)
+	} else {
+		candidates = e.completePath(partial)
+	}
+
+	if len(candidates) == 1 && strings.HasPrefix(candidates[0], partial) && len(candidates[0]) > len(partial) {
+		e.suggestion = candidates[0][len(partial):]
+	} else {
+		e.suggestion = ""
+	}
 }
 
 func isShellOperator(t string) bool {
@@ -1191,6 +1319,8 @@ func (e *LineEditor) syntaxHighlight() string {
 			if token == "then" || token == "do" || token == "else" || token == "elif" || token == "!" {
 				cmdPos = true
 			}
+		} else {
+			result.WriteString(token)
 		}
 
 		if idx < len(spans)-1 {

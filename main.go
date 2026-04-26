@@ -233,6 +233,7 @@ const (
 	colorMagenta = "\x1b[35m"
 	colorCyan    = "\x1b[36m"
 	colorWhite   = "\x1b[37m"
+	colorDarkGrey = "\x1b[90m"
 )
 
 func getGitBranch() string {
