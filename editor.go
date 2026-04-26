@@ -1297,7 +1297,13 @@ func (e *LineEditor) syntaxHighlight() string {
 				cmdPos = isChainOperator(token)
 			} else {
 				resolved := resolveTildeForCheck(token)
-				if isValidCommand(resolved) {
+				valid := isValidCommand(resolved)
+				if !valid && e.config != nil && e.config.AutoCd {
+					if info, err := os.Stat(resolved); err == nil && info.IsDir() {
+						valid = true
+					}
+				}
+				if valid {
 					result.WriteString(colorGreen)
 				} else {
 					result.WriteString(colorRed)
@@ -1390,6 +1396,18 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 	var candidates []string
 	if isFirstToken {
 		candidates = e.completeCommand(partial)
+		if e.config != nil && e.config.AutoCd && len(partial) > 0 {
+			seen := make(map[string]bool)
+			for _, c := range candidates {
+				seen[c] = true
+			}
+			for _, c := range e.completePath(partial) {
+				if !seen[c] {
+					candidates = append(candidates, c)
+				}
+			}
+			sort.Strings(candidates)
+		}
 	} else {
 		candidates = e.completePath(partial)
 	}
