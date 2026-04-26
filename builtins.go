@@ -284,6 +284,7 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			globalEditor.savedTermState = state
 			return
 		}
+	lashSub:
 		switch args[1] {
 		case "set-config":
 			if len(args) == 3 && args[2] == "list" {
@@ -407,6 +408,14 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			doFix := len(args) > 2 && args[2] == "--fix"
 			runDoctor(ctx.Cfg, doFix)
 		default:
+			if ctx.Cfg.AutoCorrect {
+				subs := []string{"set-config", "version", "help", "theme", "keybind", "env", "update", "doctor"}
+				if corr := findBestMatch(subs, strings.ToLower(args[1]), ctx.Cfg.AutoCorrectThreshold); corr != "" {
+					fmt.Fprintf(os.Stderr, "lash: corrected '%s' to '%s'\n", args[1], corr)
+					args[1] = corr
+					goto lashSub
+				}
+			}
 			fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", args[1])
 			fmt.Fprintln(os.Stderr, "see 'lash help' for shell usage.")
 			lastExitCode = 1
