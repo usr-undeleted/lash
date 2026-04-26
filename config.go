@@ -32,6 +32,7 @@ type Config struct {
 	Lashenv           bool
 	ColoredOutput     bool
 	AutoSuggest       bool
+	AutoCd            bool
 	Keybinds          map[string]string
 }
 
@@ -140,6 +141,8 @@ func LoadConfig() *Config {
 			cfg.ColoredOutput = val == "1"
 		case "auto-suggest":
 			cfg.AutoSuggest = val == "1"
+		case "auto-cd":
+			cfg.AutoCd = val == "1"
 		}
 	}
 	return cfg
@@ -178,6 +181,7 @@ func (c *Config) Save() error {
 	lines = append(lines, fmt.Sprintf("lashenv = %s", boolToStr(c.Lashenv)))
 	lines = append(lines, fmt.Sprintf("colored-output = %s", boolToStr(c.ColoredOutput)))
 	lines = append(lines, fmt.Sprintf("auto-suggest = %s", boolToStr(c.AutoSuggest)))
+	lines = append(lines, fmt.Sprintf("auto-cd = %s", boolToStr(c.AutoCd)))
 	if len(c.Keybinds) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "[keybinds]")
@@ -265,6 +269,9 @@ func (c *Config) Set(key, val string) bool {
 	case "auto-suggest":
 		c.AutoSuggest = val == "1"
 		return true
+	case "auto-cd":
+		c.AutoCd = val == "1"
+		return true
 	}
 	return false
 }
@@ -296,6 +303,7 @@ var configKeys = []configEntry{
 	{"lashenv", "<0|1>", "load per-directory .lashenv on cd"},
 	{"colored-output", "<0|1>", "set LS_COLORS and GREP_COLORS if not already defined"},
 	{"auto-suggest", "<0|1>", "show grayed-out inline completion hints as you type"},
+	{"auto-cd", "<0|1>", "change to directory when typed as a command"},
 }
 
 func printConfigList() {
@@ -325,6 +333,7 @@ func printConfigShow(c *Config) {
 	fmt.Printf("%-22s %s\n", "lashenv", boolToStr(c.Lashenv))
 	fmt.Printf("%-22s %s\n", "colored-output", boolToStr(c.ColoredOutput))
 	fmt.Printf("%-22s %s\n", "auto-suggest", boolToStr(c.AutoSuggest))
+	fmt.Printf("%-22s %s\n", "auto-cd", boolToStr(c.AutoCd))
 }
 
 func boolToStr(b bool) string {

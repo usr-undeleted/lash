@@ -262,6 +262,22 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 		return
 	}
 
+	if ctx.Cfg.AutoCd && len(expanded) == 1 {
+		if info, err := os.Stat(expanded[0]); err == nil && info.IsDir() {
+			if err := os.Chdir(expanded[0]); err != nil {
+				fmt.Fprintf(ctx.Stderr, "lash: %s\n", err)
+				lastExitCode = 1
+			} else {
+				lastExitCode = 0
+				if setLashenv {
+					tryLoadLashenv(ctx.Cfg)
+				}
+			}
+			waitProcSubst()
+			return
+		}
+	}
+
 	if cmd.Background {
 		executeBackground(expanded, redirCtx, prefixEnv)
 	} else {
