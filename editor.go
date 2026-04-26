@@ -1975,7 +1975,7 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 
 	if len(candidates) == 0 {
 		if e.config != nil && e.config.AutoCorrect && len(partial) > 0 {
-			fuzzy := FuzzyCompletions(partial, e.config.AutoCorrectThreshold, e.config.AutoCd)
+			fuzzy := FuzzyCompletions(partial, e.config.AutoCorrectThreshold, e.config.AutoCd, len(tokens) > 0 && tokens[0] == "cd")
 			if len(fuzzy) > 0 {
 				return e.applyCompletion(prompt, prevBufW, fuzzy, partial, isFirstToken, true)
 			}

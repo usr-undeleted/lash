@@ -201,7 +201,7 @@ type fuzzyEntry struct {
 	dist int
 }
 
-func FuzzyCompletions(partial string, threshold int, autocd bool) []completionEntry {
+func FuzzyCompletions(partial string, threshold int, autocd bool, dirsOnly bool) []completionEntry {
 	if len(partial) == 0 {
 		return nil
 	}
@@ -209,7 +209,19 @@ func FuzzyCompletions(partial string, threshold int, autocd bool) []completionEn
 	partialLower := strings.ToLower(partial)
 	first := rune(partialLower[0])
 
-	candidates := collectCandidates(autocd, first)
+	var candidates []string
+	if dirsOnly {
+		entries, err := os.ReadDir(".")
+		if err == nil {
+			for _, e := range entries {
+				if e.IsDir() && !strings.HasPrefix(e.Name(), ".") && startsWithRune(e.Name(), first) {
+					candidates = append(candidates, e.Name()+"/")
+				}
+			}
+		}
+	} else {
+		candidates = collectCandidates(autocd, first)
+	}
 
 	var results []fuzzyEntry
 	for _, c := range candidates {
