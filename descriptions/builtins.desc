@@ -1,0 +1,280 @@
+# lash builtin command descriptions
+
+[exit]
+desc "exit the shell"
+category builtins
+flag-char ""
+
+[cd]
+desc "change directory"
+category builtins
+flag-char ""
+
+[pwd]
+desc "print working directory"
+category builtins
+flag-char ""
+
+[jobs]
+desc "list active jobs"
+category builtins
+flag-char ""
+
+[fg]
+desc "bring job to foreground"
+category builtins
+flag-char ""
+
+[bg]
+desc "resume job in background"
+category builtins
+flag-char ""
+
+[kill]
+desc "send signal to a process"
+category builtins
+flag-char "-"
+flag -l "list all signal names and numbers"
+flag -s "specify signal to send"
+
+[export]
+desc "set environment variable"
+category builtins
+flag-char ""
+
+[unset]
+desc "remove variable or function"
+category builtins
+flag-char ""
+
+[env]
+desc "display exported environment variables"
+category builtins
+flag-char ""
+
+[echo]
+desc "print text to stdout"
+category builtins
+flag-char "-"
+flag -n "suppress trailing newline"
+flag -e "enable escape sequence interpretation"
+flag -ne "suppress newline and enable escapes"
+flag -en "suppress newline and enable escapes"
+
+[true]
+desc "return success exit code"
+category builtins
+flag-char ""
+
+[false]
+desc "return failure exit code"
+category builtins
+flag-char ""
+
+[type]
+desc "display command type and location"
+category builtins
+flag-char ""
+
+[which]
+desc "locate a command in PATH"
+category builtins
+flag-char ""
+
+[alias]
+desc "create or list command aliases"
+category builtins
+flag-char ""
+
+[unalias]
+desc "remove a command alias"
+category builtins
+flag-char ""
+
+[source]
+desc "execute commands from a file"
+category builtins
+flag-char ""
+
+[.]
+desc "execute commands from a file"
+category builtins
+flag-char ""
+
+[return]
+desc "return from a function"
+category builtins
+flag-char ""
+
+[local]
+desc "declare local variables in a function"
+category builtins
+flag-char ""
+
+[shift]
+desc "shift positional parameters"
+category builtins
+flag-char ""
+
+[read]
+desc "read input from stdin into variables"
+category builtins
+flag-char "-"
+flag -p "display prompt before reading"
+flag -r "do not allow backslash escapes"
+flag -s "read silently (no echo)"
+flag -n "read at most N characters"
+flag -t "timeout in seconds"
+flag -d "use custom delimiter instead of newline"
+flag -a "read into an array"
+
+[set]
+desc "set or display shell options and variables"
+category builtins
+flag-char ""
+
+[fetch]
+desc "make HTTP requests"
+category builtins
+flag-char ""
+
+[trap]
+desc "set signal handlers"
+category builtins
+flag-char "-"
+flag -l "list all signal names"
+flag -p "print trap handlers for signals"
+
+[test]
+desc "evaluate conditional expression"
+category builtins
+flag-char ""
+
+[]
+desc "evaluate conditional expression"
+category builtins
+flag-char ""
+
+[declare]
+desc "declare variable types"
+category builtins
+flag-char "-"
+flag -a "declare indexed array"
+flag -A "declare associative array"
+
+[mapfile]
+desc "read lines from stdin into an array"
+category builtins
+flag-char "-"
+flag -t "strip trailing delimiters"
+flag -n "read at most N lines"
+flag -O "start storing at array index"
+
+[readarray]
+desc "read lines from stdin into an array"
+category builtins
+flag-char "-"
+flag -t "strip trailing delimiters"
+flag -n "read at most N lines"
+flag -O "start storing at array index"
+
+[hash]
+desc "remember or report command locations"
+category builtins
+flag-char "-"
+flag -r "clear all cached paths"
+flag -d "remove specific entries from cache"
+flag -l "list cached commands"
+flag -p "manually add path to cache"
+
+[lash]
+desc "lash meta-command for configuration"
+category builtins
+flag-char ""
+
+# shell keywords
+
+[if]
+desc "begin conditional block"
+category keywords
+flag-char ""
+
+[then]
+desc "execute if condition is true"
+category keywords
+flag-char ""
+
+[elif]
+desc "alternate condition in if chain"
+category keywords
+flag-char ""
+
+[else]
+desc "execute if no condition matched"
+category keywords
+flag-char ""
+
+[fi]
+desc "end if block"
+category keywords
+flag-char ""
+
+[while]
+desc "loop while condition is true"
+category keywords
+flag-char ""
+
+[until]
+desc "loop until condition is true"
+category keywords
+flag-char ""
+
+[for]
+desc "loop over words or ranges"
+category keywords
+flag-char ""
+
+[in]
+desc "specify loop iteration values"
+category keywords
+flag-char ""
+
+[do]
+desc "begin loop body"
+category keywords
+flag-char ""
+
+[done]
+desc "end loop body"
+category keywords
+flag-char ""
+
+[case]
+desc "begin pattern matching block"
+category keywords
+flag-char ""
+
+[esac]
+desc "end case block"
+category keywords
+flag-char ""
+
+[select]
+desc "generate menu from a list of items"
+category keywords
+flag-char ""
+
+[break]
+desc "exit from a loop"
+category keywords
+flag-char ""
+
+[continue]
+desc "skip to next loop iteration"
+category keywords
+flag-char ""
+
+[function]
+desc "define a shell function"
+category keywords
+flag-char ""

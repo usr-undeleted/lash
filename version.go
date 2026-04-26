@@ -27,6 +27,9 @@ var roadmap string
 //go:embed README.md
 var readme string
 
+//go:embed descriptions/builtins.desc
+var shippedDescs string
+
 func getVersion() string {
 	type phaseData struct {
 		number    int

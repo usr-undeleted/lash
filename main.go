@@ -1016,6 +1016,7 @@ func initShell() *Config {
 	initVarTable()
 	initArrayTable()
 	initOptions()
+	initDescriptions()
 	os.Setenv("PS1", defaultPS1)
 	setVar("PS1", defaultPS1, true)
 
@@ -1030,6 +1031,8 @@ func initShell() *Config {
 	currentConfig = cfg
 	applyConfigToOptions(cfg)
 	initColoredOutput(cfg)
+	loadShippedDescriptions(shippedDescs)
+	loadUserDescriptions()
 
 	if shellLogin {
 		sourceProfile(cfg)

@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -16,6 +15,11 @@ import (
 
 	"golang.org/x/term"
 )
+
+type completionEntry struct {
+	name string
+	desc string
+}
 
 type LineEditor struct {
 	buf            []rune
@@ -36,6 +40,10 @@ type LineEditor struct {
 	cycleIndex      int
 	cycleLen        int
 	cycleLastBuf    string
+	menuActive    bool
+	menuCandidates []completionEntry
+	menuSelected  int
+	menuRows      int
 }
 
 func NewLineEditor(cfg *Config) *LineEditor {
@@ -521,6 +529,208 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 			return "", err
 		}
 		if n == 0 {
+			continue
+		}
+
+		if e.menuActive {
+			if b[0] == '\x1b' {
+				b2 := e.readByte()
+				if b2 == '[' {
+					b3 := e.readByte()
+					if b3 == 'A' {
+						if e.menuSelected > 0 {
+							e.menuSelected--
+						} else {
+							e.menuSelected = len(e.menuCandidates) - 1
+						}
+						prevW = e.renderMenu(prompt, prevW)
+						continue
+					}
+					if b3 == 'B' {
+						if e.menuSelected < len(e.menuCandidates)-1 {
+							e.menuSelected++
+						} else {
+							e.menuSelected = 0
+						}
+						prevW = e.renderMenu(prompt, prevW)
+						continue
+					}
+					if b3 == 'D' {
+						menuCols := 1
+						menuRows := 1
+						if e.menuCandidates != nil && len(e.menuCandidates) > 0 {
+							menuCols = len(e.menuCandidates)
+							menuRows = 1
+							termW2 := getTermWidth()
+							if termW2 <= 0 {
+								termW2 = 80
+							}
+							mnl := 0
+							for _, c := range e.menuCandidates {
+								w := visibleWidth(c.name)
+								if w > mnl {
+									mnl = w
+								}
+							}
+							cw := mnl + 2
+							if cw <= termW2 {
+								menuCols = termW2 / cw
+							}
+							if menuCols < 1 {
+								menuCols = 1
+							}
+							menuRows = (len(e.menuCandidates) + menuCols - 1) / menuCols
+							if menuRows > 10 {
+								menuCols = (len(e.menuCandidates) + 9) / 10
+								menuRows = (len(e.menuCandidates) + menuCols - 1) / menuCols
+							}
+						}
+						newSel := e.menuSelected - menuRows
+						if newSel < 0 {
+							col := e.menuSelected
+							itemsInPrevCol := col + menuRows
+							for itemsInPrevCol > len(e.menuCandidates) {
+								itemsInPrevCol -= menuRows
+							}
+							newSel = itemsInPrevCol - menuRows
+							if newSel < 0 {
+								newSel = len(e.menuCandidates) - 1
+							}
+						}
+						if newSel >= 0 && newSel < len(e.menuCandidates) {
+							e.menuSelected = newSel
+						}
+						prevW = e.renderMenu(prompt, prevW)
+						continue
+					}
+					if b3 == 'C' {
+						menuCols := 1
+						menuRows := 1
+						if e.menuCandidates != nil && len(e.menuCandidates) > 0 {
+							menuCols = len(e.menuCandidates)
+							menuRows = 1
+							termW2 := getTermWidth()
+							if termW2 <= 0 {
+								termW2 = 80
+							}
+							mnl := 0
+							for _, c := range e.menuCandidates {
+								w := visibleWidth(c.name)
+								if w > mnl {
+									mnl = w
+								}
+							}
+							cw := mnl + 2
+							if cw <= termW2 {
+								menuCols = termW2 / cw
+							}
+							if menuCols < 1 {
+								menuCols = 1
+							}
+							menuRows = (len(e.menuCandidates) + menuCols - 1) / menuCols
+							if menuRows > 10 {
+								menuCols = (len(e.menuCandidates) + 9) / 10
+								menuRows = (len(e.menuCandidates) + menuCols - 1) / menuCols
+							}
+						}
+						newSel := e.menuSelected + menuRows
+						if newSel >= len(e.menuCandidates) {
+							col := e.menuSelected / menuRows
+							newSel = col * menuRows
+							if newSel >= len(e.menuCandidates) {
+								newSel = 0
+							}
+						}
+						if newSel >= 0 && newSel < len(e.menuCandidates) {
+							e.menuSelected = newSel
+						}
+						prevW = e.renderMenu(prompt, prevW)
+						continue
+					}
+				}
+				prevW = e.cancelMenu(prompt, prevW)
+				continue
+			}
+			if b[0] == '\r' || b[0] == '\n' {
+				prevW = e.acceptMenuSelection(prompt, prevW)
+				e.clearSuggestion()
+				os.Stdout.Write([]byte("\r\n"))
+				line := string(e.buf)
+				if strings.TrimSpace(line) != "" {
+					if setHistIgnoreSpace && len(line) > 0 && line[0] == ' ' {
+						return line, nil
+					}
+					if setHistIgnoreDups {
+						e.removeHistoryDup(line)
+						e.history = append(e.history, line)
+						e.saveHistory(line)
+					} else {
+						if len(e.history) == 0 || e.history[len(e.history)-1] != line {
+							e.history = append(e.history, line)
+							e.saveHistory(line)
+						}
+					}
+				}
+				return line, nil
+			}
+			if b[0] == 3 {
+				e.cancelMenu(prompt, prevW)
+				os.Stdout.Write([]byte("^C\r\n"))
+				e.buf = nil
+				e.cursor = 0
+				return "\x03", nil
+			}
+			if b[0] == 4 {
+				e.cancelMenu(prompt, prevW)
+				if len(e.buf) == 0 {
+					if setIgnoreEOF {
+						e.eofCount++
+						if e.eofCount < 10 {
+							os.Stdout.Write([]byte("\r\n"))
+							fmt.Fprintf(os.Stdout, "Use \"exit\" to leave the shell.\r\n")
+							os.Stdout.Write([]byte(prompt))
+							e.screenRow = 0
+							continue
+						}
+					}
+					return "", io.EOF
+				}
+				e.eofCount = 0
+				if e.cursor < len(e.buf) {
+					e.buf = append(e.buf[:e.cursor], e.buf[e.cursor+1:]...)
+					e.updateSuggestion()
+					prevW = e.redraw(prompt, prevW)
+				}
+				continue
+			}
+			if b[0] == 127 || b[0] == 8 {
+				e.cancelMenu(prompt, prevW)
+				if e.cursor > 0 {
+					e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
+					e.cursor--
+					e.updateSuggestion()
+					prevW = e.redraw(prompt, prevW)
+				}
+				continue
+			}
+			if b[0] >= 32 {
+				e.cancelMenu(prompt, prevW)
+				r, _ := e.readRune(b[0])
+				e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
+				e.cursor++
+				e.updateSuggestion()
+				prevW = e.redraw(prompt, prevW)
+				continue
+			}
+			seq := string([]byte{b[0]})
+			if action, ok := e.dispatchMap[seq]; ok {
+				e.cancelMenu(prompt, prevW)
+				if result, err, done := e.executeAction(action, prompt, &prevW); done {
+					return result, err
+				}
+				continue
+			}
+			e.cancelMenu(prompt, prevW)
 			continue
 		}
 
@@ -1188,15 +1398,15 @@ func (e *LineEditor) updateSuggestion() {
 		return
 	}
 
-	var candidates []string
+	var candidates []completionEntry
 	if tokenIdx == 0 {
 		candidates = e.completeCommand(partial)
 	} else {
 		candidates = e.completePath(partial)
 	}
 
-	if len(candidates) == 1 && strings.HasPrefix(candidates[0], partial) && len(candidates[0]) > len(partial) {
-		e.suggestion = candidates[0][len(partial):]
+	if len(candidates) == 1 && strings.HasPrefix(candidates[0].name, partial) && len(candidates[0].name) > len(partial) {
+		e.suggestion = candidates[0].name[len(partial):]
 	} else {
 		e.suggestion = ""
 	}
@@ -1350,6 +1560,258 @@ func (e *LineEditor) syntaxHighlight() string {
 	return result.String()
 }
 
+const colorInverse = "\x1b[7m"
+const colorDim = "\x1b[90m"
+
+func (e *LineEditor) renderMenu(prompt string, prevBufW int) int {
+	termW := getTermWidth()
+	if termW <= 0 {
+		termW = 80
+	}
+
+	// clear previous menu if present
+	if e.menuRows > 0 {
+		var clBuf strings.Builder
+		clBuf.WriteString("\033[B\r\033[K")
+		for i := 1; i < e.menuRows; i++ {
+			clBuf.WriteString("\033[B\r\033[K")
+		}
+		for i := 0; i < e.menuRows; i++ {
+			clBuf.WriteString("\033[A")
+		}
+		os.Stdout.WriteString(clBuf.String())
+		e.menuRows = 0
+	}
+
+	maxNameLen := 0
+	for _, c := range e.menuCandidates {
+		w := visibleWidth(c.name)
+		if w > maxNameLen {
+			maxNameLen = w
+		}
+	}
+	colWidth := maxNameLen + 2
+	cols := 1
+	if colWidth <= termW {
+		cols = termW / colWidth
+	}
+	if cols < 1 {
+		cols = 1
+	}
+	rows := (len(e.menuCandidates) + cols - 1) / cols
+	maxMenuRows := 10
+	if rows > maxMenuRows {
+		cols = (len(e.menuCandidates) + maxMenuRows - 1) / maxMenuRows
+		if cols < 1 {
+			cols = 1
+		}
+		rows = (len(e.menuCandidates) + cols - 1) / cols
+	}
+
+	var buf strings.Builder
+	buf.WriteString("\r\n")
+	for row := 0; row < rows; row++ {
+		for col := 0; col < cols; col++ {
+			idx := row + col*rows
+			if idx >= len(e.menuCandidates) {
+				break
+			}
+			entry := e.menuCandidates[idx]
+			nameW := visibleWidth(entry.name)
+
+			if idx == e.menuSelected {
+				buf.WriteString(colorInverse)
+				buf.WriteString(entry.name)
+				if col < cols-1 && row+((col+1)*rows) < len(e.menuCandidates) {
+					if entry.desc != "" {
+						avail := colWidth - nameW
+						if avail > 4 {
+							buf.WriteString(colorReset)
+							buf.WriteString(" ")
+							descW := avail - 1
+							truncated := truncateVisible(entry.desc, descW)
+							buf.WriteString(colorDim)
+							buf.WriteString(truncated)
+							pad := colWidth - nameW - visibleWidth(truncated) - 1
+							buf.WriteString(colorReset)
+							buf.WriteString(colorInverse)
+							buf.WriteString(strings.Repeat(" ", pad))
+						} else {
+							buf.WriteString(strings.Repeat(" ", colWidth-nameW))
+						}
+					} else {
+						buf.WriteString(strings.Repeat(" ", colWidth-nameW))
+					}
+					buf.WriteString(colorReset)
+				} else if entry.desc != "" && colWidth > nameW+4 {
+					buf.WriteString(colorReset)
+					buf.WriteString(" ")
+					avail := colWidth - nameW - 1
+					buf.WriteString(colorDim)
+					buf.WriteString(truncateVisible(entry.desc, avail))
+					buf.WriteString(colorReset)
+				} else {
+					buf.WriteString(colorReset)
+				}
+			} else {
+				buf.WriteString(entry.name)
+				if col < cols-1 && row+((col+1)*rows) < len(e.menuCandidates) {
+					spaces := colWidth - nameW
+					if entry.desc != "" && spaces > 4 {
+						buf.WriteString(" ")
+						descW := spaces - 1
+						buf.WriteString(colorDim)
+						buf.WriteString(truncateVisible(entry.desc, descW))
+						pad := spaces - 1 - visibleWidth(truncateVisible(entry.desc, descW))
+						buf.WriteString(colorReset)
+						buf.WriteString(strings.Repeat(" ", pad))
+					} else {
+						buf.WriteString(strings.Repeat(" ", spaces))
+					}
+				} else if entry.desc != "" && colWidth > nameW+4 {
+					buf.WriteString(" ")
+					avail := colWidth - nameW - 1
+					buf.WriteString(colorDim)
+					buf.WriteString(truncateVisible(entry.desc, avail))
+					buf.WriteString(colorReset)
+				}
+			}
+		}
+		if row < rows-1 {
+			buf.WriteString("\r\n")
+		} else {
+			buf.WriteString("\033[K")
+		}
+	}
+
+	for i := 0; i < rows; i++ {
+		buf.WriteString("\033[A")
+	}
+
+	os.Stdout.WriteString(buf.String())
+	e.screenRow = 0
+	e.menuRows = rows
+	return e.redraw(prompt, prevBufW)
+}
+
+func truncateVisible(s string, maxW int) string {
+	if maxW <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	w := 0
+	for i, r := range runes {
+		rw := runeWidth(r)
+		if w+rw > maxW {
+			if i > 0 && maxW > 2 {
+				result := string(runes[:i])
+				resultW := visibleWidth(result)
+				trim := resultW - maxW + 1
+				if trim > 0 {
+					for trim > 0 {
+						r := runes[i-1]
+						rw := runeWidth(r)
+						i--
+						trim -= rw
+					}
+					result = string(runes[:i])
+				}
+				return result + "\u2026"
+			}
+			return string(runes[:i])
+		}
+		w += rw
+	}
+	return s
+}
+
+func (e *LineEditor) clearMenu(prompt string, prevBufW int) int {
+	if e.menuRows <= 0 {
+		return prevBufW
+	}
+	var buf strings.Builder
+	buf.WriteString("\033[B\r\033[K")
+	for i := 1; i < e.menuRows; i++ {
+		buf.WriteString("\033[B\r\033[K")
+	}
+	for i := 0; i < e.menuRows; i++ {
+		buf.WriteString("\033[A")
+	}
+	os.Stdout.WriteString(buf.String())
+	e.menuRows = 0
+	e.screenRow = 0
+	return e.redraw(prompt, prevBufW)
+}
+
+func (e *LineEditor) acceptMenuSelection(prompt string, prevBufW int) int {
+	if e.menuSelected < 0 || e.menuSelected >= len(e.menuCandidates) {
+		return e.cancelMenu(prompt, prevBufW)
+	}
+	completion := e.menuCandidates[e.menuSelected].name
+
+	tokens := tokenize(string(e.buf))
+	tokenIdx := -1
+	inSpace := true
+	for i, r := range e.buf {
+		if i >= e.cursor {
+			break
+		}
+		if r == ' ' || r == '\t' {
+			inSpace = true
+		} else if inSpace {
+			inSpace = false
+			tokenIdx++
+		}
+	}
+	isFirstToken := tokenIdx == 0
+
+	var partial string
+	if isFirstToken {
+		if len(tokens) > 0 {
+			partial = tokens[0]
+		}
+	} else if tokenIdx >= 0 && tokenIdx < len(tokens) {
+		partial = tokens[tokenIdx]
+	}
+
+	if !isFirstToken {
+		info, err := os.Stat(e.resolvePartialPath(completion))
+		if err == nil && info.IsDir() {
+			if !strings.HasSuffix(completion, "/") {
+				completion += "/"
+			}
+		} else {
+			completion += " "
+		}
+	} else {
+		completion += " "
+	}
+
+	partialRunes := utf8.RuneCountInString(partial)
+	for i := 0; i < partialRunes && e.cursor > 0; i++ {
+		e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
+		e.cursor--
+	}
+	for _, r := range completion {
+		e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
+		e.cursor++
+	}
+
+	e.menuActive = false
+	e.menuCandidates = nil
+	e.menuSelected = 0
+	e.updateSuggestion()
+	return e.clearMenu(prompt, 0)
+}
+
+func (e *LineEditor) cancelMenu(prompt string, prevBufW int) int {
+	e.menuActive = false
+	e.menuCandidates = nil
+	e.menuSelected = 0
+	e.updateSuggestion()
+	return e.clearMenu(prompt, prevBufW)
+}
+
 func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 	text := string(e.buf)
 	tokens := tokenize(text)
@@ -1357,7 +1819,6 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 		return prevBufW
 	}
 
-	// Figure out which token the cursor is in and whether it's the first
 	tokenIdx := -1
 	inSpace := true
 	for i, r := range e.buf {
@@ -1374,6 +1835,73 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 
 	isFirstToken := tokenIdx == 0
 
+	// in whitespace after a token — check for flag completion first
+	if inSpace && tokenIdx >= 1 {
+		prevCmd := ""
+		for _, t := range tokens {
+			if isBuiltin(t) || isKeyword(t) || isAlias(t) {
+				prevCmd = t
+				break
+			}
+			if _, ok := hashLookup(t); ok {
+				prevCmd = t
+				break
+			}
+		}
+		if prevCmd != "" {
+			entry := getDescEntry(prevCmd)
+			if entry != nil && len(entry.flagChars) > 0 {
+				candidates := getFlagCompletions(prevCmd, "")
+				if len(candidates) > 0 {
+					if e.config != nil && e.config.CompletionMenu {
+						e.menuActive = true
+						e.menuCandidates = candidates
+						e.menuSelected = 0
+						e.menuRows = 0
+						return e.renderMenu(prompt, prevBufW)
+					}
+					os.Stdout.Write([]byte("\r\n"))
+					for i, c := range candidates {
+						if i > 0 && i%6 == 0 {
+							os.Stdout.Write([]byte("\r\n"))
+						} else if i > 0 {
+							os.Stdout.Write([]byte("  "))
+						}
+						os.Stdout.Write([]byte(c.name))
+					}
+					os.Stdout.Write([]byte("\r\n"))
+					os.Stdout.Write([]byte(prompt))
+					e.screenRow = 0
+					return e.redraw(prompt, 0)
+				}
+			}
+		}
+		candidates := e.completePath("")
+		if len(candidates) > 0 {
+			if e.config != nil && e.config.CompletionMenu {
+				e.menuActive = true
+				e.menuCandidates = candidates
+				e.menuSelected = 0
+				e.menuRows = 0
+				return e.renderMenu(prompt, prevBufW)
+			}
+			os.Stdout.Write([]byte("\r\n"))
+			for i, c := range candidates {
+				if i > 0 && i%6 == 0 {
+					os.Stdout.Write([]byte("\r\n"))
+				} else if i > 0 {
+					os.Stdout.Write([]byte("  "))
+				}
+				os.Stdout.Write([]byte(c.name))
+			}
+			os.Stdout.Write([]byte("\r\n"))
+			os.Stdout.Write([]byte(prompt))
+			e.screenRow = 0
+			return e.redraw(prompt, 0)
+		}
+		return prevBufW
+	}
+
 	if inSpace && tokenIdx >= 0 {
 		candidates := e.completePath("")
 		if len(candidates) > 0 {
@@ -1384,7 +1912,7 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 				} else if i > 0 {
 					os.Stdout.Write([]byte("  "))
 				}
-				os.Stdout.Write([]byte(c))
+				os.Stdout.Write([]byte(c.name))
 			}
 			os.Stdout.Write([]byte("\r\n"))
 			os.Stdout.Write([]byte(prompt))
@@ -1404,20 +1932,42 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 		}
 	}
 
-	var candidates []string
+	// check for flag completion on non-first token
+	if !isFirstToken && len(partial) > 0 && tokenIdx >= 1 {
+		prevCmd := tokens[tokenIdx-1]
+		entry := getDescEntry(prevCmd)
+		if entry != nil && len(entry.flagChars) > 0 {
+			flagTriggered := false
+			for _, fc := range entry.flagChars {
+				if fc != "" && strings.HasPrefix(partial, fc) {
+					flagTriggered = true
+					break
+				}
+			}
+			if flagTriggered {
+				candidates := getFlagCompletions(prevCmd, partial)
+				if len(candidates) > 0 {
+					return e.applyCompletion(prompt, prevBufW, candidates, partial, false)
+				}
+				return prevBufW
+			}
+		}
+	}
+
+	var candidates []completionEntry
 	if isFirstToken {
 		candidates = e.completeCommand(partial)
 		if e.config != nil && e.config.AutoCd && len(partial) > 0 {
 			seen := make(map[string]bool)
 			for _, c := range candidates {
-				seen[c] = true
+				seen[c.name] = true
 			}
 			for _, c := range e.completePath(partial) {
-				if !seen[c] {
+				if !seen[c.name] {
 					candidates = append(candidates, c)
 				}
 			}
-			sort.Strings(candidates)
+			sortCompletionEntries(candidates)
 		}
 	} else {
 		candidates = e.completePath(partial)
@@ -1427,9 +1977,17 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 		return prevBufW
 	}
 
-	// Find common prefix (case-insensitive)
-	common := candidates[0]
-	for _, c := range candidates[1:] {
+	return e.applyCompletion(prompt, prevBufW, candidates, partial, isFirstToken)
+}
+
+func (e *LineEditor) applyCompletion(prompt string, prevBufW int, candidates []completionEntry, partial string, isFirstToken bool) int {
+	names := make([]string, len(candidates))
+	for i, c := range candidates {
+		names[i] = c.name
+	}
+
+	common := names[0]
+	for _, c := range names[1:] {
 		cRunes := []rune(c)
 		commonRunes := []rune(common)
 		for len(commonRunes) > 0 && !strings.EqualFold(string(cRunes[:min(len(commonRunes), len(cRunes))]), string(commonRunes[:min(len(commonRunes), len(cRunes))])) {
@@ -1439,7 +1997,7 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 	}
 
 	if len(candidates) == 1 {
-		completion := candidates[0]
+		completion := candidates[0].name
 		if !isFirstToken {
 			info, err := os.Stat(e.resolvePartialPath(completion))
 			if err == nil && info.IsDir() {
@@ -1464,7 +2022,35 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 		return e.redraw(prompt, prevBufW)
 	}
 
+	if common != partial {
+		var commonActual string
+		commonRunes := []rune(common)
+		for _, c := range candidates {
+			cRunes := []rune(c.name)
+			if len(cRunes) >= len(commonRunes) && strings.EqualFold(string(cRunes[:len(commonRunes)]), common) {
+				commonActual = string(cRunes[:len(commonRunes)])
+				break
+			}
+		}
+		if commonActual != "" && commonActual != partial {
+			partialRunes := utf8.RuneCountInString(partial)
+			for i := 0; i < partialRunes && e.cursor > 0; i++ {
+				e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
+				e.cursor--
+			}
+			for _, r := range commonActual {
+				e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
+				e.cursor++
+			}
+			return e.redraw(prompt, prevBufW)
+		}
+	}
+
 	// Multiple candidates — fish-style cycling
+	cycleNames := make([]string, len(candidates))
+	for i, c := range candidates {
+		cycleNames[i] = c.name
+	}
 	if e.cycleCandidates != nil && string(e.buf) == e.cycleLastBuf {
 		for i := 0; i < e.cycleLen && e.cursor > 0; i++ {
 			e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
@@ -1472,7 +2058,7 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 		}
 		e.cycleIndex = (e.cycleIndex + 1) % len(e.cycleCandidates)
 	} else {
-		e.cycleCandidates = candidates
+		e.cycleCandidates = cycleNames
 		e.cycleIndex = 0
 		partialRunes := utf8.RuneCountInString(partial)
 		for i := 0; i < partialRunes && e.cursor > 0; i++ {
@@ -1488,27 +2074,40 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 	e.cycleLen = utf8.RuneCountInString(e.cycleCandidates[e.cycleIndex])
 	e.cycleLastBuf = string(e.buf)
 
+	if e.config != nil && e.config.CompletionMenu {
+		e.menuActive = true
+		e.menuCandidates = candidates
+		e.menuSelected = 0
+		e.menuRows = 0
+		return e.renderMenu(prompt, prevBufW)
+	}
 	return e.redraw(prompt, prevBufW)
 }
 
-func (e *LineEditor) completeCommand(partial string) []string {
-	var matches []string
+func (e *LineEditor) completeCommand(partial string) []completionEntry {
+	var matches []completionEntry
 
 	for _, cmd := range allBuiltins {
 		if strings.HasPrefix(cmd, partial) {
-			matches = append(matches, cmd)
+			matches = append(matches, completionEntry{name: cmd, desc: getDesc(cmd)})
 		}
 	}
 
 	for _, kw := range allKeywords {
 		if strings.HasPrefix(kw, partial) {
-			matches = append(matches, kw)
+			matches = append(matches, completionEntry{name: kw, desc: getDesc(kw)})
 		}
 	}
 
 	for _, name := range allAliasNames() {
 		if strings.HasPrefix(name, partial) {
-			matches = append(matches, name)
+			aliasMu.RLock()
+			if a, ok := aliasTable[name]; ok {
+				matches = append(matches, completionEntry{name: name, desc: a.Raw})
+			} else {
+				matches = append(matches, completionEntry{name: name, desc: getDesc(name)})
+			}
+			aliasMu.RUnlock()
 		}
 	}
 
@@ -1521,20 +2120,19 @@ func (e *LineEditor) completeCommand(partial string) []string {
 		}
 		seen[name] = true
 		if strings.HasPrefix(name, partial) {
-			matches = append(matches, name)
+			matches = append(matches, completionEntry{name: name, desc: getDesc(name)})
 		}
 	}
 	hashMu.RUnlock()
 
-	sort.Strings(matches)
+	sortCompletionEntries(matches)
 	return matches
 }
 
-func (e *LineEditor) completePath(partial string) []string {
+func (e *LineEditor) completePath(partial string) []completionEntry {
 	dir := "."
 	prefix := partial
 
-	// Handle tilde
 	if strings.HasPrefix(partial, "~/") {
 		home := os.Getenv("HOME")
 		if home != "" {
@@ -1544,7 +2142,7 @@ func (e *LineEditor) completePath(partial string) []string {
 	} else if partial == "~" {
 		home := os.Getenv("HOME")
 		if home != "" {
-			return []string{"~/"}
+			return []completionEntry{{name: "~/"}}
 		}
 		return nil
 	} else if strings.Contains(partial, "/") {
@@ -1556,7 +2154,7 @@ func (e *LineEditor) completePath(partial string) []string {
 		prefix = partial[idx+1:]
 	}
 
-	var matches []string
+	var matches []completionEntry
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
@@ -1577,11 +2175,24 @@ func (e *LineEditor) completePath(partial string) []string {
 		if err != nil {
 			continue
 		}
-		if info.IsDir() {
+
+		var meta string
+		isDir := info.IsDir()
+		mode := info.Mode()
+		if isDir {
 			name += "/"
+			meta = "(dir)"
+		} else if mode&0111 != 0 {
+			meta = "(exe)"
+		}
+		if mode&os.ModeSymlink != 0 {
+			if meta != "" {
+				meta = "(sym)"
+			} else {
+				meta = "(sym)"
+			}
 		}
 
-		// Reconstruct full match relative to what user typed
 		if strings.Contains(partial, "/") {
 			idx := strings.LastIndex(partial, "/")
 			name = partial[:idx+1] + name
@@ -1591,10 +2202,10 @@ func (e *LineEditor) completePath(partial string) []string {
 			name = "~/" + name
 		}
 
-		matches = append(matches, name)
+		matches = append(matches, completionEntry{name: name, desc: meta})
 	}
 
-	sort.Strings(matches)
+	sortCompletionEntries(matches)
 	return matches
 }
 

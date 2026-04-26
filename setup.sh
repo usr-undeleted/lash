@@ -5,7 +5,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PREFS_FILE="$SCRIPT_DIR/.install_prefs"
 CONFIG_DIR="$HOME/.config/lash"
 THEMES_DIR="$CONFIG_DIR/themes"
+DESCS_DIR="$CONFIG_DIR/descriptions"
 REPO_THEMES="$SCRIPT_DIR/themes"
+REPO_DESCS="$SCRIPT_DIR/descriptions"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -555,6 +557,31 @@ setup_themes() {
     echo "theme=$selected" >> "$PREFS_FILE.tmp"
 }
 
+setup_descriptions() {
+    header "Completion Descriptions"
+
+    mkdir -p "$DESCS_DIR"
+
+    local desc_list=()
+    if [ -d "$REPO_DESCS" ]; then
+        for d in "$REPO_DESCS"/*.desc; do
+            [ -f "$d" ] || continue
+            desc_list+=("$(basename "$d")")
+        done
+    fi
+
+    if [ ${#desc_list[@]} -eq 0 ]; then
+        info "No description files found in source"
+        return 0
+    fi
+
+    for d in "${desc_list[@]}"; do
+        cp "$REPO_DESCS/$d" "$DESCS_DIR/$d"
+    done
+    success "Copied ${#desc_list[@]} description files to $DESCS_DIR/"
+    desc "You can add your own .desc files to $DESCS_DIR/ for custom completions"
+}
+
 write_prefs() {
     {
         echo "# dont edit file, used by install script."
@@ -691,6 +718,7 @@ reinstall() {
             setup_rc_files
             setup_config
             setup_themes
+            setup_descriptions
             write_prefs
             show_done
             ;;
@@ -727,6 +755,7 @@ full_setup() {
     setup_rc_files
     setup_config
     setup_themes
+    setup_descriptions
     write_prefs
     show_done
 }

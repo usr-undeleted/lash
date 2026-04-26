@@ -33,6 +33,7 @@ type Config struct {
 	ColoredOutput     bool
 	AutoSuggest       bool
 	AutoCd            bool
+	CompletionMenu    bool
 	UpdateSource      string
 	Keybinds          map[string]string
 }
@@ -144,6 +145,8 @@ func LoadConfig() *Config {
 			cfg.AutoSuggest = val == "1"
 		case "auto-cd":
 			cfg.AutoCd = val == "1"
+		case "completion-menu":
+			cfg.CompletionMenu = val == "1"
 		case "update-source":
 			cfg.UpdateSource = val
 		}
@@ -185,6 +188,7 @@ func (c *Config) Save() error {
 	lines = append(lines, fmt.Sprintf("colored-output = %s", boolToStr(c.ColoredOutput)))
 	lines = append(lines, fmt.Sprintf("auto-suggest = %s", boolToStr(c.AutoSuggest)))
 	lines = append(lines, fmt.Sprintf("auto-cd = %s", boolToStr(c.AutoCd)))
+	lines = append(lines, fmt.Sprintf("completion-menu = %s", boolToStr(c.CompletionMenu)))
 	if c.UpdateSource != "" {
 		lines = append(lines, fmt.Sprintf("update-source = %s", c.UpdateSource))
 	}
@@ -278,6 +282,9 @@ func (c *Config) Set(key, val string) bool {
 	case "auto-cd":
 		c.AutoCd = val == "1"
 		return true
+	case "completion-menu":
+		c.CompletionMenu = val == "1"
+		return true
 	case "update-source":
 		c.UpdateSource = val
 		return true
@@ -313,6 +320,7 @@ var configKeys = []configEntry{
 	{"colored-output", "<0|1>", "set LS_COLORS and GREP_COLORS if not already defined"},
 	{"auto-suggest", "<0|1>", "show grayed-out inline completion hints as you type"},
 	{"auto-cd", "<0|1>", "change to directory when typed as a command"},
+	{"completion-menu", "<0|1>", "show navigable completion menu for ambiguous completions"},
 	{"update-source", "<path>", "path to lash source directory for lash update"},
 }
 
@@ -344,6 +352,7 @@ func printConfigShow(c *Config) {
 	fmt.Printf("%-22s %s\n", "colored-output", boolToStr(c.ColoredOutput))
 	fmt.Printf("%-22s %s\n", "auto-suggest", boolToStr(c.AutoSuggest))
 	fmt.Printf("%-22s %s\n", "auto-cd", boolToStr(c.AutoCd))
+	fmt.Printf("%-22s %s\n", "completion-menu", boolToStr(c.CompletionMenu))
 	fmt.Printf("%-22s %s\n", "update-source", c.UpdateSource)
 }
 
