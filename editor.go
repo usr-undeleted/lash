@@ -1947,7 +1947,7 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 			if flagTriggered {
 				candidates := getFlagCompletions(prevCmd, partial)
 				if len(candidates) > 0 {
-					return e.applyCompletion(prompt, prevBufW, candidates, partial, false)
+					return e.applyCompletion(prompt, prevBufW, candidates, partial, false, false)
 				}
 				return prevBufW
 			}
@@ -1977,29 +1977,31 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 		if e.config != nil && e.config.AutoCorrect && len(partial) > 0 {
 			fuzzy := FuzzyCompletions(partial, e.config.AutoCorrectThreshold, e.config.AutoCd)
 			if len(fuzzy) > 0 {
-				return e.applyCompletion(prompt, prevBufW, fuzzy, partial, isFirstToken)
+				return e.applyCompletion(prompt, prevBufW, fuzzy, partial, isFirstToken, true)
 			}
 		}
 		return prevBufW
 	}
 
-	return e.applyCompletion(prompt, prevBufW, candidates, partial, isFirstToken)
+	return e.applyCompletion(prompt, prevBufW, candidates, partial, isFirstToken, false)
 }
 
-func (e *LineEditor) applyCompletion(prompt string, prevBufW int, candidates []completionEntry, partial string, isFirstToken bool) int {
+func (e *LineEditor) applyCompletion(prompt string, prevBufW int, candidates []completionEntry, partial string, isFirstToken bool, fuzzy bool) int {
 	names := make([]string, len(candidates))
 	for i, c := range candidates {
 		names[i] = c.name
 	}
 
 	common := names[0]
-	for _, c := range names[1:] {
-		cRunes := []rune(c)
-		commonRunes := []rune(common)
-		for len(commonRunes) > 0 && !strings.EqualFold(string(cRunes[:min(len(commonRunes), len(cRunes))]), string(commonRunes[:min(len(commonRunes), len(cRunes))])) {
-			commonRunes = commonRunes[:len(commonRunes)-1]
+	if !fuzzy {
+		for _, c := range names[1:] {
+			cRunes := []rune(c)
+			commonRunes := []rune(common)
+			for len(commonRunes) > 0 && !strings.EqualFold(string(cRunes[:min(len(commonRunes), len(cRunes))]), string(commonRunes[:min(len(commonRunes), len(cRunes))])) {
+				commonRunes = commonRunes[:len(commonRunes)-1]
+			}
+			common = string(commonRunes)
 		}
-		common = string(commonRunes)
 	}
 
 	if len(candidates) == 1 {
@@ -2028,6 +2030,7 @@ func (e *LineEditor) applyCompletion(prompt string, prevBufW int, candidates []c
 		return e.redraw(prompt, prevBufW)
 	}
 
+	if !fuzzy {
 	if common != partial {
 		var commonActual string
 		commonRunes := []rune(common)
@@ -2050,6 +2053,7 @@ func (e *LineEditor) applyCompletion(prompt string, prevBufW int, candidates []c
 			}
 			return e.redraw(prompt, prevBufW)
 		}
+	}
 	}
 
 	// Multiple candidates — fish-style cycling
