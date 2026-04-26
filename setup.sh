@@ -427,17 +427,17 @@ setup_config() {
         val=$(ask_yn "Reconfigure settings?" "0")
         if [ "$val" = "0" ]; then
             info "Keeping existing config"
-            echo "noclobber=0" >> "$PREFS_FILE.tmp"
-            echo "lashenv=0" >> "$PREFS_FILE.tmp"
-            echo "ignoreeof=0" >> "$PREFS_FILE.tmp"
-            echo "notify=0" >> "$PREFS_FILE.tmp"
-            echo "hist-ignore-dups=0" >> "$PREFS_FILE.tmp"
-            echo "hist-ignore-space=0" >> "$PREFS_FILE.tmp"
+            echo "noclobber=1" >> "$PREFS_FILE.tmp"
+            echo "lashenv=1" >> "$PREFS_FILE.tmp"
+            echo "ignoreeof=1" >> "$PREFS_FILE.tmp"
+            echo "notify=1" >> "$PREFS_FILE.tmp"
+            echo "hist-ignore-dups=1" >> "$PREFS_FILE.tmp"
+            echo "hist-ignore-space=1" >> "$PREFS_FILE.tmp"
             echo "history-size=1000" >> "$PREFS_FILE.tmp"
-            echo "colored-output=0" >> "$PREFS_FILE.tmp"
-            echo "auto-suggest=0" >> "$PREFS_FILE.tmp"
-            echo "auto-cd=0" >> "$PREFS_FILE.tmp"
-            echo "autocorrect=0" >> "$PREFS_FILE.tmp"
+            echo "colored-output=1" >> "$PREFS_FILE.tmp"
+            echo "auto-suggest=1" >> "$PREFS_FILE.tmp"
+            echo "auto-cd=1" >> "$PREFS_FILE.tmp"
+            echo "autocorrect=1" >> "$PREFS_FILE.tmp"
             echo "autocorrect-threshold=4" >> "$PREFS_FILE.tmp"
             return 0
         fi
@@ -449,14 +449,14 @@ setup_config() {
 
     local noclobber lashenv auto_cd ignoreeof notify hist_dups hist_space colored_output auto_suggest autocorrect
 
-    noclobber=$(ask_config "noclobber" "prevent > overwriting existing files (use >| to force)" "0")
-    lashenv=$(ask_config "lashenv" "auto-load per-directory .lashenv on cd" "0")
-    auto_cd=$(ask_config "auto-cd" "change to directory when typed as a command" "0")
-    autocorrect=$(ask_config "autocorrect" "auto-correct mistyped commands using fuzzy matching" "0")
-    ignoreeof=$(ask_config "ignoreeof" "require 10 Ctrl-D presses to exit" "0")
-    notify=$(ask_config "notify" "report background job status immediately" "0")
-    hist_dups=$(ask_config "hist-ignore-dups" "skip duplicate consecutive history entries" "0")
-    hist_space=$(ask_config "hist-ignore-space" "skip commands starting with space from history" "0")
+    noclobber=$(ask_config "noclobber" "prevent > overwriting existing files (use >| to force)" "1")
+    lashenv=$(ask_config "lashenv" "auto-load per-directory .lashenv on cd" "1")
+    auto_cd=$(ask_config "auto-cd" "change to directory when typed as a command" "1")
+    autocorrect=$(ask_config "autocorrect" "auto-correct mistyped commands using fuzzy matching" "1")
+    ignoreeof=$(ask_config "ignoreeof" "require 10 Ctrl-D presses to exit" "1")
+    notify=$(ask_config "notify" "report background job status immediately" "1")
+    hist_dups=$(ask_config "hist-ignore-dups" "skip duplicate consecutive history entries" "1")
+    hist_space=$(ask_config "hist-ignore-space" "skip commands starting with space from history" "1")
     colored_output=$(ask_config "colored-output" "set LS_COLORS and GREP_COLORS if not already defined" "1")
     auto_suggest=$(ask_config "auto-suggest" "show grayed-out inline completion hints as you type" "1")
 
