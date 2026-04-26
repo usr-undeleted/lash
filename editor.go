@@ -1134,8 +1134,22 @@ func (e *LineEditor) updateSuggestion() {
 		e.suggestion = ""
 		return
 	}
-	text := string(e.buf)
-	tokens := tokenize(text)
+	if len(e.buf) == 0 || e.cursor == 0 {
+		e.suggestion = ""
+		return
+	}
+
+	prefix := string(e.buf[:e.cursor])
+
+	for i := len(e.history) - 1; i >= 0; i-- {
+		entry := e.history[i]
+		if strings.HasPrefix(entry, prefix) && len(entry) > len(prefix) {
+			e.suggestion = entry[len(prefix):]
+			return
+		}
+	}
+
+	tokens := tokenize(prefix)
 	if len(tokens) == 0 {
 		e.suggestion = ""
 		return
@@ -1143,10 +1157,7 @@ func (e *LineEditor) updateSuggestion() {
 
 	tokenIdx := -1
 	inSpace := true
-	for i, r := range e.buf {
-		if i >= e.cursor {
-			break
-		}
+	for _, r := range prefix {
 		if r == ' ' || r == '\t' {
 			inSpace = true
 		} else if inSpace {
@@ -1155,31 +1166,19 @@ func (e *LineEditor) updateSuggestion() {
 		}
 	}
 
-	isFirstToken := tokenIdx == 0
-
-	var partial string
-	if inSpace && tokenIdx >= 0 {
+	if inSpace || tokenIdx < 0 || tokenIdx >= len(tokens) {
 		e.suggestion = ""
 		return
 	}
 
-	if isFirstToken {
-		if tokenIdx < len(tokens) {
-			partial = tokens[tokenIdx]
-		}
-	} else {
-		if tokenIdx >= 0 && tokenIdx < len(tokens) {
-			partial = tokens[tokenIdx]
-		}
-	}
-
+	partial := tokens[tokenIdx]
 	if partial == "" {
 		e.suggestion = ""
 		return
 	}
 
 	var candidates []string
-	if isFirstToken {
+	if tokenIdx == 0 {
 		candidates = e.completeCommand(partial)
 	} else {
 		candidates = e.completePath(partial)
