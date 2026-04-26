@@ -14,22 +14,31 @@ jobs:
       - uses: actions/checkout@v4
         if: github.event_name == 'push'
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Get event info
         id: event
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
-            DIFF=$(git diff HEAD~1 HEAD 2>/dev/null || true)
-            COMMIT_MSG=$(git log -1 --pretty=format:"%s%n%b")
+            BEFORE="${{ github.event.before }}"
+            AFTER="${{ github.event.after }}"
+            if [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              DIFF=$(git diff HEAD 2>/dev/null || true)
+              COMMIT_LOG=$(git log --pretty=format:"- %h %s (%an)" HEAD)
+            else
+              DIFF=$(git diff "$BEFORE" "$AFTER" 2>/dev/null || true)
+              COMMIT_LOG=$(git log --pretty=format:"- %h %s (%an)" "$BEFORE".."$AFTER")
+            fi
+            COMMIT_COUNT=$(echo "$COMMIT_LOG" | wc -l)
+            LAST_SHA=$(git log -1 --pretty=format:"%h")
             COMMITTER=$(git log -1 --pretty=format:"%an")
-            SHA=$(git log -1 --pretty=format:"%h")
-            printf '%s' "$DIFF" | head -c 3000 > /tmp/context.txt
-            printf '%s' "$COMMIT_MSG" > /tmp/extra.txt
+            printf '%s' "$DIFF" | head -c 6000 > /tmp/context.txt
+            printf '%s' "$COMMIT_LOG" > /tmp/extra.txt
             echo "event_type=commit" >> "$GITHUB_OUTPUT"
-            echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+            echo "sha=$LAST_SHA" >> "$GITHUB_OUTPUT"
             echo "author=$COMMITTER" >> "$GITHUB_OUTPUT"
-            echo "link=https://github.com/usr-undeleted/lash/commit/$SHA" >> "$GITHUB_OUTPUT"
+            echo "commit_count=$COMMIT_COUNT" >> "$GITHUB_OUTPUT"
+            echo "link=https://github.com/usr-undeleted/lash/compare/$BEFORE...$AFTER" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             PR="${{ github.event.pull_request }}"
             TITLE=$(echo "$PR" | jq -r '.title')
@@ -78,8 +87,8 @@ jobs:
         run: |
           EVENT_TYPE="${{ steps.event.outputs.event_type }}"
           if [ "$EVENT_TYPE" = "commit" ]; then
-            PROMPT="Summarize this git commit concisely. What changed and why? Keep it to 2-3 sentences max. Use plain text, no markdown."
-            USER_CONTENT="Commit message:\n$(cat /tmp/extra.txt)\n\nDiff:\n$(cat /tmp/context.txt)"
+            PROMPT="Summarize this git push concisely. What changed and why across all commits? Keep it to 2-3 sentences max. Use plain text, no markdown."
+            USER_CONTENT="Commits pushed:\n$(cat /tmp/extra.txt)\n\nFull diff:\n$(cat /tmp/context.txt)"
           elif [ "$EVENT_TYPE" = "pull_request" ]; then
             PROMPT="Summarize this pull request concisely. What is it trying to do and why? Keep it to 2-3 sentences max. Use plain text, no markdown."
             USER_CONTENT=$(cat /tmp/context.txt)
@@ -117,7 +126,13 @@ jobs:
           LINK="${{ steps.event.outputs.link }}"
           SUMMARY=$(cat /tmp/summary.txt)
           if [ "$EVENT_TYPE" = "commit" ]; then
-            CONTENT="**New commit by \`$AUTHOR\`**: \`$SHA\` (<$LINK>)"$'\n\n'"$SUMMARY"
+            COMMIT_COUNT="${{ steps.event.outputs.commit_count }}"
+            if [ "$COMMIT_COUNT" = "1" ]; then
+              HEADER="**New commit by \`$AUTHOR\`**: \`$SHA\` (<$LINK>)"
+            else
+              HEADER="**$COMMIT_COUNT commits pushed by \`$AUTHOR\`**: (<$LINK>)"
+            fi
+            CONTENT="$HEADER"$'\n\n'"$SUMMARY"
           elif [ "$EVENT_TYPE" = "pull_request" ]; then
             STATUS="${{ steps.event.outputs.status }}"
             CONTENT="**$STATUS pull request by \`$AUTHOR\`**: $SHA (<$LINK>)"$'\n\n'"$SUMMARY"
