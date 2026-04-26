@@ -11,6 +11,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/term"
 )
 
 var allBuiltins = []string{
@@ -256,15 +258,29 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			if err != nil {
 				bin = os.Args[0]
 			}
+			term.Restore(int(os.Stdin.Fd()), globalEditor.savedTermState)
 			cmd := exec.Command(bin)
+			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 			cmd.Stdin = os.Stdin
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			cmd.Env = os.Environ()
-			err = cmd.Run()
+			err = cmd.Start()
 			if err != nil {
+				fmt.Fprintf(os.Stderr, "lash: %s\n", err)
 				lastExitCode = 1
+				state, _ := term.MakeRaw(int(os.Stdin.Fd()))
+				globalEditor.savedTermState = state
+				return
 			}
+			exitCode := waitForeground([]int{cmd.Process.Pid}, cmd.Process.Pid, "lash")
+			if exitCode < 0 {
+				lastExitCode = 128 + int(syscall.SIGTSTP)
+			} else {
+				lastExitCode = exitCode
+			}
+			state, _ := term.MakeRaw(int(os.Stdin.Fd()))
+			globalEditor.savedTermState = state
 			return
 		}
 		switch args[1] {
