@@ -437,6 +437,8 @@ setup_config() {
             echo "colored-output=0" >> "$PREFS_FILE.tmp"
             echo "auto-suggest=0" >> "$PREFS_FILE.tmp"
             echo "auto-cd=0" >> "$PREFS_FILE.tmp"
+            echo "autocorrect=0" >> "$PREFS_FILE.tmp"
+            echo "autocorrect-threshold=2" >> "$PREFS_FILE.tmp"
             return 0
         fi
         printf '\n'
@@ -445,11 +447,12 @@ setup_config() {
     c "$DIM"; desc "Answer each question, or press Enter to keep the default value."; c "$RESET"
     printf '\n'
 
-    local noclobber lashenv auto_cd ignoreeof notify hist_dups hist_space colored_output
+    local noclobber lashenv auto_cd ignoreeof notify hist_dups hist_space colored_output auto_suggest autocorrect
 
     noclobber=$(ask_config "noclobber" "prevent > overwriting existing files (use >| to force)" "0")
     lashenv=$(ask_config "lashenv" "auto-load per-directory .lashenv on cd" "0")
     auto_cd=$(ask_config "auto-cd" "change to directory when typed as a command" "0")
+    autocorrect=$(ask_config "autocorrect" "auto-correct mistyped commands using fuzzy matching" "0")
     ignoreeof=$(ask_config "ignoreeof" "require 10 Ctrl-D presses to exit" "0")
     notify=$(ask_config "notify" "report background job status immediately" "0")
     hist_dups=$(ask_config "hist-ignore-dups" "skip duplicate consecutive history entries" "0")
@@ -469,6 +472,8 @@ setup_config() {
     echo "noclobber=$noclobber" >> "$PREFS_FILE.tmp"
     echo "lashenv=$lashenv" >> "$PREFS_FILE.tmp"
     echo "auto-cd=$auto_cd" >> "$PREFS_FILE.tmp"
+    echo "autocorrect=$autocorrect" >> "$PREFS_FILE.tmp"
+    echo "autocorrect-threshold=2" >> "$PREFS_FILE.tmp"
     echo "ignoreeof=$ignoreeof" >> "$PREFS_FILE.tmp"
     echo "notify=$notify" >> "$PREFS_FILE.tmp"
     echo "hist-ignore-dups=$hist_dups" >> "$PREFS_FILE.tmp"
@@ -486,6 +491,8 @@ setup_config() {
         "$SCRIPT_DIR/lash" set-config noclobber "$noclobber" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config lashenv "$lashenv" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config auto-cd "$auto_cd" 2>/dev/null || true
+        "$SCRIPT_DIR/lash" set-config autocorrect "$autocorrect" 2>/dev/null || true
+        "$SCRIPT_DIR/lash" set-config autocorrect-threshold 2 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config ignoreeof "$ignoreeof" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config notify "$notify" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config hist-ignore-dups "$hist_dups" 2>/dev/null || true
