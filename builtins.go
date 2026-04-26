@@ -256,7 +256,15 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			if err != nil {
 				bin = os.Args[0]
 			}
-			syscall.Exec(bin, []string{bin}, os.Environ())
+			cmd := exec.Command(bin)
+			cmd.Stdin = os.Stdin
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			cmd.Env = os.Environ()
+			err = cmd.Run()
+			if err != nil {
+				lastExitCode = 1
+			}
 			return
 		}
 		switch args[1] {
