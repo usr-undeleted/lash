@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"embed"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,12 +137,25 @@ func parseFlagLine(s string) (string, string, bool) {
 }
 
 // load shipped descriptions from embedded content
-func loadShippedDescriptions(content string) {
-	entries := parseDescFile(content)
+func loadShippedDescriptions(efs embed.FS) {
 	descMu.Lock()
 	defer descMu.Unlock()
-	for k, v := range entries {
-		descTable[k] = v
+	entries, err := fs.ReadDir(efs, "descriptions")
+	if err != nil {
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".desc") {
+			continue
+		}
+		data, err := fs.ReadFile(efs, "descriptions/"+entry.Name())
+		if err != nil {
+			continue
+		}
+		parsed := parseDescFile(string(data))
+		for k, v := range parsed {
+			descTable[k] = v
+		}
 	}
 }
 
@@ -243,7 +258,7 @@ func reloadDescriptions() {
 	descMu.Lock()
 	descTable = make(map[string]*descEntry)
 	descMu.Unlock()
-	loadShippedDescriptions(shippedDescs)
+	loadShippedDescriptions(shippedDescFS)
 	loadUserDescriptions()
 }
 

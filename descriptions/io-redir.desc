@@ -1,0 +1,48 @@
+# env - display or set environment variables and run a command
+
+[env]
+desc "display or modify environment variables then run a command"
+category io-redirection
+flag-char "-"
+flag -i "start with an empty environment"
+flag -u "remove variable from the environment"
+flag -v "print each modified variable on a new line"
+flag --ignore-environment "start with an empty environment"
+flag --unset "remove variable from the environment"
+flag --version "output version information and exit"
+flag --null "end each output line with NUL, not newline"
+
+# printenv - print all or part of the environment
+
+[printenv]
+desc "print all or specified environment variables"
+category io-redirection
+flag-char "-"
+flag -0 "end each output line with NUL, not newline"
+flag --null "end each output line with NUL, not newline"
+flag --help "display this help and exit"
+
+# printf - format and print data
+
+[printf]
+desc "format and print data"
+category io-redirection
+flag-char "-"
+flag --help "display this help and exit"
+flag --version "output version information and exit"
+
+# seq - print a sequence of numbers
+
+[seq]
+desc "print a sequence of numbers"
+category io-redirection
+flag-char "-"
+flag -f "use printf style floating-point FORMAT"
+flag -s "use STRING to separate numbers (default newline)"
+flag -w "pad to width with leading zeros"
+flag -e "use printf style floating-point FORMAT"
+flag --separator "use STRING to separate numbers (default newline)"
+flag --equal-width "pad to width with leading zeros"
+flag --format "use printf style floating-point FORMAT"
+flag --help "display this help and exit"
+flag --version "output version information and exit"

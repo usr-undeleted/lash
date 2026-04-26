@@ -1,0 +1,154 @@
+# File management command descriptions and flags
+
+[ls]
+desc "list directory contents"
+category file-management
+flag-char "-"
+flag -1 "list one file per line"
+flag -a "list all files including hidden"
+flag -A "list all except . and .."
+flag -d "list directories themselves, not contents"
+flag -F "append type indicator to entries"
+flag -h "human-readable file sizes"
+flag -i "show inode numbers"
+flag -l "use long listing format"
+flag -r "reverse sort order"
+flag -R "list subdirectories recursively"
+flag -S "sort by file size"
+flag -t "sort by modification time"
+flag -X "sort alphabetically by extension"
+flag --color "colorize output"
+flag --group-directories-first "group directories before files"
+flag --sort "sort by WORD: none, size, time, extension"
+flag --time "show time as WORD: access, use, change, modify"
+
+[cp]
+desc "copy files and directories"
+category file-management
+flag-char "-"
+flag -a "archive mode, same as -dR --preserve=all"
+flag -f "force overwrite by removing destination"
+flag -i "prompt before overwrite"
+flag -n "do not overwrite existing files"
+flag -p "preserve mode, ownership, timestamps"
+flag -r "copy directories recursively"
+flag -R "copy directories recursively"
+flag -s "create symbolic links instead of copying"
+flag -u "copy only when source is newer"
+flag -v "verbose, show files being copied"
+flag --backup "make backup of each existing destination file"
+flag --preserve "preserve attributes: mode, ownership, timestamps, context, links, xattr, all"
+
+[mv]
+desc "move or rename files"
+category file-management
+flag-char "-"
+flag -b "create backup of each existing destination file"
+flag -f "do not prompt before overwriting"
+flag -i "prompt before overwrite"
+flag -n "do not overwrite existing files"
+flag -S "override usual backup suffix"
+flag -T "treat destination as normal file"
+flag -u "move only when source is newer or missing"
+flag -v "verbose, show files being moved"
+
+[rm]
+desc "remove files or directories"
+category file-management
+flag-char "-"
+flag -d "remove empty directories"
+flag -f "ignore nonexistent files, never prompt"
+flag -i "prompt before every removal"
+flag -r "remove directories and contents recursively"
+flag -R "remove directories and contents recursively"
+flag -v "verbose, show files being removed"
+flag --one-file-system "stay on same filesystem when removing recursively"
+
+[mkdir]
+desc "create directories"
+category file-management
+flag-char "-"
+flag -m "set file mode as octal string"
+flag -p "create parent directories as needed, no error if existing"
+flag -v "verbose, print each directory as it is created"
+
+[rmdir]
+desc "remove empty directories"
+category file-management
+flag-char "-"
+flag -p "remove parent directories if empty"
+flag -v "verbose, print each directory as it is processed"
+flag --ignore-fail-on-non-empty "ignore failures caused by non-empty directories"
+
+[ln]
+desc "make links between files"
+category file-management
+flag-char "-"
+flag -f "remove existing destination files"
+flag -i "prompt whether to remove destinations"
+flag -n "treat destination as normal file if it is a symlink to a directory"
+flag -r "create symbolic links relative to link location"
+flag -s "create symbolic links instead of hard links"
+flag -T "treat destination as normal file"
+flag -v "verbose, print name of each linked file"
+
+[touch]
+desc "change file timestamps"
+category file-management
+flag-char "-"
+flag -a "change only access time"
+flag -c "do not create any files"
+flag -d "parse string and use as timestamp"
+flag -h "affect each symbolic link instead of referenced file"
+flag -m "change only modification time"
+flag -r "use file timestamp as reference"
+flag -t "use timestamp in format [[CC]YY]MMDDhhmm[.ss]"
+flag --no-dereference "affect each symbolic link instead of referenced file"
+
+[stat]
+desc "display file or file system status"
+category file-management
+flag-char "-"
+flag -c "use format string instead of default"
+flag -f "display file system status instead of file status"
+flag -L "follow symbolic links"
+flag -s "display in terse format"
+flag -t "display in terse format for easy parsing"
+flag -x "display in a more readable format"
+flag --format "same as -c"
+flag --printf "like --format but interpret backslash escapes"
+
+[chmod]
+desc "change file mode bits"
+category file-management
+flag-char "-"
+flag +x "add execute permission"
+flag -R "change files and directories recursively"
+flag -c "report when a change is made"
+flag -f "suppress most error messages"
+flag -v "output diagnostic for every file processed"
+flag -x "remove execute permission"
+flag --reference "use mode from reference file"
+
+[chown]
+desc "change file owner and group"
+category file-management
+flag-char "-"
+flag -R "operate on files and directories recursively"
+flag -c "report when a change is made"
+flag -f "suppress most error messages"
+flag -h "affect symbolic links instead of referenced files"
+flag -v "output diagnostic for every file processed"
+flag --from "change owner only when current owner matches"
+flag --reference "use owner and group from reference file"
+
+[chgrp]
+desc "change group ownership"
+category file-management
+flag-char "-"
+flag -R "operate on files and directories recursively"
+flag -c "report when a change is made"
+flag -f "suppress most error messages"
+flag -h "affect symbolic links instead of referenced files"
+flag -v "output diagnostic for every file processed"
+flag --reference "use group from reference file"

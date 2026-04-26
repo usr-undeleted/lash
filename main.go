@@ -1033,7 +1033,7 @@ func initShell() *Config {
 	currentConfig = cfg
 	applyConfigToOptions(cfg)
 	initColoredOutput(cfg)
-	loadShippedDescriptions(shippedDescs)
+	loadShippedDescriptions(shippedDescFS)
 	loadUserDescriptions()
 
 	if shellLogin {

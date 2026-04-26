@@ -1,0 +1,81 @@
+# sha256sum - compute and check SHA256 cryptographic hashes
+
+[sha256sum]
+desc "compute SHA256 cryptographic hashes"
+category encoding
+flag-char "-"
+flag -b "read in binary mode"
+flag -c "read SHA256 sums from FILEs and check them"
+flag --check "read SHA256 sums from FILEs and check them"
+flag --tag "create a BSD-style checksum"
+flag --text "read in text mode (default)"
+flag --zero "end each output line with NUL, not newline"
+flag --ignore-missing "don't fail or report status for missing files"
+flag --quiet "don't print OK for each successfully verified file"
+flag --status "don't output anything, status code shows success"
+flag --warn "warn about improperly formatted checksum lines"
+
+# md5sum - compute and check MD5 cryptographic hashes
+
+[md5sum]
+desc "compute MD5 cryptographic hashes"
+category encoding
+flag-char "-"
+flag -b "read in binary mode"
+flag -c "read MD5 sums from FILEs and check them"
+flag -t "read in text mode (default)"
+flag --check "read MD5 sums from FILEs and check them"
+flag --tag "create a BSD-style checksum"
+flag --text "read in text mode (default)"
+flag --binary "read in binary mode"
+flag --zero "end each output line with NUL, not newline"
+flag --quiet "don't print OK for each successfully verified file"
+flag --status "don't output anything, status code shows success"
+flag --warn "warn about improperly formatted checksum lines"
+
+# iconv - convert text encoding from one character set to another
+
+[iconv]
+desc "convert text from one character encoding to another"
+category encoding
+flag-char "-"
+flag -f "original text encoding"
+flag -t "output text encoding"
+flag -l "list all known character sets"
+flag -c "omit invalid characters from output"
+flag -s "suppress warnings"
+flag -o "output file"
+flag --from-code "original text encoding"
+flag --to-code "output text encoding"
+flag --list "list all known character sets"
+flag --omit-invalid "omit invalid characters from output"
+flag --silent "suppress warnings"
+flag --output "output file"
+
+# base64 - encode or decode data in base64 format
+
+[base64]
+desc "encode or decode data in base64 format"
+category encoding
+flag-char "-"
+flag -d "decode data"
+flag -w "wrap encoded lines after COLS characters (default 76, 0 to disable)"
+flag -i "when decoding, ignore non-alphabet characters"
+flag -o "send output to FILE instead of stdout"
+flag -e "use email-compatible base64 encoding"
+flag -u "use universal base64 encoding (RFC 4648 section 5)"
+flag -n "when decoding, ignore newlines"
+flag -p "when decoding, ignore non-alphabet characters and newlines"
+flag -z "when encoding, do not add trailing newline"
+flag -A "use URL-safe base64 alphabet (- and _ instead of + and /)"
+flag -a "use URL-safe base64 alphabet (- and _ instead of + and /)"
+flag --decode "decode data"
+flag --wrap "wrap encoded lines after COLS characters (default 76, 0 to disable)"
+flag --ignore-garbage "when decoding, ignore non-alphabet characters"
+flag --output "send output to FILE instead of stdout"
+flag --email "use email-compatible base64 encoding"
+flag --universal "use universal base64 encoding (RFC 4648 section 5)"
+flag --nobreak "do not wrap encoded lines"
+flag --zero "add a NUL character after the output"
+flag --auto "detect the encoding automatically"
+flag --help "display this help and exit"

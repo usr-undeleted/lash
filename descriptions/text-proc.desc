@@ -1,0 +1,256 @@
+# Text processing command descriptions
+# All flags for standard Unix text processing utilities
+
+[cat]
+desc "concatenate and display files"
+category text-processing
+flag-char "-"
+flag -n "number all output lines"
+flag -b "number non-empty output lines"
+flag -s "squeeze multiple blank lines into one"
+flag -E "display end-of-line characters as $"
+flag -T "display tab characters as ^I"
+flag -A "equivalent to -vET"
+flag -e "equivalent to -vE"
+flag -t "equivalent to -vT"
+flag -v "display non-printing characters except LFD and TAB using ^ and M- notation"
+flag --number "number all output lines"
+flag --number-nonblank "number non-empty output lines"
+flag --squeeze-blank "squeeze multiple blank lines into one"
+
+[head]
+desc "output the first part of files"
+category text-processing
+flag-char "-"
+flag -n "output the first NUM lines"
+flag -c "output the first NUM bytes"
+flag -q "never print headers giving file names"
+flag -v "always print headers giving file names"
+flag -z "line delimiter is NUL instead of newline"
+
+[tail]
+desc "output the last part of files"
+category text-processing
+flag-char "-"
+flag -n "output the last NUM lines"
+flag -c "output the last NUM bytes"
+flag -f "output appended data as the file grows"
+flag -q "never print headers giving file names"
+flag -v "always print headers giving file names"
+flag -F "same as --follow=name --retry"
+flag --pid "follow process ID, terminate after PID dies"
+flag --retry "keep trying to open a file if it is inaccessible"
+
+[wc]
+desc "print newline, word, and byte counts for each file"
+category text-processing
+flag-char "-"
+flag -l "print the newline counts"
+flag -w "print the word counts"
+flag -c "print the byte counts"
+flag -m "print the character counts"
+flag -L "print the length of the longest line"
+flag --files0-from "read input from NUL-terminated file names in file"
+
+[sort]
+desc "sort lines of text files"
+category text-processing
+flag-char "-"
+flag -r "reverse the result of comparisons"
+flag -n "compare according to string numerical value"
+flag -k "sort by a key"
+flag -t "use SEP instead of non-blank to blank transition"
+flag -u "output only the first of an equal run"
+flag -f "fold lower case to upper case characters"
+flag -h "compare human readable numbers"
+flag -R "sort by random hash of keys"
+flag -V "natural sort of version numbers"
+flag -b "ignore leading blanks"
+flag -d "consider only blanks and alphanumeric characters"
+flag -g "compare according to general numerical value"
+flag -i "consider only printable characters"
+flag -M "compare month names"
+flag -o "write result to FILE instead of standard output"
+flag -S "specify main memory buffer size"
+flag -s "disable last-resort comparison"
+flag -T "use DIR for temporary files"
+flag --stable "stabilize sort by disabling last-resort comparison"
+flag --random-sort "sort by a random hash of keys"
+flag --reverse "reverse the result of comparisons"
+
+[uniq]
+desc "report or omit repeated lines"
+category text-processing
+flag-char "-"
+flag -c "prefix lines by the number of occurrences"
+flag -d "only print duplicate lines, one for each group"
+flag -u "only print unique lines"
+flag -i "ignore differences in case when comparing"
+flag -f "avoid comparing the first N fields"
+flag -s "avoid comparing the first N characters"
+flag -w "compare no more than N characters in lines"
+flag -z "line delimiter is NUL instead of newline"
+flag --group "show all items, separating groups with an empty line"
+flag --all-repeated "print all duplicate lines, one group per delimiter"
+
+[cut]
+desc "remove sections from each line of a file"
+category text-processing
+flag-char "-"
+flag -b "select only these bytes"
+flag -c "select only these characters"
+flag -f "select only these fields"
+flag -d "use DELIM instead of TAB for field delimiter"
+flag -s "do not print lines not containing delimiters"
+flag --output-delimiter "use STRING as the output delimiter"
+flag --complement "complement the set of selected bytes, characters or fields"
+
+[tr]
+desc "translate or delete characters"
+category text-processing
+flag-char "-"
+flag -s "replace each sequence of repeated characters with a single occurrence"
+flag -d "delete characters in SET1, do not translate"
+flag -c "use the complement of SET1"
+flag -C "same as -c but complementing characters"
+flag -t "first truncate SET1 to length of SET2"
+flag --squeeze-repeats "replace each input sequence of a repeated character with a single occurrence"
+
+[tee]
+desc "read from standard input and write to standard output and files"
+category text-processing
+flag-char "-"
+flag -a "append to the given files, do not overwrite"
+flag -i "ignore interrupt signals"
+flag -p "diagnose errors writing to non-pipes"
+
+[paste]
+desc "merge lines of files"
+category text-processing
+flag-char "-"
+flag -d "reuse characters from LIST instead of TABs"
+flag -s "paste one file at a time instead of in parallel"
+flag -z "line delimiter is NUL instead of newline"
+flag --serial "paste one file at a time instead of in parallel"
+
+[od]
+desc "dump files in octal and other formats"
+category text-processing
+flag-char "-"
+flag -A "select input address base"
+flag -t "select output format"
+flag -x "hexadecimal, 2 bytes per unit"
+flag -c "ASCII characters or backslash escapes"
+flag -d "unsigned decimal, 2 bytes per unit"
+flag -o "octal, 2 bytes per unit"
+flag -N "interpret only NUM bytes of input"
+flag -j "skip bytes in input"
+flag -v "display all input data without suppression"
+flag -w "specify output width"
+flag -s "look for strings of characters of minimum length"
+flag -S "look for strings of characters of minimum length"
+flag -f "floating point format"
+flag -a "named characters"
+flag -i "decimal, 4 bytes per unit"
+
+[dd]
+desc "copy and convert a file"
+category text-processing
+flag-char "-"
+flag bs "read and write up to BYTES bytes at a time"
+flag count "copy only N input blocks"
+flag if "read from FILE instead of stdin"
+flag of "write to FILE instead of stdout"
+flag skip "skip N ibs-sized blocks at start of input"
+flag seek "seek N obs-sized blocks at start of output"
+flag conv "convert the file as per the comma-separated symbol list"
+flag status "level of information to print to stderr"
+
+[diff]
+desc "compare files line by line"
+category text-processing
+flag-char "-"
+flag -u "use the unified output format"
+flag -U "set number of context lines to NUM"
+flag -r "recursively compare subdirectories"
+flag -q "report only when files differ"
+flag -s "report when two files are the same"
+flag -i "ignore case differences"
+flag -w "ignore all whitespace"
+flag -B "ignore changes whose lines are all blank"
+flag -y "use side by side output format"
+flag --color "colorize the output"
+flag --suppress-common-lines "do not print common lines in side by side format"
+flag -N "treat absent files as empty"
+flag --tabsize "expand tabs to NUM columns in output"
+flag -E "ignore changes due to tab expansion"
+flag -Z "ignore trailing white space at line end"
+flag --brief "report only whether the files differ"
+flag --side-by-side "use side by side output format"
+
+[fmt]
+desc "simple optimal text formatter"
+category text-processing
+flag-char "-"
+flag -w "maximum line width"
+flag -c "preserve the indentation of the first two lines"
+flag -t "preserve paragraph indentation"
+flag -u "uniform spacing: one space between words and two after sentences"
+flag -p "reformat only lines matching regex"
+flag -s "split long lines but do not refill"
+
+[nl]
+desc "number lines of files"
+category text-processing
+flag-char "-"
+flag -b "use STYLE for numbering body lines"
+flag -f "use STYLE for numbering footer lines"
+flag -h "use STYLE for numbering header lines"
+flag -i "use LINE_INCREMENT for line numbering"
+flag -l "ensure the number of lines is a multiple of NUMBER"
+flag -n "use STYLE to format line numbers"
+flag -s "use STRING to separate line numbers from lines"
+flag -v "use FIRST_LINE as the first line number"
+flag -w "use WIDTH columns for line numbers"
+flag -d "use STRING for section delimiters"
+flag --body-numbering "use STYLE for numbering body lines"
+
+[pr]
+desc "convert text files for printing"
+category text-processing
+flag-char "-"
+flag -h "use STRING instead of filename in header"
+flag -l "set page length to LINES"
+flag -o "indent each line by OFFSET spaces"
+flag -D "use FORMAT for the header date"
+flag -t "omit page headers and trailers"
+flag -e "set tabs of size TABS"
+flag -i "replace tabs with spaces"
+flag -n "number lines using FORMAT"
+flag -N "provide line numbering using NUMBER as starting count"
+flag -w "set page width to WIDTH columns"
+flag -f "use form feeds instead of newlines"
+flag -F "use form feeds instead of newlines and truncate long lines"
+flag -r "do not print any warning or diagnostic messages"
+flag -m "merge and print all files simultaneously"
+flag -s "separate columns by character STRING"
+flag -T "suppress printing of page headers and trailers"
+flag -J "merge full lines, pass through with -m"
+
+[expand]
+desc "convert tabs to spaces"
+category text-processing
+flag-char "-"
+flag -i "only convert initial tabs on each line to spaces"
+flag -t "use TABS as tab stops instead of every 8"
+flag --tabs "use TABS as tab stops instead of every 8"
+
+[unexpand]
+desc "convert spaces to tabs"
+category text-processing
+flag-char "-"
+flag -a "convert all blanks instead of just leading blanks"
+flag -f "convert only leading blanks"
+flag -t "have tabs at TABS positions instead of every 8"
+flag --first-only "convert only leading blanks"
+flag --tabs "have tabs at TABS positions instead of every 8"

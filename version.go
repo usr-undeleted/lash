@@ -2,7 +2,7 @@ package main
 
 import (
 	"bufio"
-	_ "embed"
+	"embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -27,8 +27,8 @@ var roadmap string
 //go:embed README.md
 var readme string
 
-//go:embed descriptions/builtins.desc
-var shippedDescs string
+//go:embed descriptions
+var shippedDescFS embed.FS
 
 func getVersion() string {
 	return computeVersion(roadmap, readme)

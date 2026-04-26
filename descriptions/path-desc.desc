@@ -1,0 +1,48 @@
+# Comments start with #
+
+[basename]
+desc "strip directory and suffix from file names"
+category path
+flag-char "-"
+flag -a "pass each NAME to suffix; handle multiple arguments"
+flag -s "remove a trailing SUFFIX from each NAME"
+flag -z "end each output line with NUL, not newline"
+
+[dirname]
+desc "strip last component from file name"
+category path
+flag-char "-"
+flag -z "end each output line with NUL, not newline"
+
+[realpath]
+desc "print the resolved path"
+category path
+flag-char "-"
+flag -e "ensure all components of the path exist"
+flag -m "allow missing path components"
+flag -s "don't canonicalize by following symlinks"
+flag -z "end each output line with NUL, not newline"
+flag --canonicalize "same as -e"
+flag --canonicalize-existing "same as -e"
+flag --canonicalize-missing "same as -m"
+flag --strip "same as -s"
+flag --no-symlinks "same as -s"
+flag --relative-to "print resolved path relative to DIR"
+flag --relative-base "print resolved path relative to BASE if under it"
+
+[readlink]
+desc "print resolved symbolic links or canonical file names"
+category path
+flag-char "-"
+flag -f "canonicalize by following every symlink in every component recursively"
+flag -e "canonicalize by following symlinks, require all components to exist"
+flag -m "canonicalize by following symlinks, require only final component to exist"
+flag -n "do not output the trailing delimiter"
+flag -v "report error if a link is broken"
+flag -z "end each output line with NUL, not newline"
+flag --canonicalize "same as -f"
+flag --canonicalize-existing "same as -e"
+flag --canonicalize-missing "same as -m"
+flag --no-newline "same as -n"
+flag --silent "suppress error messages"
+flag --verbose "same as -v"
