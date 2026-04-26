@@ -14,7 +14,22 @@
   <img src="logo/demo.gif" alt="lash demo" width="600">
 </p>
 
-A modern Linux shell written in Go — with fuzzy autocorrect, fish-style completion, a built-in updater, and rich prompt customization.
+AI-generated Go slop-code Linux shell made for some thingimajig. Only contribute with AI code.
+
+lash = larp shell.  
+
+Since we are actually adding a ton of good features — this is a shell made in 2026, so we're adding lots of convenient and cool features that famous shells still lack. I'd never think that an AI Linux shell would actually work this well... especially with:
+
+- Convenient built-in escape codes like `\f` (fill line)
+- `\g` (git integration)
+- `\l` (show user distro logo)
+- Even more customizable aliases with argument specifiers (`{ALL}`, `{1,2}`, `{NULL}`)
+- `fetch` builtin
+- and much more to come
+
+Whenever this thing is FINALLY finished, we hope to see actual good Go devs make this be actually good (as in, not ridden with AI slop). So if you're willing to contribute actual human code, just wait for us to give you the green light — as in, finally typing enough prompts until it's deemed done.
+
+---
 
 ## installation
 
