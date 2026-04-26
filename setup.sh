@@ -232,15 +232,20 @@ install_binary() {
         warn "Need sudo to create $dest_dir"
     }
 
-    if [ -w "$dest_dir" ]; then
-        cp "$SCRIPT_DIR/lash" "$dest"
-        chmod +x "$dest"
-    else
-        sudo cp "$SCRIPT_DIR/lash" "$dest"
-        sudo chmod +x "$dest"
-    fi
+	if [ -w "$dest_dir" ]; then
+		cp "$SCRIPT_DIR/lash" "$dest"
+		chmod +x "$dest"
+	else
+		sudo cp "$SCRIPT_DIR/lash" "$dest"
+		sudo chmod +x "$dest"
+	fi
 
-    success "Installed to $dest"
+	if [ ! -f "$dest" ]; then
+		error "Install failed — binary not found at $dest"
+		exit 1
+	fi
+
+	success "Installed to $dest"
 
     if ! path_in_path "$dest_dir"; then
         warn "$dest_dir is not in your PATH"
@@ -662,14 +667,18 @@ reinstall() {
             local dest_dir
             dest_dir="$(dirname "$old_path")"
             mkdir -p "$dest_dir" 2>/dev/null || true
-            if [ -w "$dest_dir" ]; then
-                cp "$SCRIPT_DIR/lash" "$old_path"
-                chmod +x "$old_path"
-            else
-                sudo cp "$SCRIPT_DIR/lash" "$old_path"
-                sudo chmod +x "$old_path"
-            fi
-            success "Re-installed to $old_path"
+			if [ -w "$dest_dir" ]; then
+				cp "$SCRIPT_DIR/lash" "$old_path"
+				chmod +x "$old_path"
+			else
+				sudo cp "$SCRIPT_DIR/lash" "$old_path"
+				sudo chmod +x "$old_path"
+			fi
+			if [ ! -f "$old_path" ]; then
+				error "Re-install failed — binary not found at $old_path"
+				exit 1
+			fi
+			success "Re-installed to $old_path"
             ;;
         2)
             remove_old_binary
