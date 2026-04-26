@@ -56,13 +56,31 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 			dir = os.Getenv("HOME")
 		}
 		if err := os.Chdir(dir); err != nil {
-			fmt.Fprintf(os.Stderr, "cd: %s\n", err)
-			lastExitCode = 1
-		} else {
-			lastExitCode = 0
-			if setLashenv {
-				tryLoadLashenv(ctx.Cfg)
+			if ctx.Cfg.AutoCorrect && !strings.Contains(dir, "/") && len(dir) > 0 {
+				entries, rdErr := os.ReadDir(".")
+				if rdErr == nil {
+					var dirs []string
+					for _, e := range entries {
+						if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+							dirs = append(dirs, e.Name()+"/")
+						}
+					}
+					if corr := FindBestMatch(dirs, strings.ToLower(dir), ctx.Cfg.AutoCorrectThreshold); corr != "" {
+						fmt.Fprintf(os.Stderr, "lash: corrected '%s' to '%s'\n", dir, corr)
+						dir = corr
+						err = os.Chdir(dir)
+					}
+				}
 			}
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "cd: %s\n", err)
+				lastExitCode = 1
+				return
+			}
+		}
+		lastExitCode = 0
+		if setLashenv {
+			tryLoadLashenv(ctx.Cfg)
 		}
 	case "pwd":
 		dir, err := os.Getwd()
@@ -410,7 +428,7 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		default:
 			if ctx.Cfg.AutoCorrect {
 				subs := []string{"set-config", "version", "help", "theme", "keybind", "env", "update", "doctor"}
-				if corr := findBestMatch(subs, strings.ToLower(args[1]), ctx.Cfg.AutoCorrectThreshold); corr != "" {
+				if corr := FindBestMatch(subs, strings.ToLower(args[1]), ctx.Cfg.AutoCorrectThreshold); corr != "" {
 					fmt.Fprintf(os.Stderr, "lash: corrected '%s' to '%s'\n", args[1], corr)
 					args[1] = corr
 					goto lashSub

@@ -299,7 +299,7 @@ func (c *Config) Set(key, val string) bool {
 		c.AutoCorrect = val == "1"
 		return true
 	case "autocorrect-threshold":
-		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+		if n, err := strconv.Atoi(val); err == nil && n >= 1 && n <= 4 {
 			c.AutoCorrectThreshold = n
 			return true
 		}
@@ -341,7 +341,7 @@ var configKeys = []configEntry{
 	{"auto-cd", "<0|1>", "change to directory when typed as a command"},
 	{"completion-menu", "<0|1>", "show navigable completion menu for ambiguous completions"},
 	{"autocorrect", "<0|1>", "auto-correct mistyped commands using fuzzy matching"},
-	{"autocorrect-threshold", "<int>", "max edit distance for autocorrect (default 2)"},
+	{"autocorrect-threshold", "<1-4>", "max edit distance for autocorrect (default 2)"},
 	{"update-source", "<path>", "path to lash source directory for lash update"},
 }
 

@@ -77,7 +77,7 @@ func findCorrection(typo string, threshold int, autocd bool) string {
 	typoLower := strings.ToLower(typo)
 
 	// Try builtins first — small, high-confidence set
-	result := findBestMatch(allBuiltins, typoLower, threshold)
+	result := 	FindBestMatch(allBuiltins, typoLower, threshold)
 	if result != "" {
 		return result
 	}
@@ -89,18 +89,18 @@ func findCorrection(typo string, threshold int, autocd bool) string {
 		funcNames = append(funcNames, name)
 	}
 	funcMu.Unlock()
-	result = findBestMatch(funcNames, typoLower, threshold)
+	result = 	FindBestMatch(funcNames, typoLower, threshold)
 	if result != "" {
 		return result
 	}
 
 	// Full PATH scan
 	candidates := collectCandidates(autocd, rune(typoLower[0]))
-	result = findBestMatch(candidates, typoLower, threshold)
+	result = 	FindBestMatch(candidates, typoLower, threshold)
 	return result
 }
 
-func findBestMatch(candidates []string, typoLower string, threshold int) string {
+func FindBestMatch(candidates []string, typoLower string, threshold int) string {
 	bestDist := threshold + 1
 	var bestMatch string
 	tied := false
