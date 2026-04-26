@@ -279,28 +279,30 @@ func executeCommandNode(cmd *Command, ctx *ExecContext) {
 	}
 
 	if ctx.Cfg.AutoCorrect && !strings.Contains(expanded[0], "/") {
-		correction := findCorrection(expanded[0], ctx.Cfg.AutoCorrectThreshold, ctx.Cfg.AutoCd)
-		if correction != "" {
-			fmt.Fprintf(ctx.Stderr, "lash: corrected '%s' to '%s'\n", expanded[0], correction)
-			expanded[0] = correction
-			if isBuiltin(expanded[0]) {
-				executeBuiltin(expanded, redirCtx)
-				waitProcSubst()
-				return
-			}
-			if ctx.Cfg.AutoCd && len(expanded) == 1 {
-				if info, err := os.Stat(expanded[0]); err == nil && info.IsDir() {
-					if err := os.Chdir(expanded[0]); err != nil {
-						fmt.Fprintf(ctx.Stderr, "lash: %s\n", err)
-						lastExitCode = 1
-					} else {
-						lastExitCode = 0
-						if setLashenv {
-							tryLoadLashenv(ctx.Cfg)
-						}
-					}
+		if _, ok := hashLookup(expanded[0]); !ok {
+			correction := findCorrection(expanded[0], ctx.Cfg.AutoCorrectThreshold, ctx.Cfg.AutoCd)
+			if correction != "" {
+				fmt.Fprintf(ctx.Stderr, "lash: corrected '%s' to '%s'\n", expanded[0], correction)
+				expanded[0] = correction
+				if isBuiltin(expanded[0]) {
+					executeBuiltin(expanded, redirCtx)
 					waitProcSubst()
 					return
+				}
+				if ctx.Cfg.AutoCd && len(expanded) == 1 {
+					if info, err := os.Stat(expanded[0]); err == nil && info.IsDir() {
+						if err := os.Chdir(expanded[0]); err != nil {
+							fmt.Fprintf(ctx.Stderr, "lash: %s\n", err)
+							lastExitCode = 1
+						} else {
+							lastExitCode = 0
+							if setLashenv {
+								tryLoadLashenv(ctx.Cfg)
+							}
+						}
+						waitProcSubst()
+						return
+					}
 				}
 			}
 		}
