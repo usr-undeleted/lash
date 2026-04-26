@@ -31,8 +31,6 @@ type Config struct {
 	HashAll           bool
 	Lashenv           bool
 	ColoredOutput     bool
-	LSColors          string
-	GrepColors        string
 	Keybinds          map[string]string
 }
 
@@ -139,10 +137,6 @@ func LoadConfig() *Config {
 			cfg.Lashenv = val == "1"
 		case "colored-output":
 			cfg.ColoredOutput = val == "1"
-		case "ls-colors":
-			cfg.LSColors = val
-		case "grep-colors":
-			cfg.GrepColors = val
 		}
 	}
 	return cfg
@@ -180,12 +174,6 @@ func (c *Config) Save() error {
 	lines = append(lines, fmt.Sprintf("hashall = %s", boolToStr(c.HashAll)))
 	lines = append(lines, fmt.Sprintf("lashenv = %s", boolToStr(c.Lashenv)))
 	lines = append(lines, fmt.Sprintf("colored-output = %s", boolToStr(c.ColoredOutput)))
-	if c.LSColors != "" {
-		lines = append(lines, fmt.Sprintf("ls-colors = %s", c.LSColors))
-	}
-	if c.GrepColors != "" {
-		lines = append(lines, fmt.Sprintf("grep-colors = %s", c.GrepColors))
-	}
 	if len(c.Keybinds) > 0 {
 		lines = append(lines, "")
 		lines = append(lines, "[keybinds]")
@@ -270,12 +258,6 @@ func (c *Config) Set(key, val string) bool {
 	case "colored-output":
 		c.ColoredOutput = val == "1"
 		return true
-	case "ls-colors":
-		c.LSColors = val
-		return true
-	case "grep-colors":
-		c.GrepColors = val
-		return true
 	}
 	return false
 }
@@ -306,8 +288,6 @@ var configKeys = []configEntry{
 	{"hashall", "<0|1>", "hash command paths"},
 	{"lashenv", "<0|1>", "load per-directory .lashenv on cd"},
 	{"colored-output", "<0|1>", "set LS_COLORS and GREP_COLORS if not already defined"},
-	{"ls-colors", "<string>", "custom LS_COLORS value (empty resets to built-in default)"},
-	{"grep-colors", "<string>", "custom GREP_COLORS value (empty resets to built-in default)"},
 }
 
 func printConfigList() {
@@ -336,8 +316,6 @@ func printConfigShow(c *Config) {
 	fmt.Printf("%-22s %s\n", "hashall", boolToStr(c.HashAll))
 	fmt.Printf("%-22s %s\n", "lashenv", boolToStr(c.Lashenv))
 	fmt.Printf("%-22s %s\n", "colored-output", boolToStr(c.ColoredOutput))
-	fmt.Printf("%-22s %s\n", "ls-colors", c.LSColors)
-	fmt.Printf("%-22s %s\n", "grep-colors", c.GrepColors)
 }
 
 func boolToStr(b bool) string {
