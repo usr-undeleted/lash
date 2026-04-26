@@ -1064,115 +1064,144 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	return newW
 }
 
-func (e *LineEditor) syntaxHighlight() string {
-	text := string(e.buf)
-	tokens := tokenize(text)
-	if len(tokens) == 0 || e.continuation {
-		return text
+func isShellOperator(t string) bool {
+	switch t {
+	case ";", "&&", "||", "|", "&", ">>", ">", "<", "<<", "<<-", "<<<", ">|":
+		return true
 	}
-
-	inQuote := false
-	quoteChar := rune(0)
-	actualFirstEnd := 0
-	for i, r := range e.buf {
-		if !inQuote && (r == '\'' || r == '"') {
-			inQuote = true
-			quoteChar = r
-		} else if inQuote && r == quoteChar {
-			inQuote = false
-		}
-		actualFirstEnd = i + 1
-		if !inQuote && (r == ' ' || r == '\t') {
-			if i > 0 {
-				actualFirstEnd = i
-			}
-			break
-		}
-	}
-
-	cmdPart := string(e.buf[:actualFirstEnd])
-	rest := string(e.buf[actualFirstEnd:])
-
-	var result strings.Builder
-	if isValidCommand(tokens[0]) {
-		result.WriteString(colorGreen)
-		result.WriteString(cmdPart)
-		result.WriteString(colorReset)
-	} else {
-		result.WriteString(colorRed)
-		result.WriteString(cmdPart)
-		result.WriteString(colorReset)
-	}
-
-	if len(rest) > 0 {
-		result.WriteString(highlightKeywords(rest))
-	}
-
-	return result.String()
+	return false
 }
 
-func highlightKeywords(text string) string {
-	runes := []rune(text)
-	var buf strings.Builder
-	i := 0
+func isChainOperator(t string) bool {
+	switch t {
+	case "|", "&&", "||", ";":
+		return true
+	}
+	return false
+}
 
-	for i < len(runes) {
-		if runes[i] == ' ' || runes[i] == '\t' {
-			buf.WriteRune(runes[i])
-			i++
-			continue
+func isRedirectionOp(t string) bool {
+	switch t {
+	case ">>", ">", "<", "<<", "<<-", "<<<", ">|":
+		return true
+	}
+	return false
+}
+
+func resolveTildeForCheck(name string) string {
+	if strings.HasPrefix(name, "~/") {
+		home := os.Getenv("HOME")
+		if home != "" {
+			return home + name[1:]
 		}
+	}
+	return name
+}
 
+func (e *LineEditor) syntaxHighlight() string {
+	runes := e.buf
+	if len(runes) == 0 || e.continuation {
+		return string(runes)
+	}
+
+	type span struct {
+		start, end int
+	}
+	var spans []span
+	i := 0
+	for i < len(runes) {
+		for i < len(runes) && (runes[i] == ' ' || runes[i] == '\t') {
+			i++
+		}
+		if i >= len(runes) {
+			break
+		}
+		start := i
 		if runes[i] == '\'' {
-			buf.WriteRune(runes[i])
 			i++
 			for i < len(runes) && runes[i] != '\'' {
-				buf.WriteRune(runes[i])
 				i++
 			}
 			if i < len(runes) {
-				buf.WriteRune(runes[i])
 				i++
 			}
-			continue
-		}
-
-		if runes[i] == '"' {
-			buf.WriteRune(runes[i])
+		} else if runes[i] == '"' {
 			i++
 			for i < len(runes) && runes[i] != '"' {
 				if runes[i] == '\\' && i+1 < len(runes) {
-					buf.WriteRune(runes[i])
-					buf.WriteRune(runes[i+1])
 					i += 2
-					continue
+				} else {
+					i++
 				}
-				buf.WriteRune(runes[i])
-				i++
 			}
 			if i < len(runes) {
-				buf.WriteRune(runes[i])
 				i++
 			}
-			continue
+		} else {
+			for i < len(runes) && runes[i] != ' ' && runes[i] != '\t' {
+				i++
+			}
 		}
-
-		start := i
-		for i < len(runes) && runes[i] != ' ' && runes[i] != '\t' {
-			buf.WriteRune(runes[i])
-			i++
-		}
-		token := string(runes[start:i])
-		if isKeyword(token) {
-			colored := colorYellow + token + colorReset
-			bufStr := buf.String()
-			buf.Reset()
-			buf.WriteString(bufStr[:len(bufStr)-len(token)])
-			buf.WriteString(colored)
-		}
+		spans = append(spans, span{start, i})
+	}
+	if len(spans) == 0 {
+		return string(runes)
 	}
 
-	return buf.String()
+	cmdPos := true
+	var result strings.Builder
+	for idx, sp := range spans {
+		token := string(runes[sp.start:sp.end])
+
+		if cmdPos {
+			if isKeyword(token) {
+				result.WriteString(colorYellow)
+				result.WriteString(token)
+				result.WriteString(colorReset)
+				if token == "then" || token == "do" || token == "else" || token == "elif" || token == "!" {
+					cmdPos = true
+				} else {
+					cmdPos = false
+				}
+			} else if isShellOperator(token) {
+				result.WriteString(colorBold)
+				result.WriteString(token)
+				result.WriteString(colorReset)
+				cmdPos = isChainOperator(token)
+			} else {
+				resolved := resolveTildeForCheck(token)
+				if isValidCommand(resolved) {
+					result.WriteString(colorGreen)
+				} else {
+					result.WriteString(colorRed)
+				}
+				result.WriteString(token)
+				result.WriteString(colorReset)
+				cmdPos = false
+			}
+		} else if isShellOperator(token) {
+			result.WriteString(colorBold)
+			result.WriteString(token)
+			result.WriteString(colorReset)
+			cmdPos = isChainOperator(token)
+		} else if isKeyword(token) {
+			result.WriteString(colorYellow)
+			result.WriteString(token)
+			result.WriteString(colorReset)
+			if token == "then" || token == "do" || token == "else" || token == "elif" || token == "!" {
+				cmdPos = true
+			}
+		}
+
+		if idx < len(spans)-1 {
+			result.WriteString(string(runes[sp.end:spans[idx+1].start]))
+		}
+	}
+	lastEnd := spans[len(spans)-1].end
+	if lastEnd < len(runes) {
+		result.WriteString(string(runes[lastEnd:]))
+	}
+	return result.String()
 }
 
 func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
