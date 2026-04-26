@@ -427,6 +427,7 @@ setup_config() {
             echo "hist-ignore-dups=0" >> "$PREFS_FILE.tmp"
             echo "hist-ignore-space=0" >> "$PREFS_FILE.tmp"
             echo "history-size=1000" >> "$PREFS_FILE.tmp"
+            echo "colored-output=0" >> "$PREFS_FILE.tmp"
             return 0
         fi
         printf '\n'
@@ -435,7 +436,7 @@ setup_config() {
     c "$DIM"; desc "Answer each question, or press Enter to keep the default value."; c "$RESET"
     printf '\n'
 
-    local noclobber lashenv ignoreeof notify hist_dups hist_space
+    local noclobber lashenv ignoreeof notify hist_dups hist_space colored_output
 
     noclobber=$(ask_config "noclobber" "prevent > overwriting existing files (use >| to force)" "0")
     lashenv=$(ask_config "lashenv" "auto-load per-directory .lashenv on cd" "0")
@@ -443,6 +444,7 @@ setup_config() {
     notify=$(ask_config "notify" "report background job status immediately" "0")
     hist_dups=$(ask_config "hist-ignore-dups" "skip duplicate consecutive history entries" "0")
     hist_space=$(ask_config "hist-ignore-space" "skip commands starting with space from history" "0")
+    colored_output=$(ask_config "colored-output" "set LS_COLORS and GREP_COLORS if not already defined" "1")
 
     local hist_size=""
     while true; do
@@ -460,6 +462,7 @@ setup_config() {
     echo "hist-ignore-dups=$hist_dups" >> "$PREFS_FILE.tmp"
     echo "hist-ignore-space=$hist_space" >> "$PREFS_FILE.tmp"
     echo "history-size=$hist_size" >> "$PREFS_FILE.tmp"
+    echo "colored-output=$colored_output" >> "$PREFS_FILE.tmp"
 
     printf '\n'
     c "$DIM"; desc "Applying configuration..."; c "$RESET"
@@ -474,6 +477,7 @@ setup_config() {
         "$SCRIPT_DIR/lash" set-config hist-ignore-dups "$hist_dups" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config hist-ignore-space "$hist_space" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config history-size "$hist_size" 2>/dev/null || true
+        "$SCRIPT_DIR/lash" set-config colored-output "$colored_output" 2>/dev/null || true
         success "Configuration applied"
     else
         warn "Could not apply config — binary not found"

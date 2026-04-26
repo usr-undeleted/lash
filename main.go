@@ -1027,6 +1027,7 @@ func initShell() *Config {
 	cfg := LoadConfig()
 	currentConfig = cfg
 	applyConfigToOptions(cfg)
+	initColoredOutput(cfg)
 
 	if shellLogin {
 		sourceProfile(cfg)
