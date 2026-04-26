@@ -106,7 +106,7 @@
 - [ ] Multi-line command editing (with visual indicator)
 - [x] Auto-suggestions (fish-style灰色 hints)
 - [x] Syntax highlighting as you type
-- [ ] Tab completion menus (when ambiguous)
+- [x] Tab completion menus (when ambiguous)
 - [ ] Completion descriptions (showing what each option does)
 - [ ] Command-not-found hook (suggest packages to install)
 - [ ] Auto-correct / fuzzy matching for commands and directories (correct typos like "prkjects" → "projects" using Levenshtein distance, with confidence threshold and `lash set-config autocorrect` toggle)

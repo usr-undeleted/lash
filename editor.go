@@ -32,6 +32,10 @@ type LineEditor struct {
 	savedTermState *term.State
 	continuation   bool
 	suggestion    string
+	cycleCandidates []string
+	cycleIndex      int
+	cycleLen        int
+	cycleLastBuf    string
 }
 
 func NewLineEditor(cfg *Config) *LineEditor {
@@ -70,6 +74,9 @@ func (e *LineEditor) initDispatch() {
 // executeAction runs a named action on the editor.
 // Returns (line, err, true) if the action terminates input (accept, eof, interrupt).
 func (e *LineEditor) executeAction(action string, prompt string, prevW *int) (string, error, bool) {
+	if action != actComplete {
+		e.clearCycle()
+	}
 	switch action {
 	case actBeginningOfLine:
 		if e.cursor > 0 {
@@ -1129,6 +1136,10 @@ func (e *LineEditor) clearSuggestion() {
 	e.suggestion = ""
 }
 
+func (e *LineEditor) clearCycle() {
+	e.cycleCandidates = nil
+}
+
 func (e *LineEditor) updateSuggestion() {
 	if e.config == nil || !e.config.AutoSuggest {
 		e.suggestion = ""
@@ -1453,45 +1464,31 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 		return e.redraw(prompt, prevBufW)
 	}
 
-	// Multiple matches
-	if common != partial {
-		var commonActual string
-		commonRunes := []rune(common)
-		for _, c := range candidates {
-			cRunes := []rune(c)
-			if len(cRunes) >= len(commonRunes) && strings.EqualFold(string(cRunes[:len(commonRunes)]), common) {
-				commonActual = string(cRunes[:len(commonRunes)])
-				break
-			}
+	// Multiple candidates — fish-style cycling
+	if e.cycleCandidates != nil && string(e.buf) == e.cycleLastBuf {
+		for i := 0; i < e.cycleLen && e.cursor > 0; i++ {
+			e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
+			e.cursor--
 		}
-		if commonActual != "" && commonActual != partial {
-			partialRunes := utf8.RuneCountInString(partial)
-			for i := 0; i < partialRunes && e.cursor > 0; i++ {
-				e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
-				e.cursor--
-			}
-			for _, r := range commonActual {
-				e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
-				e.cursor++
-			}
-			return e.redraw(prompt, prevBufW)
+		e.cycleIndex = (e.cycleIndex + 1) % len(e.cycleCandidates)
+	} else {
+		e.cycleCandidates = candidates
+		e.cycleIndex = 0
+		partialRunes := utf8.RuneCountInString(partial)
+		for i := 0; i < partialRunes && e.cursor > 0; i++ {
+			e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
+			e.cursor--
 		}
 	}
 
-	// Show all candidates
-	os.Stdout.Write([]byte("\r\n"))
-	for i, c := range candidates {
-		if i > 0 && i%6 == 0 {
-			os.Stdout.Write([]byte("\r\n"))
-		} else if i > 0 {
-			os.Stdout.Write([]byte("  "))
-		}
-		os.Stdout.Write([]byte(c))
+	for _, r := range e.cycleCandidates[e.cycleIndex] {
+		e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
+		e.cursor++
 	}
-	os.Stdout.Write([]byte("\r\n"))
-	os.Stdout.Write([]byte(prompt))
-	e.screenRow = 0
-	return e.redraw(prompt, 0)
+	e.cycleLen = utf8.RuneCountInString(e.cycleCandidates[e.cycleIndex])
+	e.cycleLastBuf = string(e.buf)
+
+	return e.redraw(prompt, prevBufW)
 }
 
 func (e *LineEditor) completeCommand(partial string) []string {
