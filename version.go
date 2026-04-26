@@ -31,6 +31,10 @@ var readme string
 var shippedDescs string
 
 func getVersion() string {
+	return computeVersion(roadmap, readme)
+}
+
+func computeVersion(roadmapContent, readmeContent string) string {
 	type phaseData struct {
 		number    int
 		completed int
@@ -39,7 +43,7 @@ func getVersion() string {
 
 	var phases []phaseData
 	currentIdx := -1
-	scanner := bufio.NewScanner(strings.NewReader(roadmap))
+	scanner := bufio.NewScanner(strings.NewReader(roadmapContent))
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -73,11 +77,15 @@ func getVersion() string {
 		idx = len(phases) - 1
 	}
 
-	return fmt.Sprintf("v%d.%d%s", phases[idx].number, phases[idx].completed, getPatchVersion())
+	return fmt.Sprintf("v%d.%d%s", phases[idx].number, phases[idx].completed, computePatchVersion(readmeContent))
 }
 
 func getPatchVersion() string {
-	scanner := bufio.NewScanner(strings.NewReader(readme))
+	return computePatchVersion(readme)
+}
+
+func computePatchVersion(readmeContent string) string {
+	scanner := bufio.NewScanner(strings.NewReader(readmeContent))
 	for scanner.Scan() {
 		line := scanner.Text()
 		if idx := strings.Index(line, "version-v"); idx >= 0 {

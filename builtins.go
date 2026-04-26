@@ -1564,6 +1564,9 @@ func builtinUpdate(ctx *ExecContext) {
 		}
 	}
 
-	fmt.Printf("Updated to %s — restart your shell\n", getVersion())
+	roadmapData, _ := os.ReadFile(filepath.Join(ctx.Cfg.UpdateSource, "ROADMAP.md"))
+	readmeData, _ := os.ReadFile(filepath.Join(ctx.Cfg.UpdateSource, "README.md"))
+	newVer := computeVersion(string(roadmapData), string(readmeData))
+	fmt.Printf("Updated to %s — restart your shell\n", newVer)
 	lastExitCode = 0
 }
