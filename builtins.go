@@ -252,8 +252,11 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		}
 	case "lash":
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "see 'lash help' for shell usage.")
-			lastExitCode = 1
+			bin, err := os.Executable()
+			if err != nil {
+				bin = os.Args[0]
+			}
+			syscall.Exec(bin, []string{bin}, os.Environ())
 			return
 		}
 		switch args[1] {
