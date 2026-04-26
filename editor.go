@@ -1402,7 +1402,7 @@ func (e *LineEditor) updateSuggestion() {
 	if tokenIdx == 0 {
 		candidates = e.completeCommand(partial)
 	} else {
-		candidates = e.completePath(partial)
+		candidates = e.completePath(partial, len(tokens) > 0 && tokens[0] == "cd")
 	}
 
 	if len(candidates) == 1 && strings.HasPrefix(candidates[0].name, partial) && len(candidates[0].name) > len(partial) {
@@ -1876,7 +1876,7 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 				}
 			}
 		}
-		candidates := e.completePath("")
+		candidates := e.completePath("", len(tokens) > 0 && tokens[0] == "cd")
 		if len(candidates) > 0 {
 			if e.config != nil && e.config.CompletionMenu {
 				e.menuActive = true
@@ -1903,7 +1903,7 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 	}
 
 	if inSpace && tokenIdx >= 0 {
-		candidates := e.completePath("")
+		candidates := e.completePath("", len(tokens) > 0 && tokens[0] == "cd")
 		if len(candidates) > 0 {
 			os.Stdout.Write([]byte("\r\n"))
 			for i, c := range candidates {
@@ -1962,7 +1962,7 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 			for _, c := range candidates {
 				seen[c.name] = true
 			}
-			for _, c := range e.completePath(partial) {
+			for _, c := range e.completePath(partial, len(tokens) > 0 && tokens[0] == "cd") {
 				if !seen[c.name] {
 					candidates = append(candidates, c)
 				}
@@ -1970,7 +1970,7 @@ func (e *LineEditor) handleTabCompletion(prompt string, prevBufW int) int {
 			sortCompletionEntries(candidates)
 		}
 	} else {
-		candidates = e.completePath(partial)
+		candidates = e.completePath(partial, len(tokens) > 0 && tokens[0] == "cd")
 	}
 
 	if len(candidates) == 0 {
@@ -2139,7 +2139,7 @@ func (e *LineEditor) completeCommand(partial string) []completionEntry {
 	return matches
 }
 
-func (e *LineEditor) completePath(partial string) []completionEntry {
+func (e *LineEditor) completePath(partial string, dirsOnly bool) []completionEntry {
 	dir := "."
 	prefix := partial
 
@@ -2201,6 +2201,10 @@ func (e *LineEditor) completePath(partial string) []completionEntry {
 			} else {
 				meta = "(sym)"
 			}
+		}
+
+		if dirsOnly && !isDir {
+			continue
 		}
 
 		if strings.Contains(partial, "/") {
