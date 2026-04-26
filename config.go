@@ -57,7 +57,7 @@ func themesDirPath() string {
 }
 
 func LoadConfig() *Config {
-	cfg := &Config{LogoSize: "big", HistorySize: 1000, GlobCaseSensitive: true, AutoCorrectThreshold: 2, Keybinds: make(map[string]string)}
+	cfg := &Config{LogoSize: "big", HistorySize: 1000, GlobCaseSensitive: true, AutoCorrectThreshold: 4, Keybinds: make(map[string]string)}
 	path := configPath()
 	if path == "" {
 		return cfg
@@ -341,7 +341,7 @@ var configKeys = []configEntry{
 	{"auto-cd", "<0|1>", "change to directory when typed as a command"},
 	{"completion-menu", "<0|1>", "show navigable completion menu for ambiguous completions"},
 	{"autocorrect", "<0|1>", "auto-correct mistyped commands using fuzzy matching"},
-	{"autocorrect-threshold", "<1-4>", "max edit distance for autocorrect (default 2)"},
+	{"autocorrect-threshold", "<1-4>", "max edit distance for autocorrect (default 4)"},
 	{"update-source", "<path>", "path to lash source directory for lash update"},
 }
 

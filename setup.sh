@@ -438,7 +438,7 @@ setup_config() {
             echo "auto-suggest=0" >> "$PREFS_FILE.tmp"
             echo "auto-cd=0" >> "$PREFS_FILE.tmp"
             echo "autocorrect=0" >> "$PREFS_FILE.tmp"
-            echo "autocorrect-threshold=2" >> "$PREFS_FILE.tmp"
+            echo "autocorrect-threshold=4" >> "$PREFS_FILE.tmp"
             return 0
         fi
         printf '\n'
@@ -473,7 +473,7 @@ setup_config() {
     echo "lashenv=$lashenv" >> "$PREFS_FILE.tmp"
     echo "auto-cd=$auto_cd" >> "$PREFS_FILE.tmp"
     echo "autocorrect=$autocorrect" >> "$PREFS_FILE.tmp"
-    echo "autocorrect-threshold=2" >> "$PREFS_FILE.tmp"
+    echo "autocorrect-threshold=4" >> "$PREFS_FILE.tmp"
     echo "ignoreeof=$ignoreeof" >> "$PREFS_FILE.tmp"
     echo "notify=$notify" >> "$PREFS_FILE.tmp"
     echo "hist-ignore-dups=$hist_dups" >> "$PREFS_FILE.tmp"

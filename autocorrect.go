@@ -89,9 +89,26 @@ func findCorrection(typo string, threshold int, autocd bool) string {
 		funcNames = append(funcNames, name)
 	}
 	funcMu.Unlock()
-	result = 	FindBestMatch(funcNames, typoLower, threshold)
+	result = FindBestMatch(funcNames, typoLower, threshold)
 	if result != "" {
 		return result
+	}
+
+	// CWD directories (higher priority than PATH)
+	if autocd {
+		entries, rdErr := os.ReadDir(".")
+		if rdErr == nil {
+			var dirs []string
+			for _, e := range entries {
+				if e.IsDir() && !strings.HasPrefix(e.Name(), ".") && startsWithRune(e.Name(), rune(typoLower[0])) {
+					dirs = append(dirs, e.Name()+"/")
+				}
+			}
+			result = FindBestMatch(dirs, typoLower, threshold)
+			if result != "" {
+				return result
+			}
+		}
 	}
 
 	// Full PATH scan
@@ -116,7 +133,7 @@ func FindBestMatch(candidates []string, typoLower string, threshold int) string 
 			continue
 		}
 
-		dist := levenshtein(typoLower, strings.ToLower(c))
+		dist := damerauLevenshtein(typoLower, strings.ToLower(c))
 		if dist <= threshold {
 			if dist < bestDist {
 				bestDist = dist
@@ -139,4 +156,41 @@ func abs(n int) int {
 		return -n
 	}
 	return n
+}
+
+func damerauLevenshtein(a, b string) int {
+	ar := []rune(a)
+	br := []rune(b)
+	n, m := len(ar), len(br)
+	if n == 0 {
+		return m
+	}
+	if m == 0 {
+		return n
+	}
+
+	d := make([][]int, n+1)
+	for i := range d {
+		d[i] = make([]int, m+1)
+		d[i][0] = i
+	}
+	for j := 0; j <= m; j++ {
+		d[0][j] = j
+	}
+
+	for i := 1; i <= n; i++ {
+		for j := 1; j <= m; j++ {
+			cost := 1
+			if ar[i-1] == br[j-1] {
+				cost = 0
+			}
+			d[i][j] = min3(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+cost)
+			if i > 1 && j > 1 && ar[i-1] == br[j-2] && ar[i-2] == br[j-1] {
+				if d[i-2][j-2]+cost < d[i][j] {
+					d[i][j] = d[i-2][j-2] + cost
+				}
+			}
+		}
+	}
+	return d[n][m]
 }
