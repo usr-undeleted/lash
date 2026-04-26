@@ -111,7 +111,7 @@
 - [ ] Command-not-found hook (suggest packages to install)
 - [ ] Auto-correct / fuzzy matching for commands and directories (correct typos like "prkjects" → "projects" using Levenshtein distance, with confidence threshold and `lash set-config autocorrect` toggle)
 - [ ] Directory history (`cd -<number>`, `cdh`)
-- [ ] Auto-cd (type directory name to cd into it)
+- [x] Auto-cd (type directory name to cd into it)
 - [ ] Smart cd with frecency/parent matching (`z`-style)
 - [ ] Clipboard integration
 - [ ] URL detection and click-to-open
