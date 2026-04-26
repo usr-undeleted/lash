@@ -403,6 +403,9 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				return
 			}
 			builtinUpdate(ctx)
+		case "doctor":
+			doFix := len(args) > 2 && args[2] == "--fix"
+			runDoctor(ctx.Cfg, doFix)
 		default:
 			fmt.Fprintf(os.Stderr, "lash: unknown subcommand: %s\n", args[1])
 			fmt.Fprintln(os.Stderr, "see 'lash help' for shell usage.")

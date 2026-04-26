@@ -945,7 +945,9 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "  keybind <set|list|reset|delete|actions>  manage key bindings")
 	fmt.Fprintln(os.Stderr, "  env <refresh|allow|deny|trusted>  manage .lashenv trust")
 	fmt.Fprintln(os.Stderr, "  update                    pull, build, and install latest lash")
+	fmt.Fprintln(os.Stderr, "  doctor [--fix]            diagnose common issues")
 }
+
 
 func initShell() *Config {
 	shellInteractive = isTerminal()
