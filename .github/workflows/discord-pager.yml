@@ -40,13 +40,13 @@ jobs:
             echo "commit_count=$COMMIT_COUNT" >> "$GITHUB_OUTPUT"
             echo "link=https://github.com/usr-undeleted/lash/compare/$BEFORE...$AFTER" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            PR='${{ toJSON(github.event.pull_request) }}'
-            TITLE=$(echo "$PR" | jq -r '.title')
-            BODY=$(echo "$PR" | jq -r '.body // ""')
-            AUTHOR=$(echo "$PR" | jq -r '.user.login')
-            NUMBER=$(echo "$PR" | jq -r '.number')
-            MERGED=$(echo "$PR" | jq -r '.merged')
-            STATE=$(echo "$PR" | jq -r '.state')
+            echo '${{ toJSON(github.event.pull_request) }}' > /tmp/event.json
+            TITLE=$(jq -r '.title' /tmp/event.json)
+            BODY=$(jq -r '.body // ""' /tmp/event.json)
+            AUTHOR=$(jq -r '.user.login' /tmp/event.json)
+            NUMBER=$(jq -r '.number' /tmp/event.json)
+            MERGED=$(jq -r '.merged' /tmp/event.json)
+            STATE=$(jq -r '.state' /tmp/event.json)
             if [ "$MERGED" = "true" ]; then
               STATUS="merged"
             elif [ "$STATE" = "closed" ]; then
@@ -62,13 +62,13 @@ jobs:
             echo "link=${{ github.event.pull_request.html_url }}" >> "$GITHUB_OUTPUT"
             echo "status=$STATUS" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "issues" ]; then
-            ISSUE='${{ toJSON(github.event.issue) }}'
-            TITLE=$(echo "$ISSUE" | jq -r '.title')
-            BODY=$(echo "$ISSUE" | jq -r '.body // ""')
-            AUTHOR=$(echo "$ISSUE" | jq -r '.user.login')
-            NUMBER=$(echo "$ISSUE" | jq -r '.number')
-            STATE=$(echo "$ISSUE" | jq -r '.state')
-            LABELS=$(echo "$ISSUE" | jq -r '[.labels[].name] | join(", ") // "none"')
+            echo '${{ toJSON(github.event.issue) }}' > /tmp/event.json
+            TITLE=$(jq -r '.title' /tmp/event.json)
+            BODY=$(jq -r '.body // ""' /tmp/event.json)
+            AUTHOR=$(jq -r '.user.login' /tmp/event.json)
+            NUMBER=$(jq -r '.number' /tmp/event.json)
+            STATE=$(jq -r '.state' /tmp/event.json)
+            LABELS=$(jq -r '[.labels[].name] | join(", ") // "none"' /tmp/event.json)
             printf '%s\n\n%s' "$TITLE" "$BODY" > /tmp/context.txt
             printf '' > /tmp/extra.txt
             echo "event_type=issue" >> "$GITHUB_OUTPUT"
