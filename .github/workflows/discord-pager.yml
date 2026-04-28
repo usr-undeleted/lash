@@ -40,7 +40,7 @@ jobs:
             echo "commit_count=$COMMIT_COUNT" >> "$GITHUB_OUTPUT"
             echo "link=https://github.com/usr-undeleted/lash/compare/$BEFORE...$AFTER" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            printf '%s' '${{ toJSON(github.event.pull_request) }}' > /tmp/event.json
+            echo '${{ toJSON(github.event.pull_request) }}' > /tmp/event.json
             TITLE=$(jq -r '.title' /tmp/event.json)
             BODY=$(jq -r '.body // ""' /tmp/event.json)
             AUTHOR=$(jq -r '.user.login' /tmp/event.json)
@@ -62,7 +62,7 @@ jobs:
             echo "link=${{ github.event.pull_request.html_url }}" >> "$GITHUB_OUTPUT"
             echo "status=$STATUS" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "issues" ]; then
-            printf '%s' '${{ toJSON(github.event.issue) }}' > /tmp/event.json
+            echo '${{ toJSON(github.event.issue) }}' > /tmp/event.json
             TITLE=$(jq -r '.title' /tmp/event.json)
             BODY=$(jq -r '.body // ""' /tmp/event.json)
             AUTHOR=$(jq -r '.user.login' /tmp/event.json)
