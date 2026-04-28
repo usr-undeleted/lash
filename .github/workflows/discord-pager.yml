@@ -108,7 +108,7 @@ jobs:
                   { role: "system", content: $prompt },
                   { role: "user", content: $content }
                 ],
-                max_tokens: 1500
+                max_tokens: 3000
               }')")
           HTTP_CODE=$(echo "$RESPONSE" | tail -1)
           BODY=$(echo "$RESPONSE" | sed '$d')
