@@ -40,13 +40,11 @@ jobs:
             echo "commit_count=$COMMIT_COUNT" >> "$GITHUB_OUTPUT"
             echo "link=https://github.com/usr-undeleted/lash/compare/$BEFORE...$AFTER" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
-            printf '%s' '${{ toJSON(github.event.pull_request) }}' > /tmp/event.json
-            TITLE=$(jq -r '.title' /tmp/event.json)
-            BODY=$(jq -r '.body // ""' /tmp/event.json)
-            AUTHOR=$(jq -r '.user.login' /tmp/event.json)
-            NUMBER=$(jq -r '.number' /tmp/event.json)
-            MERGED=$(jq -r '.merged' /tmp/event.json)
-            STATE=$(jq -r '.state' /tmp/event.json)
+            TITLE="${{ github.event.pull_request.title }}"
+            NUMBER="${{ github.event.pull_request.number }}"
+            AUTHOR="${{ github.event.pull_request.user.login }}"
+            MERGED="${{ github.event.pull_request.merged }}"
+            STATE="${{ github.event.pull_request.state }}"
             if [ "$MERGED" = "true" ]; then
               STATUS="merged"
             elif [ "$STATE" = "closed" ]; then
@@ -54,7 +52,9 @@ jobs:
             else
               STATUS="open"
             fi
-            printf '%s\n\n%s' "$TITLE" "$BODY" > /tmp/context.txt
+            cat > /tmp/context.txt << 'BODYEOF'
+${{ github.event.pull_request.body }}
+BODYEOF
             printf '' > /tmp/extra.txt
             echo "event_type=pull_request" >> "$GITHUB_OUTPUT"
             echo "sha=#$NUMBER" >> "$GITHUB_OUTPUT"
@@ -62,14 +62,14 @@ jobs:
             echo "link=${{ github.event.pull_request.html_url }}" >> "$GITHUB_OUTPUT"
             echo "status=$STATUS" >> "$GITHUB_OUTPUT"
           elif [ "${{ github.event_name }}" = "issues" ]; then
-            printf '%s' '${{ toJSON(github.event.issue) }}' > /tmp/event.json
-            TITLE=$(jq -r '.title' /tmp/event.json)
-            BODY=$(jq -r '.body // ""' /tmp/event.json)
-            AUTHOR=$(jq -r '.user.login' /tmp/event.json)
-            NUMBER=$(jq -r '.number' /tmp/event.json)
-            STATE=$(jq -r '.state' /tmp/event.json)
-            LABELS=$(jq -r '[.labels[].name] | join(", ") // "none"' /tmp/event.json)
-            printf '%s\n\n%s' "$TITLE" "$BODY" > /tmp/context.txt
+            TITLE="${{ github.event.issue.title }}"
+            NUMBER="${{ github.event.issue.number }}"
+            AUTHOR="${{ github.event.issue.user.login }}"
+            STATE="${{ github.event.issue.state }}"
+            LABELS="${{ join(github.event.issue.labels.*.name, ', ') }}"
+            cat > /tmp/context.txt << 'BODYEOF'
+${{ github.event.issue.body }}
+BODYEOF
             printf '' > /tmp/extra.txt
             echo "event_type=issue" >> "$GITHUB_OUTPUT"
             echo "sha=#$NUMBER" >> "$GITHUB_OUTPUT"
