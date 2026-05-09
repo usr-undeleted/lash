@@ -422,6 +422,54 @@ func (e *LineEditor) readLineFallback(prompt string) (string, error) {
 	return strings.TrimRight(line, "\n"), nil
 }
 
+// check if the last command output ended with a newline
+// sends DSR (Device Status Report) and reads cursor position response from stdin
+func checkTrailingNewline() bool {
+	outFd := int(os.Stdout.Fd())
+
+	os.Stdout.WriteString("\033[6n")
+	syscall.Syscall(syscall.SYS_IOCTL, uintptr(outFd), 0x5402, uintptr(0x1))
+
+	os.Stdin.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
+	defer os.Stdin.SetReadDeadline(time.Time{})
+
+	buf := make([]byte, 0, 32)
+	tmp := make([]byte, 1)
+	for {
+		n, err := os.Stdin.Read(tmp)
+		if n > 0 {
+			buf = append(buf, tmp[0])
+			if tmp[0] == 'R' {
+				break
+			}
+		}
+		if err != nil {
+			break
+		}
+	}
+
+	resp := string(buf)
+	if !strings.HasPrefix(resp, "\x1b[") {
+		return false
+	}
+	resp = resp[2:]
+	if len(resp) == 0 || resp[len(resp)-1] != 'R' {
+		return false
+	}
+	resp = resp[:len(resp)-1]
+	parts := strings.SplitN(resp, ";", 2)
+	if len(parts) < 2 {
+		return false
+	}
+	col, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return false
+	}
+	return col > 1
+}
+
+const promptCRIndicator = "\x1b[7m%\x1b[0m"
+
 func getTermWidth() int {
 	type winsize struct {
 		ws_row, ws_col       uint16

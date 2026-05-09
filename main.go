@@ -1153,9 +1153,16 @@ func main() {
 
 	globalEditor = NewLineEditor(cfg)
 	stdinReader = bufio.NewReader(os.Stdin)
+	firstLoop := true
 	for {
 		reapZombies()
 		drainNotifs()
+		if !firstLoop && shellInteractive && currentConfig != nil && currentConfig.PromptCR {
+			if checkTrailingNewline() {
+				os.Stdout.Write([]byte("\n" + promptCRIndicator + "\n"))
+			}
+		}
+		firstLoop = false
 		prompt := getPrompt()
 		line, err := globalEditor.ReadLine(prompt)
 		if err == io.EOF {
