@@ -117,7 +117,7 @@
 - [ ] URL detection and click-to-open
 - [ ] Thumbnail previews in completion (for images/icons)
 - [ ] Right-aligned prompt info (git branch, timer, etc.)
-- [ ] Command duration tracking (show time for slow commands)
+- [x] Command duration tracking (show time for slow commands)
 - [ ] Notification on long-running command completion
 
 ## Phase 8: Performance & Architecture

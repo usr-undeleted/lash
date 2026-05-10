@@ -15,6 +15,7 @@ import (
 )
 
 var lastExitCode int = 0
+var lastCmdDuration time.Duration = 0
 var expandError bool
 var cmdNumber int = 0
 var returnFlag bool
@@ -412,6 +413,41 @@ func expandPS1(ps1 string) string {
 	return result
 }
 
+func formatDuration(d time.Duration, pattern string) string {
+	if d < 0 {
+		d = 0
+	}
+	totalSec := int(d.Seconds())
+	if totalSec == 0 {
+		return ""
+	}
+	if pattern != "" {
+		return strings.NewReplacer(
+			"%s", fmt.Sprintf("%d", totalSec),
+			"%S", fmt.Sprintf("%02d", totalSec%60),
+			"%m", fmt.Sprintf("%d", totalSec/60),
+			"%M", fmt.Sprintf("%02d", (totalSec/60)%60),
+			"%h", fmt.Sprintf("%d", totalSec/3600),
+			"%H", fmt.Sprintf("%02d", totalSec/3600),
+			"%e", fmt.Sprintf("%.1f", d.Seconds()),
+		).Replace(pattern)
+	}
+	days := totalSec / 86400
+	hours := (totalSec % 86400) / 3600
+	mins := (totalSec % 3600) / 60
+	secs := totalSec % 60
+	if days > 0 {
+		return fmt.Sprintf("%dd%dh%dm%ds", days, hours, mins, secs)
+	}
+	if hours > 0 {
+		return fmt.Sprintf("%dh%dm%ds", hours, mins, secs)
+	}
+	if mins > 0 {
+		return fmt.Sprintf("%dm%ds", mins, secs)
+	}
+	return fmt.Sprintf("%ds", secs)
+}
+
 func expandTimeFormat(format string) string {
 	now := time.Now()
 	var b strings.Builder
@@ -657,6 +693,13 @@ func expandPS1Escapes(ps1 string) string {
 			} else {
 				b.WriteByte('\\')
 				b.WriteRune(runes[i])
+			}
+		case 'E':
+			if content, consumed, ok := tryParseBrace(runes, i+1); ok {
+				b.WriteString(formatDuration(lastCmdDuration, content))
+				i += consumed
+			} else {
+				b.WriteString(formatDuration(lastCmdDuration, ""))
 			}
 		case '!':
 			b.WriteString(strconv.Itoa(cmdNumber))
@@ -1240,6 +1283,8 @@ func main() {
 		cmdNumber++
 		currentSourceLine = cmdNumber
 		prog := Parse(line)
+		cmdStart := time.Now()
 		executeNode(prog, defaultContext())
+		lastCmdDuration = time.Since(cmdStart)
 	}
 }
