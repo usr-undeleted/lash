@@ -1314,6 +1314,17 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 		prevRows = 1
 	}
 
+	newW := bufWidth(e.buf)
+	newRows := (typingCol + newW + termW - 1) / termW
+	if newRows < 1 {
+		newRows = 1
+	}
+
+	rowsToClear := prevRows
+	if newRows > rowsToClear {
+		rowsToClear = newRows
+	}
+
 	var buf strings.Builder
 
 	if e.screenRow > 0 {
@@ -1326,12 +1337,12 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	}
 	buf.WriteString("\033[K")
 
-	for i := 1; i < prevRows; i++ {
+	for i := 1; i < rowsToClear; i++ {
 		buf.WriteString("\033[B\r\033[K")
 	}
 
-	if prevRows > 1 {
-		buf.WriteString(fmt.Sprintf("\033[%dA", prevRows-1))
+	if rowsToClear > 1 {
+		buf.WriteString(fmt.Sprintf("\033[%dA", rowsToClear-1))
 	}
 
 	buf.WriteString("\r")
@@ -1353,7 +1364,6 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 		buf.WriteString(colorReset)
 	}
 
-	newW := bufWidth(e.buf)
 	cursorW := bufWidth(e.buf[:e.cursor])
 
 	targetPos := typingCol + cursorW
