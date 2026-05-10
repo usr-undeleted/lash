@@ -44,6 +44,7 @@ type LineEditor struct {
 	menuCandidates []completionEntry
 	menuSelected  int
 	menuRows      int
+	lastDisplayRows int
 }
 
 func NewLineEditor(cfg *Config) *LineEditor {
@@ -565,6 +566,7 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 	e.buf = nil
 	e.cursor = 0
 	e.screenRow = 0
+	e.lastDisplayRows = 0
 	e.histIdx = len(e.history)
 	prevW := 0
 
@@ -916,10 +918,9 @@ func (e *LineEditor) handleCSI(prompt string, prevW *int) (string, error, bool) 
 						*prevW = e.redraw(prompt, *prevW)
 					} else if e.suggestion != "" {
 						runes := []rune(e.suggestion)
-						e.buf = append(e.buf, runes[0])
-						e.cursor++
-						e.suggestion = string(runes[1:])
-						e.updateSuggestion()
+						e.buf = append(e.buf, runes...)
+						e.cursor += len(runes)
+						e.suggestion = ""
 						*prevW = e.redraw(prompt, *prevW)
 					}
 				}
@@ -1309,20 +1310,30 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 
 	typingCol := pvis % termW
 
-	prevRows := (typingCol + prevBufW + termW - 1) / termW
+	prevRows := e.lastDisplayRows
 	if prevRows < 1 {
 		prevRows = 1
 	}
 
 	newW := bufWidth(e.buf)
-	newRows := (typingCol + newW + termW - 1) / termW
-	if newRows < 1 {
-		newRows = 1
+	inputRows := (typingCol + newW + termW - 1) / termW
+	if inputRows < 1 {
+		inputRows = 1
+	}
+
+	sugW := 0
+	if e.suggestion != "" {
+		sugW = bufWidth([]rune(e.suggestion))
+	}
+	totalW := newW + sugW
+	totalRows := (typingCol + totalW + termW - 1) / termW
+	if totalRows < 1 {
+		totalRows = 1
 	}
 
 	rowsToClear := prevRows
-	if newRows > rowsToClear {
-		rowsToClear = newRows
+	if inputRows > rowsToClear {
+		rowsToClear = inputRows
 	}
 
 	var buf strings.Builder
@@ -1362,6 +1373,7 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 		buf.WriteString(colorDarkGrey)
 		buf.WriteString(e.suggestion)
 		buf.WriteString(colorReset)
+		buf.WriteString("\033[K")
 	}
 
 	cursorW := bufWidth(e.buf[:e.cursor])
@@ -1369,34 +1381,38 @@ func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	targetPos := typingCol + cursorW
 	e.screenRow = targetPos / termW
 
-	endPos := typingCol + newW
-	var endRow int
-	if endPos > 0 && endPos%termW == 0 {
-		endRow = endPos/termW - 1
+	var physRow int
+	if e.suggestion != "" {
+		sugEndPos := typingCol + totalW
+		if sugEndPos > 0 && sugEndPos%termW == 0 {
+			physRow = sugEndPos/termW - 1
+		} else {
+			physRow = sugEndPos / termW
+		}
 	} else {
-		endRow = endPos / termW
+		endPos := typingCol + newW
+		if endPos > 0 && endPos%termW == 0 {
+			physRow = endPos/termW - 1
+		} else {
+			physRow = endPos / termW
+		}
 	}
 
-	atExactEdge := e.cursor == len(e.buf) && targetPos > 0 && targetPos%termW == 0
-
-	rowsDiff := endRow - e.screenRow
+	rowsDiff := physRow - e.screenRow
 	if rowsDiff > 0 {
 		buf.WriteString(fmt.Sprintf("\033[%dA", rowsDiff))
-	} else if rowsDiff < 0 && !atExactEdge {
+	} else if rowsDiff < 0 {
 		buf.WriteString(fmt.Sprintf("\033[%dB", -rowsDiff))
 	}
-	if atExactEdge {
-		buf.WriteString("\r\n")
-	} else {
-		buf.WriteString("\r")
-		targetCol := targetPos % termW
-		if targetCol > 0 {
-			buf.WriteString(fmt.Sprintf("\033[%dC", targetCol))
-		}
+	buf.WriteString("\r")
+	targetCol := targetPos % termW
+	if targetCol > 0 {
+		buf.WriteString(fmt.Sprintf("\033[%dC", targetCol))
 	}
 	buf.WriteString("\033[?25h")
 	os.Stdout.WriteString(buf.String())
 
+	e.lastDisplayRows = totalRows
 	return newW
 }
 
