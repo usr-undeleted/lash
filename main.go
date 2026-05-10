@@ -418,9 +418,14 @@ func formatDuration(d time.Duration, pattern string) string {
 		d = 0
 	}
 	totalSec := int(d.Seconds())
-	if totalSec == 0 {
-		return ""
+	trimTrailing := func(s string) string {
+		if strings.Contains(s, ".") {
+			s = strings.TrimRight(s, "0")
+			s = strings.TrimRight(s, ".")
+		}
+		return s
 	}
+	secStr := trimTrailing(fmt.Sprintf("%.2f", d.Seconds()))
 	if pattern != "" {
 		return strings.NewReplacer(
 			"%s", fmt.Sprintf("%d", totalSec),
@@ -429,23 +434,23 @@ func formatDuration(d time.Duration, pattern string) string {
 			"%M", fmt.Sprintf("%02d", (totalSec/60)%60),
 			"%h", fmt.Sprintf("%d", totalSec/3600),
 			"%H", fmt.Sprintf("%02d", totalSec/3600),
-			"%e", fmt.Sprintf("%.1f", d.Seconds()),
+			"%e", secStr,
 		).Replace(pattern)
 	}
 	days := totalSec / 86400
 	hours := (totalSec % 86400) / 3600
 	mins := (totalSec % 3600) / 60
-	secs := totalSec % 60
+	secFrac := trimTrailing(fmt.Sprintf("%.2f", float64(totalSec%60)+d.Seconds()-float64(totalSec)))
 	if days > 0 {
-		return fmt.Sprintf("%dd%dh%dm%ds", days, hours, mins, secs)
+		return fmt.Sprintf("%dd%dh%dm%ss", days, hours, mins, secFrac)
 	}
 	if hours > 0 {
-		return fmt.Sprintf("%dh%dm%ds", hours, mins, secs)
+		return fmt.Sprintf("%dh%dm%ss", hours, mins, secFrac)
 	}
 	if mins > 0 {
-		return fmt.Sprintf("%dm%ds", mins, secs)
+		return fmt.Sprintf("%dm%ss", mins, secFrac)
 	}
-	return fmt.Sprintf("%ds", secs)
+	return secFrac + "s"
 }
 
 func expandTimeFormat(format string) string {
