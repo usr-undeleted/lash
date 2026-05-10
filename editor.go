@@ -1667,6 +1667,7 @@ func (e *LineEditor) renderMenu(prompt string, prevBufW int) int {
 	}
 
 	var buf strings.Builder
+	savedScreenRow := e.screenRow
 	buf.WriteString("\r\n")
 	for row := 0; row < rows; row++ {
 		for col := 0; col < cols; col++ {
@@ -1747,7 +1748,7 @@ func (e *LineEditor) renderMenu(prompt string, prevBufW int) int {
 	}
 
 	os.Stdout.WriteString(buf.String())
-	e.screenRow = 0
+	e.screenRow = savedScreenRow + 1
 	e.menuRows = rows
 	return e.redraw(prompt, prevBufW)
 }
@@ -1797,7 +1798,6 @@ func (e *LineEditor) clearMenu(prompt string, prevBufW int) int {
 	}
 	os.Stdout.WriteString(buf.String())
 	e.menuRows = 0
-	e.screenRow = 0
 	return e.redraw(prompt, prevBufW)
 }
 
