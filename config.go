@@ -34,6 +34,7 @@ type Config struct {
 	AutoSuggest       bool
 	AutoCd            bool
 	CompletionMenu    bool
+	PromptCR          bool
 	AutoCorrect        bool
 	AutoCorrectThreshold int
 	UpdateSource      string
@@ -149,6 +150,8 @@ func LoadConfig() *Config {
 			cfg.AutoCd = val == "1"
 		case "completion-menu":
 			cfg.CompletionMenu = val == "1"
+		case "prompt-cr":
+			cfg.PromptCR = val == "1"
 		case "autocorrect":
 			cfg.AutoCorrect = val == "1"
 		case "autocorrect-threshold":
@@ -197,6 +200,7 @@ func (c *Config) Save() error {
 	lines = append(lines, fmt.Sprintf("auto-suggest = %s", boolToStr(c.AutoSuggest)))
 	lines = append(lines, fmt.Sprintf("auto-cd = %s", boolToStr(c.AutoCd)))
 	lines = append(lines, fmt.Sprintf("completion-menu = %s", boolToStr(c.CompletionMenu)))
+	lines = append(lines, fmt.Sprintf("prompt-cr = %s", boolToStr(c.PromptCR)))
 	lines = append(lines, fmt.Sprintf("autocorrect = %s", boolToStr(c.AutoCorrect)))
 	lines = append(lines, fmt.Sprintf("autocorrect-threshold = %d", c.AutoCorrectThreshold))
 	if c.UpdateSource != "" {
@@ -295,6 +299,9 @@ func (c *Config) Set(key, val string) bool {
 	case "completion-menu":
 		c.CompletionMenu = val == "1"
 		return true
+	case "prompt-cr":
+		c.PromptCR = val == "1"
+		return true
 	case "autocorrect":
 		c.AutoCorrect = val == "1"
 		return true
@@ -340,6 +347,7 @@ var configKeys = []configEntry{
 	{"auto-suggest", "<0|1>", "show grayed-out inline completion hints as you type"},
 	{"auto-cd", "<0|1>", "change to directory when typed as a command"},
 	{"completion-menu", "<0|1>", "show navigable completion menu for ambiguous completions"},
+	{"prompt-cr", "<0|1>", "show % indicator when output has no trailing newline"},
 	{"autocorrect", "<0|1>", "auto-correct mistyped commands using fuzzy matching"},
 	{"autocorrect-threshold", "<1-4>", "max edit distance for autocorrect (default 4)"},
 	{"update-source", "<path>", "path to lash source directory for lash update"},
@@ -374,6 +382,7 @@ func printConfigShow(c *Config) {
 	fmt.Printf("%-22s %s\n", "auto-suggest", boolToStr(c.AutoSuggest))
 	fmt.Printf("%-22s %s\n", "auto-cd", boolToStr(c.AutoCd))
 	fmt.Printf("%-22s %s\n", "completion-menu", boolToStr(c.CompletionMenu))
+	fmt.Printf("%-22s %s\n", "prompt-cr", boolToStr(c.PromptCR))
 	fmt.Printf("%-22s %s\n", "autocorrect", boolToStr(c.AutoCorrect))
 	fmt.Printf("%-22s %d\n", "autocorrect-threshold", c.AutoCorrectThreshold)
 	fmt.Printf("%-22s %s\n", "update-source", c.UpdateSource)

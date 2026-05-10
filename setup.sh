@@ -439,6 +439,7 @@ setup_config() {
             echo "auto-cd=1" >> "$PREFS_FILE.tmp"
             echo "autocorrect=1" >> "$PREFS_FILE.tmp"
             echo "autocorrect-threshold=4" >> "$PREFS_FILE.tmp"
+            echo "prompt-cr=1" >> "$PREFS_FILE.tmp"
             return 0
         fi
         printf '\n'
@@ -447,12 +448,13 @@ setup_config() {
     c "$DIM"; desc "Answer each question, or press Enter to keep the default value."; c "$RESET"
     printf '\n'
 
-    local noclobber lashenv auto_cd ignoreeof notify hist_dups hist_space colored_output auto_suggest autocorrect
+    local noclobber lashenv auto_cd ignoreeof notify hist_dups hist_space colored_output auto_suggest autocorrect prompt_cr
 
     noclobber=$(ask_config "noclobber" "prevent > overwriting existing files (use >| to force)" "1")
     lashenv=$(ask_config "lashenv" "auto-load per-directory .lashenv on cd" "1")
     auto_cd=$(ask_config "auto-cd" "change to directory when typed as a command" "1")
     autocorrect=$(ask_config "autocorrect" "auto-correct mistyped commands using fuzzy matching" "1")
+    prompt_cr=$(ask_config "prompt-cr" "show %% indicator when output has no trailing newline" "1")
     ignoreeof=$(ask_config "ignoreeof" "require 10 Ctrl-D presses to exit" "1")
     notify=$(ask_config "notify" "report background job status immediately" "1")
     hist_dups=$(ask_config "hist-ignore-dups" "skip duplicate consecutive history entries" "1")
@@ -474,6 +476,7 @@ setup_config() {
     echo "auto-cd=$auto_cd" >> "$PREFS_FILE.tmp"
     echo "autocorrect=$autocorrect" >> "$PREFS_FILE.tmp"
     echo "autocorrect-threshold=4" >> "$PREFS_FILE.tmp"
+    echo "prompt-cr=$prompt_cr" >> "$PREFS_FILE.tmp"
     echo "ignoreeof=$ignoreeof" >> "$PREFS_FILE.tmp"
     echo "notify=$notify" >> "$PREFS_FILE.tmp"
     echo "hist-ignore-dups=$hist_dups" >> "$PREFS_FILE.tmp"
@@ -500,6 +503,7 @@ setup_config() {
         "$SCRIPT_DIR/lash" set-config history-size "$hist_size" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config colored-output "$colored_output" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config auto-suggest "$auto_suggest" 2>/dev/null || true
+        "$SCRIPT_DIR/lash" set-config prompt-cr "$prompt_cr" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config update-source "$SCRIPT_DIR" 2>/dev/null || true
         success "Configuration applied"
     else
