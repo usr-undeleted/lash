@@ -35,18 +35,16 @@ type LineEditor struct {
 	termKeySeqs    map[string]string
 	savedTermState *term.State
 	continuation   bool
-	suggestion     string
+	suggestion    string
 	cycleCandidates []string
 	cycleIndex      int
 	cycleLen        int
 	cycleLastBuf    string
-	menuActive      bool
-	menuCandidates  []completionEntry
-	menuSelected    int
-	menuRows        int
+	menuActive    bool
+	menuCandidates []completionEntry
+	menuSelected  int
+	menuRows      int
 	lastDisplayRows int
-	multiline       bool
-	ps2             string
 }
 
 func NewLineEditor(cfg *Config) *LineEditor {
@@ -151,13 +149,6 @@ func (e *LineEditor) executeAction(action string, prompt string, prevW *int) (st
 		}
 	case actAcceptLine:
 		e.clearSuggestion()
-		if e.multiline && needsContinuation(e.buf) {
-			e.buf = append(e.buf[:e.cursor], append([]rune{'\n'}, e.buf[e.cursor:]...)...)
-			e.cursor++
-			e.updateSuggestion()
-			*prevW = e.redraw(prompt, *prevW)
-			return "", nil, false
-		}
 		os.Stdout.Write([]byte("\r\n"))
 		line := string(e.buf)
 		if strings.TrimSpace(line) != "" {
@@ -711,13 +702,6 @@ func (e *LineEditor) readLineRaw(prompt string) (string, error) {
 			if b[0] == '\r' || b[0] == '\n' {
 				prevW = e.acceptMenuSelection(prompt, prevW)
 				e.clearSuggestion()
-				if e.multiline && needsContinuation(e.buf) {
-					e.buf = append(e.buf[:e.cursor], append([]rune{'\n'}, e.buf[e.cursor:]...)...)
-					e.cursor++
-					e.updateSuggestion()
-					prevW = e.redraw(prompt, prevW)
-					continue
-				}
 				os.Stdout.Write([]byte("\r\n"))
 				line := string(e.buf)
 				if strings.TrimSpace(line) != "" {
@@ -905,18 +889,14 @@ func (e *LineEditor) handleCSI(prompt string, prevW *int) (string, error, bool) 
 			}
 			switch b {
 			case 'A':
-				if e.multiline && e.lineStart(e.cursor) > 0 {
-					e.moveCursorUp(prompt, prevW)
-				} else if len(e.history) > 0 && e.histIdx > 0 {
+				if len(e.history) > 0 && e.histIdx > 0 {
 					e.histIdx--
 					e.buf = []rune(e.history[e.histIdx])
 					e.cursor = len(e.buf)
 					*prevW = e.redraw(prompt, *prevW)
 				}
 			case 'B':
-				if e.multiline && e.lineEnd(e.cursor) < len(e.buf) {
-					e.moveCursorDown(prompt, prevW)
-				} else if e.histIdx < len(e.history) {
+				if e.histIdx < len(e.history) {
 					e.histIdx++
 					if e.histIdx < len(e.history) {
 						e.buf = []rune(e.history[e.histIdx])
@@ -1016,18 +996,14 @@ func (e *LineEditor) handleSS3(prompt string, prevW *int) (string, error, bool) 
 	}
 	switch b {
 	case 'A':
-		if e.multiline && e.lineStart(e.cursor) > 0 {
-			e.moveCursorUp(prompt, prevW)
-		} else if len(e.history) > 0 && e.histIdx > 0 {
+		if len(e.history) > 0 && e.histIdx > 0 {
 			e.histIdx--
 			e.buf = []rune(e.history[e.histIdx])
 			e.cursor = len(e.buf)
 			*prevW = e.redraw(prompt, *prevW)
 		}
 	case 'B':
-		if e.multiline && e.lineEnd(e.cursor) < len(e.buf) {
-			e.moveCursorDown(prompt, prevW)
-		} else if e.histIdx < len(e.history) {
+		if e.histIdx < len(e.history) {
 			e.histIdx++
 			if e.histIdx < len(e.history) {
 				e.buf = []rune(e.history[e.histIdx])
@@ -1323,49 +1299,15 @@ func (e *LineEditor) deleteWhitespaceWordBack(prompt string, prevW *int) {
 }
 
 func (e *LineEditor) redraw(prompt string, prevBufW int) int {
+	pvis := visibleWidth(prompt)
+
 	termW := getTermWidth()
 	if termW <= 0 {
 		termW = 80
 	}
 
-	hasNewlines := false
-	for _, r := range e.buf {
-		if r == '\n' {
-			hasNewlines = true
-			break
-		}
-	}
-
-	var ps2 string
-	if hasNewlines {
-		ps2 = e.ps2
-		if ps2 == "" {
-			ps2 = "> "
-		}
-	}
-
-	var displayStr string
-	if e.config != nil && e.config.SyntaxColor && len(e.buf) > 0 && !e.continuation {
-		displayStr = e.syntaxHighlight()
-	} else {
-		displayStr = string(e.buf)
-	}
-
-	pvis := visibleWidth(prompt)
-	pRows := (pvis + termW - 1) / termW
-	if pRows < 1 {
-		pRows = 1
-	}
 	typingCol := pvis % termW
 
-	if !hasNewlines {
-		return e.redrawSingleLine(prompt, displayStr, typingCol, termW)
-	}
-
-	return e.redrawMultiLine(prompt, ps2, displayStr, typingCol, pRows, termW)
-}
-
-func (e *LineEditor) redrawSingleLine(prompt, display string, typingCol, termW int) int {
 	prevRows := e.lastDisplayRows
 	if prevRows < 1 {
 		prevRows = 1
@@ -1393,23 +1335,35 @@ func (e *LineEditor) redrawSingleLine(prompt, display string, typingCol, termW i
 	}
 
 	var buf strings.Builder
+
 	if e.screenRow > 0 {
 		buf.WriteString(fmt.Sprintf("\033[%dA", e.screenRow))
 	}
+
 	buf.WriteString("\r")
 	if typingCol > 0 {
 		buf.WriteString(fmt.Sprintf("\033[%dC", typingCol))
 	}
 	buf.WriteString("\033[K")
+
 	for i := 1; i < rowsToClear; i++ {
 		buf.WriteString("\033[B\r\033[K")
 	}
+
 	if rowsToClear > 1 {
 		buf.WriteString(fmt.Sprintf("\033[%dA", rowsToClear-1))
 	}
+
 	buf.WriteString("\r")
 	if typingCol > 0 {
 		buf.WriteString(fmt.Sprintf("\033[%dC", typingCol))
+	}
+
+	var display string
+	if e.config != nil && e.config.SyntaxColor && len(e.buf) > 0 {
+		display = e.syntaxHighlight()
+	} else {
+		display = string(e.buf)
 	}
 	buf.WriteString("\033[?25l")
 	buf.WriteString(display)
@@ -1421,6 +1375,7 @@ func (e *LineEditor) redrawSingleLine(prompt, display string, typingCol, termW i
 	}
 
 	cursorW := bufWidth(e.buf[:e.cursor])
+
 	targetPos := typingCol + cursorW
 	e.screenRow = targetPos / termW
 
@@ -1454,186 +1409,9 @@ func (e *LineEditor) redrawSingleLine(prompt, display string, typingCol, termW i
 	}
 	buf.WriteString("\033[?25h")
 	os.Stdout.WriteString(buf.String())
+
 	e.lastDisplayRows = totalRows
 	return newW
-}
-
-func (e *LineEditor) redrawMultiLine(prompt, ps2, display string, typingCol, pRows, termW int) int {
-	prevRows := e.lastDisplayRows
-	if prevRows < 1 {
-		prevRows = 1
-	}
-
-	displayRunes := []rune(display)
-	ps2vis := visibleWidth(ps2)
-	pvis := visibleWidth(prompt)
-
-	totalDisplayRows := pRows - 1
-	cursorDisplayRow := 0
-	cursorDisplayCol := 0
-	foundCursor := false
-
-	lineStart := 0
-	currentPromptVis := pvis
-	promptRows := pRows
-
-	for i := 0; i <= len(displayRunes); i++ {
-		if i == len(displayRunes) || displayRunes[i] == '\n' {
-			lineRunes := displayRunes[lineStart:i]
-			lineW := bufWidth(lineRunes)
-			lineRows := (currentPromptVis%termW + lineW + termW - 1) / termW
-			totalDisplayRows += lineRows
-
-			if !foundCursor {
-				if e.cursor >= lineStart && (e.cursor <= i || i == len(displayRunes)) {
-					offsetInLine := e.cursor - lineStart
-					cursorOffsetW := bufWidth(displayRunes[lineStart : lineStart+offsetInLine])
-					cursorPos := currentPromptVis%termW + cursorOffsetW
-					cursorDisplayRow = totalDisplayRows - lineRows + cursorPos/termW
-					cursorDisplayCol = cursorPos % termW
-					foundCursor = true
-				}
-			}
-
-			lineStart = i + 1
-			currentPromptVis = ps2vis
-			promptRows = (ps2vis + termW - 1) / termW
-			if promptRows < 1 {
-				promptRows = 1
-			}
-			totalDisplayRows += promptRows - 1
-			continue
-		}
-	}
-
-	if totalDisplayRows < 1 {
-		totalDisplayRows = 1
-	}
-
-	var buf strings.Builder
-	if e.screenRow > 0 {
-		buf.WriteString(fmt.Sprintf("\033[%dA", e.screenRow))
-	}
-	buf.WriteString("\r\033[K")
-	for i := 1; i < prevRows; i++ {
-		buf.WriteString("\033[B\r\033[K")
-	}
-	if prevRows > 1 {
-		buf.WriteString(fmt.Sprintf("\033[%dA", prevRows-1))
-	}
-
-	buf.WriteString("\033[?25l")
-	buf.WriteString(display)
-
-	if !foundCursor {
-		cursorDisplayRow = totalDisplayRows - 1
-		cursorDisplayCol = 0
-	}
-
-	buf.WriteString("\033[K")
-
-	targetRow := cursorDisplayRow
-	rowsDiff := (totalDisplayRows - 1) - targetRow
-	if rowsDiff > 0 {
-		buf.WriteString(fmt.Sprintf("\033[%dA", rowsDiff))
-	}
-	buf.WriteString("\r")
-	if cursorDisplayCol > 0 {
-		buf.WriteString(fmt.Sprintf("\033[%dC", cursorDisplayCol))
-	}
-	buf.WriteString("\033[?25h")
-	os.Stdout.WriteString(buf.String())
-	e.screenRow = targetRow
-	e.lastDisplayRows = totalDisplayRows
-	return bufWidth(e.buf)
-}
-
-func (e *LineEditor) lineStart(pos int) int {
-	for i := pos - 1; i >= 0; i-- {
-		if e.buf[i] == '\n' {
-			return i + 1
-		}
-	}
-	return 0
-}
-
-func (e *LineEditor) lineEnd(pos int) int {
-	for i := pos; i < len(e.buf); i++ {
-		if e.buf[i] == '\n' {
-			return i
-		}
-	}
-	return len(e.buf)
-}
-
-func (e *LineEditor) prevLineStart(pos int) int {
-	if pos == 0 {
-		return 0
-	}
-	i := pos - 1
-	for i > 0 && e.buf[i] != '\n' {
-		i--
-	}
-	if i > 0 && e.buf[i] == '\n' {
-		i--
-		for i > 0 && e.buf[i] != '\n' {
-			i--
-		}
-		if i > 0 {
-			return i + 1
-		}
-		return 0
-	}
-	return 0
-}
-
-func (e *LineEditor) nextLineStart(pos int) int {
-	for i := pos; i < len(e.buf); i++ {
-		if e.buf[i] == '\n' {
-			return i + 1
-		}
-	}
-	return len(e.buf)
-}
-
-func (e *LineEditor) moveCursorUp(prompt string, prevW *int) {
-	if !e.multiline || len(e.buf) == 0 {
-		return
-	}
-	ls := e.lineStart(e.cursor)
-	if ls == 0 {
-		return
-	}
-	col := e.cursor - ls
-	prevLS := e.prevLineStart(e.cursor)
-	prevLE := e.lineEnd(prevLS)
-	prevLineLen := prevLE - prevLS
-	newCol := col
-	if newCol > prevLineLen {
-		newCol = prevLineLen
-	}
-	e.cursor = prevLS + newCol
-	*prevW = e.redraw(prompt, *prevW)
-}
-
-func (e *LineEditor) moveCursorDown(prompt string, prevW *int) {
-	if !e.multiline || len(e.buf) == 0 {
-		return
-	}
-	le := e.lineEnd(e.cursor)
-	if le == len(e.buf) {
-		return
-	}
-	col := e.cursor - e.lineStart(e.cursor)
-	nls := le + 1
-	nle := e.lineEnd(nls)
-	nextLineLen := nle - nls
-	newCol := col
-	if newCol > nextLineLen {
-		newCol = nextLineLen
-	}
-	e.cursor = nls + newCol
-	*prevW = e.redraw(prompt, *prevW)
 }
 
 func (e *LineEditor) clearSuggestion() {
@@ -1898,7 +1676,7 @@ func resolveTildeForCheck(name string) string {
 
 func (e *LineEditor) syntaxHighlight() string {
 	runes := e.buf
-	if len(runes) == 0 {
+	if len(runes) == 0 || e.continuation {
 		return string(runes)
 	}
 
@@ -1908,7 +1686,7 @@ func (e *LineEditor) syntaxHighlight() string {
 	var spans []span
 	i := 0
 	for i < len(runes) {
-		for i < len(runes) && (runes[i] == ' ' || runes[i] == '\t' || runes[i] == '\n') {
+		for i < len(runes) && (runes[i] == ' ' || runes[i] == '\t') {
 			i++
 		}
 		if i >= len(runes) {

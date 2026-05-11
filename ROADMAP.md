@@ -103,7 +103,7 @@
 
 ## Phase 7: Advanced Interactive Features
 
-- [x] Multi-line command editing (with visual indicator)
+- [ ] Multi-line command editing (with visual indicator)
 - [x] Auto-suggestions (fish-style灰色 hints)
 - [x] Syntax highlighting as you type
 - [x] Tab completion menus (when ambiguous)
