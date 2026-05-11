@@ -1486,17 +1486,17 @@ func (e *LineEditor) updateSuggestion() {
 	}
 }
 
-func isShellOperator(t string) bool {
+func isChainOp(t string) bool {
 	switch t {
-	case ";", "&&", "||", "|", "&", ">>", ">", "<", "<<", "<<-", "<<<", ">|":
+	case "|", "&&", "||":
 		return true
 	}
 	return false
 }
 
-func isChainOperator(t string) bool {
+func isSeparatorOp(t string) bool {
 	switch t {
-	case "|", "&&", "||", ";":
+	case ";", "&", ";;":
 		return true
 	}
 	return false
@@ -1508,6 +1508,162 @@ func isRedirectionOp(t string) bool {
 		return true
 	}
 	return false
+}
+
+func writeColored(b *strings.Builder, text, color string) {
+	if color != "" {
+		b.WriteString(color)
+	}
+	b.WriteString(text)
+	if color != "" {
+		b.WriteString(colorReset)
+	}
+}
+
+func isVarStartChar(r rune) bool {
+	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || r == '_'
+}
+
+// colorArgParts colors sub-tokens inside an argument (variables, escapes, tilde, globs)
+func hasUnquotedGlob(token string) bool {
+	inSingle := false
+	inDouble := false
+	for _, r := range token {
+		if r == '\'' && !inDouble {
+			inSingle = !inSingle
+			continue
+		}
+		if r == '"' && !inSingle {
+			inDouble = !inDouble
+			continue
+		}
+		if inSingle || inDouble {
+			continue
+		}
+		if r == '*' || r == '?' || r == '[' {
+			return true
+		}
+	}
+	return false
+}
+
+func colorArgParts(b *strings.Builder, token string) {
+	if hasUnquotedGlob(token) {
+		writeColored(b, token, colorMagenta)
+		return
+	}
+	inSingle := false
+	inDouble := false
+	i := 0
+	for i < len(token) {
+		r := rune(token[i])
+		if r == '\'' && !inDouble {
+			writeColored(b, "'", colorMagenta)
+			inSingle = !inSingle
+			i++
+			continue
+		}
+		if r == '"' && !inSingle {
+			writeColored(b, `"`, colorMagenta)
+			inDouble = !inDouble
+			i++
+			continue
+		}
+		if inSingle {
+			b.WriteByte(token[i])
+			i++
+			continue
+		}
+		if r == '\\' && inDouble && i+1 < len(token) {
+			writeColored(b, string(token[i:i+2]), colorCyan)
+			i += 2
+			continue
+		}
+		if r == '\\' && !inDouble {
+			writeColored(b, string(token[i:i+2]), colorCyan)
+			i += 2
+			continue
+		}
+		if r == '$' && i+1 < len(token) {
+			next := rune(token[i+1])
+			if next == '{' || next == '(' || isVarStartChar(next) || next == '?' || next == '$' || next == '!' || next == '#' {
+				end := i + 1
+				if next == '{' {
+					end++
+					for end < len(token) && token[end] != '}' {
+						end++
+					}
+					if end < len(token) {
+						end++
+					}
+				} else if next == '(' {
+					depth := 1
+					end++
+					for end < len(token) && depth > 0 {
+						if token[end] == '(' {
+							depth++
+						} else if token[end] == ')' {
+							depth--
+						}
+						end++
+					}
+				} else {
+					end++
+					for end < len(token) && (isVarStartChar(rune(token[end])) || (token[end] >= '0' && token[end] <= '9')) {
+						end++
+					}
+				}
+				writeColored(b, token[i:end], colorCyan)
+				i = end
+				continue
+			}
+		}
+		if (r == '*' || r == '?' || r == '[') && !inDouble {
+			writeColored(b, string(r), colorMagenta)
+			i++
+			continue
+		}
+		b.WriteByte(token[i])
+		i++
+	}
+}
+
+func looksLikePath(token string) bool {
+	return strings.HasPrefix(token, "/") || strings.HasPrefix(token, "./") ||
+		strings.HasPrefix(token, "../") || strings.HasPrefix(token, "~") ||
+		strings.Contains(token, "/")
+}
+
+func isSimpleToken(token string) bool {
+	for _, r := range token {
+		switch r {
+		case '$', '\\', '\'', '"', '*', '?', '[':
+			return false
+		}
+	}
+	return true
+}
+
+func colorPathOrArg(b *strings.Builder, token string) {
+	if !isSimpleToken(token) {
+		colorArgParts(b, token)
+		return
+	}
+	resolved := resolveTildeForCheck(token)
+	info, err := os.Stat(resolved)
+	if err != nil {
+		if looksLikePath(token) {
+			writeColored(b, token, colorRed)
+		} else {
+			b.WriteString(token)
+		}
+		return
+	}
+	if info.IsDir() {
+		writeColored(b, token, colorBold+colorBlue)
+	} else {
+		writeColored(b, token, colorCyan)
+	}
 }
 
 func resolveTildeForCheck(name string) string {
@@ -1559,6 +1715,10 @@ func (e *LineEditor) syntaxHighlight() string {
 			if i < len(runes) {
 				i++
 			}
+		} else if runes[i] == '#' {
+			for i < len(runes) && runes[i] != '\n' {
+				i++
+			}
 		} else {
 			for i < len(runes) && runes[i] != ' ' && runes[i] != '\t' {
 				i++
@@ -1571,25 +1731,47 @@ func (e *LineEditor) syntaxHighlight() string {
 	}
 
 	cmdPos := true
+	optionMode := false
+	redirNext := false
 	var result strings.Builder
+
 	for idx, sp := range spans {
 		token := string(runes[sp.start:sp.end])
 
-		if cmdPos {
+		if token == "#" {
+			writeColored(&result, token+string(runes[sp.end:]), colorDarkGrey)
+			break
+		}
+		if strings.HasPrefix(token, "#") {
+			writeColored(&result, token, colorDarkGrey)
+			if idx < len(spans)-1 {
+				result.WriteString(string(runes[sp.end:spans[idx+1].start]))
+			}
+			continue
+		}
+
+		if isChainOp(token) {
+			writeColored(&result, token, colorBold)
+			cmdPos = true
+			optionMode = false
+			redirNext = false
+		} else if isSeparatorOp(token) {
+			writeColored(&result, token, colorDarkGrey)
+			cmdPos = true
+			optionMode = false
+			redirNext = false
+		} else if isRedirectionOp(token) {
+			writeColored(&result, token, colorCyan)
+			redirNext = true
+			optionMode = false
+		} else if cmdPos {
 			if isKeyword(token) {
-				result.WriteString(colorYellow)
-				result.WriteString(token)
-				result.WriteString(colorReset)
+				writeColored(&result, token, colorYellow)
 				if token == "then" || token == "do" || token == "else" || token == "elif" || token == "!" {
 					cmdPos = true
 				} else {
 					cmdPos = false
 				}
-			} else if isShellOperator(token) {
-				result.WriteString(colorBold)
-				result.WriteString(token)
-				result.WriteString(colorReset)
-				cmdPos = isChainOperator(token)
 			} else {
 				resolved := resolveTildeForCheck(token)
 				valid := isValidCommand(resolved)
@@ -1599,36 +1781,42 @@ func (e *LineEditor) syntaxHighlight() string {
 					}
 				}
 				if valid {
-					result.WriteString(colorGreen)
+					writeColored(&result, token, colorGreen)
 				} else {
-					result.WriteString(colorRed)
+					writeColored(&result, token, colorRed)
 				}
-				result.WriteString(token)
-				result.WriteString(colorReset)
 				cmdPos = false
 			}
-		} else if isShellOperator(token) {
-			result.WriteString(colorBold)
-			result.WriteString(token)
-			result.WriteString(colorReset)
-			cmdPos = isChainOperator(token)
+			optionMode = false
+			redirNext = false
+		} else if redirNext {
+			colorPathOrArg(&result, token)
+			redirNext = false
+		} else if optionMode && strings.HasPrefix(token, "-") {
+			writeColored(&result, token, colorCyan)
 		} else if isKeyword(token) {
-			result.WriteString(colorYellow)
-			result.WriteString(token)
-			result.WriteString(colorReset)
+			writeColored(&result, token, colorYellow)
 			if token == "then" || token == "do" || token == "else" || token == "elif" || token == "!" {
 				cmdPos = true
+				optionMode = false
 			}
 		} else {
-			result.WriteString(token)
+			if strings.HasPrefix(token, "-") && len(token) > 1 {
+				optionMode = true
+				writeColored(&result, token, colorCyan)
+			} else {
+				optionMode = false
+				colorPathOrArg(&result, token)
+			}
 		}
 
 		if idx < len(spans)-1 {
 			result.WriteString(string(runes[sp.end:spans[idx+1].start]))
 		}
 	}
+
 	lastEnd := spans[len(spans)-1].end
-	if lastEnd < len(runes) {
+	if lastEnd < len(runes) && !(len(spans) > 0 && strings.HasPrefix(string(runes[spans[0].start:spans[0].end]), "#")) {
 		result.WriteString(string(runes[lastEnd:]))
 	}
 	return result.String()
