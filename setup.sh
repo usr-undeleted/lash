@@ -431,6 +431,8 @@ setup_config() {
             echo "lashenv=1" >> "$PREFS_FILE.tmp"
             echo "ignoreeof=1" >> "$PREFS_FILE.tmp"
             echo "notify=1" >> "$PREFS_FILE.tmp"
+            echo "notify-long=0" >> "$PREFS_FILE.tmp"
+            echo "notify-duration=10" >> "$PREFS_FILE.tmp"
             echo "hist-ignore-dups=1" >> "$PREFS_FILE.tmp"
             echo "hist-ignore-space=1" >> "$PREFS_FILE.tmp"
             echo "history-size=1000" >> "$PREFS_FILE.tmp"
@@ -448,7 +450,7 @@ setup_config() {
     c "$DIM"; desc "Answer each question, or press Enter to keep the default value."; c "$RESET"
     printf '\n'
 
-    local noclobber lashenv auto_cd ignoreeof notify hist_dups hist_space colored_output auto_suggest autocorrect prompt_cr
+    local noclobber lashenv auto_cd ignoreeof notify hist_dups hist_space colored_output auto_suggest autocorrect prompt_cr notify_long notify_duration
 
     noclobber=$(ask_config "noclobber" "prevent > overwriting existing files (use >| to force)" "1")
     lashenv=$(ask_config "lashenv" "auto-load per-directory .lashenv on cd" "1")
@@ -457,6 +459,8 @@ setup_config() {
     prompt_cr=$(ask_config "prompt-cr" "show %% indicator when output has no trailing newline" "1")
     ignoreeof=$(ask_config "ignoreeof" "require 10 Ctrl-D presses to exit" "1")
     notify=$(ask_config "notify" "report background job status immediately" "1")
+    notify_long=$(ask_config "notify-long" "desktop notification when long-running command finishes" "0")
+    notify_duration=$(ask_config "notify-duration" "threshold in seconds for long command notification" "10")
     hist_dups=$(ask_config "hist-ignore-dups" "skip duplicate consecutive history entries" "1")
     hist_space=$(ask_config "hist-ignore-space" "skip commands starting with space from history" "1")
     colored_output=$(ask_config "colored-output" "set LS_COLORS and GREP_COLORS if not already defined" "1")
@@ -479,6 +483,8 @@ setup_config() {
     echo "prompt-cr=$prompt_cr" >> "$PREFS_FILE.tmp"
     echo "ignoreeof=$ignoreeof" >> "$PREFS_FILE.tmp"
     echo "notify=$notify" >> "$PREFS_FILE.tmp"
+    echo "notify-long=$notify_long" >> "$PREFS_FILE.tmp"
+    echo "notify-duration=$notify_duration" >> "$PREFS_FILE.tmp"
     echo "hist-ignore-dups=$hist_dups" >> "$PREFS_FILE.tmp"
     echo "hist-ignore-space=$hist_space" >> "$PREFS_FILE.tmp"
     echo "history-size=$hist_size" >> "$PREFS_FILE.tmp"
@@ -498,6 +504,8 @@ setup_config() {
         "$SCRIPT_DIR/lash" set-config autocorrect-threshold 2 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config ignoreeof "$ignoreeof" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config notify "$notify" 2>/dev/null || true
+        "$SCRIPT_DIR/lash" set-config notify-long "$notify_long" 2>/dev/null || true
+        "$SCRIPT_DIR/lash" set-config notify-duration "$notify_duration" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config hist-ignore-dups "$hist_dups" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config hist-ignore-space "$hist_space" 2>/dev/null || true
         "$SCRIPT_DIR/lash" set-config history-size "$hist_size" 2>/dev/null || true

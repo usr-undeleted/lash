@@ -37,7 +37,9 @@ type Config struct {
 	PromptCR          bool
 	AutoCorrect        bool
 	AutoCorrectThreshold int
-	UpdateSource      string
+	NotifyLong         bool
+	NotifyDuration     int
+	UpdateSource       string
 	Keybinds          map[string]string
 }
 
@@ -158,6 +160,12 @@ func LoadConfig() *Config {
 			if n, err := strconv.Atoi(val); err == nil && n > 0 {
 				cfg.AutoCorrectThreshold = n
 			}
+		case "notify-long":
+			cfg.NotifyLong = val == "1"
+		case "notify-duration":
+			if n, err := strconv.Atoi(val); err == nil && n > 0 {
+				cfg.NotifyDuration = n
+			}
 		case "update-source":
 			cfg.UpdateSource = val
 		}
@@ -203,6 +211,8 @@ func (c *Config) Save() error {
 	lines = append(lines, fmt.Sprintf("prompt-cr = %s", boolToStr(c.PromptCR)))
 	lines = append(lines, fmt.Sprintf("autocorrect = %s", boolToStr(c.AutoCorrect)))
 	lines = append(lines, fmt.Sprintf("autocorrect-threshold = %d", c.AutoCorrectThreshold))
+	lines = append(lines, fmt.Sprintf("notify-long = %s", boolToStr(c.NotifyLong)))
+	lines = append(lines, fmt.Sprintf("notify-duration = %d", c.NotifyDuration))
 	if c.UpdateSource != "" {
 		lines = append(lines, fmt.Sprintf("update-source = %s", c.UpdateSource))
 	}
@@ -311,6 +321,15 @@ func (c *Config) Set(key, val string) bool {
 			return true
 		}
 		return false
+	case "notify-long":
+		c.NotifyLong = val == "1"
+		return true
+	case "notify-duration":
+		if n, err := strconv.Atoi(val); err == nil && n > 0 {
+			c.NotifyDuration = n
+			return true
+		}
+		return false
 	case "update-source":
 		c.UpdateSource = val
 		return true
@@ -350,6 +369,8 @@ var configKeys = []configEntry{
 	{"prompt-cr", "<0|1>", "show % indicator when output has no trailing newline"},
 	{"autocorrect", "<0|1>", "auto-correct mistyped commands using fuzzy matching"},
 	{"autocorrect-threshold", "<1-4>", "max edit distance for autocorrect (default 4)"},
+	{"notify-long", "<0|1>", "desktop notification when a long-running command finishes"},
+	{"notify-duration", "<seconds>", "threshold in seconds for long command notification (default 10)"},
 	{"update-source", "<path>", "path to lash source directory for lash update"},
 }
 
@@ -385,6 +406,8 @@ func printConfigShow(c *Config) {
 	fmt.Printf("%-22s %s\n", "prompt-cr", boolToStr(c.PromptCR))
 	fmt.Printf("%-22s %s\n", "autocorrect", boolToStr(c.AutoCorrect))
 	fmt.Printf("%-22s %d\n", "autocorrect-threshold", c.AutoCorrectThreshold)
+	fmt.Printf("%-22s %s\n", "notify-long", boolToStr(c.NotifyLong))
+	fmt.Printf("%-22s %d\n", "notify-duration", c.NotifyDuration)
 	fmt.Printf("%-22s %s\n", "update-source", c.UpdateSource)
 }
 

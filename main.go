@@ -37,6 +37,8 @@ var setNoClobber bool
 var setNoUnset bool
 var setNoGlob bool
 var setNotify bool
+var setNotifyLong bool
+var setNotifyDuration int
 var setHistIgnoreDups bool
 var setHistIgnoreSpace bool
 var setHupOnExit bool
@@ -451,6 +453,17 @@ func formatDuration(d time.Duration, pattern string) string {
 		return fmt.Sprintf("%dm%ss", mins, secFrac)
 	}
 	return secFrac + "s"
+}
+
+func sendDesktopNotification(cmd string, duration time.Duration) {
+	summary := "Command completed"
+	durStr := formatDuration(duration, "")
+	displayCmd := strings.TrimSpace(cmd)
+	if len(displayCmd) > 50 {
+		displayCmd = displayCmd[:47] + "..."
+	}
+	body := fmt.Sprintf("'%s' completed in %s", displayCmd, durStr)
+	exec.Command("notify-send", summary, body).Start()
 }
 
 func expandTimeFormat(format string) string {
@@ -1291,5 +1304,11 @@ func main() {
 		cmdStart := time.Now()
 		executeNode(prog, defaultContext())
 		lastCmdDuration = time.Since(cmdStart)
+		if shellInteractive && setNotifyLong && setNotifyDuration > 0 {
+			threshold := time.Duration(setNotifyDuration) * time.Second
+			if lastCmdDuration >= threshold {
+				sendDesktopNotification(line, lastCmdDuration)
+			}
+		}
 	}
 }

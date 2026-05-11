@@ -24,6 +24,8 @@ func applyConfigToOptions(cfg *Config) {
 	setNoUnset = cfg.NoUnset
 	setNoGlob = cfg.NoGlob
 	setNotify = cfg.Notify
+	setNotifyLong = cfg.NotifyLong
+	setNotifyDuration = cfg.NotifyDuration
 	setHistIgnoreDups = cfg.HistIgnoreDups
 	setHistIgnoreSpace = cfg.HistIgnoreSpace
 	setHupOnExit = cfg.HupOnExit
