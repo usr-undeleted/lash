@@ -1228,7 +1228,10 @@ func main() {
 		}
 		firstLoop = false
 		prompt := getPrompt()
+		globalEditor.multiline = true
+		globalEditor.ps2 = getPS2()
 		line, err := globalEditor.ReadLine(prompt)
+		globalEditor.multiline = false
 		if err == io.EOF {
 			fmt.Println()
 			break
@@ -1241,6 +1244,7 @@ func main() {
 			lastExitCode = 130
 			continue
 		}
+		line = strings.ReplaceAll(line, "\n", "; ")
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -1250,39 +1254,8 @@ func main() {
 			continue
 		}
 
-		for {
-			tks := tokenize(line)
-			if len(tks) == 0 {
-				break
-			}
-			last := tks[len(tks)-1]
-			if last != "|" && last != ">" && last != ">>" && last != ">|" && last != "<" && last != "<<" && last != "<<-" && last != "<<<" && last != ";" && last != "&&" && last != "||" {
-				break
-			}
-			globalEditor.continuation = true
-			nextLine, err := globalEditor.ReadLine(getPS2())
-			globalEditor.continuation = false
-			if err != nil {
-				break
-			}
-			if nextLine == "\x03" {
-				lastExitCode = 130
-				line = ""
-				break
-			}
-			if nextLine == "" {
-				break
-			}
-			line = line + " " + nextLine
-		}
-		if line == "" {
-			continue
-		}
-
 		line = preprocessHeredocs(line, func() (string, error) {
-			globalEditor.continuation = true
 			nextLine, err := globalEditor.ReadLine(getPS2())
-			globalEditor.continuation = false
 			if err != nil {
 				return "", err
 			}

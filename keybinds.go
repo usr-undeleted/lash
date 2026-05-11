@@ -53,6 +53,7 @@ var defaultKeybinds = map[string]string{
 	"ctrl-k":    actKillLineEnd,
 	"ctrl-l":    actClearScreen,
 	"ctrl-m":    actAcceptLine,
+	"enter":     actAcceptLine,
 	"ctrl-n":    actHistoryForward,
 	"ctrl-p":    actHistoryBack,
 	"ctrl-r":    actReverseSearch,
