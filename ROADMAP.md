@@ -110,13 +110,13 @@
 - [x] Completion descriptions (showing what each option does)
 - [ ] Command-not-found hook (suggest packages to install)
 - [x] Auto-correct / fuzzy matching for commands and directories (correct typos like "prkjects" → "projects" using Levenshtein distance, with confidence threshold and `lash set-config autocorrect` toggle)
-- [ ] Directory history (`cd -<number>`, `cdh`)
+- [x] Directory history (`cd -<number>`, `cdh`)
 - [x] Auto-cd (type directory name to cd into it)
 - [ ] Smart cd with frecency/parent matching (`z`-style)
 - [ ] Clipboard integration
 - [ ] URL detection and click-to-open
 - [ ] Thumbnail previews in completion (for images/icons)
-- [ ] Right-aligned prompt info (git branch, timer, etc.)
+- [x] Right-aligned prompt info (git branch, timer, etc.)
 - [x] Command duration tracking (show time for slow commands)
 - [ ] Notification on long-running command completion
 

@@ -17,7 +17,7 @@ import (
 )
 
 var allBuiltins = []string{
-	"exit", "cd", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
+	"exit", "cd", "cdh", "pwd", "jobs", "fg", "bg", "kill", "export", "lash",
 	"echo", "true", "false", "unset", "env", "type", "which", "alias", "unalias",
 	"source", ".", "return", "local", "shift", "read", "set", "fetch", "trap",
 	"test", "[", "declare", "mapfile", "readarray", "hash",
@@ -55,6 +55,25 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 		} else {
 			dir = os.Getenv("HOME")
 		}
+		cwd, _ := os.Getwd()
+		if strings.HasPrefix(dir, "-") && len(dir) > 1 {
+			n, err := strconv.Atoi(dir[1:])
+			if err == nil && n >= 0 && n < len(dirHistory) {
+				dir = dirHistory[len(dirHistory)-1-n]
+			} else {
+				fmt.Fprintf(os.Stderr, "cd: invalid directory history index: %s\n", dir[1:])
+				lastExitCode = 1
+				return
+			}
+		} else if dir == "-" {
+			if prevDir == "" {
+				fmt.Fprintln(os.Stderr, "cd: OLDPWD not set")
+				lastExitCode = 1
+				return
+			}
+			dir = prevDir
+			fmt.Println(dir)
+		}
 		if err := os.Chdir(dir); err != nil {
 			if ctx.Cfg.AutoCorrect && !strings.Contains(dir, "/") && len(dir) > 0 {
 				entries, rdErr := os.ReadDir(".")
@@ -78,9 +97,32 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 				return
 			}
 		}
+		newDir, _ := os.Getwd()
+		if cwd != "" && cwd != newDir {
+			prevDir = cwd
+			os.Setenv("OLDPWD", cwd)
+			for i, d := range dirHistory {
+				if d == newDir {
+					dirHistory = append(dirHistory[:i], dirHistory[i+1:]...)
+					break
+				}
+			}
+			dirHistory = append(dirHistory, newDir)
+		}
+		setVar("PWD", newDir, true)
 		lastExitCode = 0
 		if setLashenv {
 			tryLoadLashenv(ctx.Cfg)
+		}
+	case "cdh":
+		if len(dirHistory) == 0 {
+			fmt.Fprintln(os.Stderr, "cdh: no directory history")
+			lastExitCode = 1
+		} else {
+			for i := len(dirHistory) - 1; i >= 0; i-- {
+				fmt.Printf("  %d  %s\n", len(dirHistory)-1-i, dirHistory[i])
+			}
+			lastExitCode = 0
 		}
 	case "pwd":
 		dir, err := os.Getwd()

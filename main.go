@@ -55,6 +55,9 @@ var currentSourceLine int
 var currentFuncName string
 var callDepth int
 
+var dirHistory []string
+var prevDir string
+
 var heredocMap map[string]*heredocInfo
 var heredocCount int
 
