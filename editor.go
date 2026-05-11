@@ -245,11 +245,9 @@ func (e *LineEditor) executeAction(action string, prompt string, prevW *int) (st
 			e.clearSuggestion()
 			*prevW = e.redraw(prompt, *prevW)
 		} else if e.suggestion != "" {
-			runes := []rune(e.suggestion)
-			e.buf = append(e.buf, runes[0])
-			e.cursor++
-			e.suggestion = string(runes[1:])
-			e.updateSuggestion()
+			e.buf = append(e.buf, []rune(e.suggestion)...)
+			e.cursor = len(e.buf)
+			e.clearSuggestion()
 			*prevW = e.redraw(prompt, *prevW)
 		}
 	case actNop:
