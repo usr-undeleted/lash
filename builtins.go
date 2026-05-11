@@ -1592,14 +1592,21 @@ func builtinUpdate(ctx *ExecContext) {
 		return
 	}
 
+	// Stash any dirty tracked files before pulling
+	exec.Command("git", "stash", "-q", "--include-untracked").Run()
+
 	pull := exec.Command("git", "pull", "--rebase")
 	pull.Stdout = os.Stdout
 	pull.Stderr = os.Stderr
 	if err := pull.Run(); err != nil {
+		exec.Command("git", "stash", "pop", "-q").Run()
 		fmt.Fprintf(os.Stderr, "lash: git pull failed: %s\n", err)
 		lastExitCode = 1
 		return
 	}
+
+	// Restore stashed changes
+	exec.Command("git", "stash", "pop", "-q").Run()
 
 	build := exec.Command("bash", "./build.sh")
 	build.Stdout = os.Stdout
