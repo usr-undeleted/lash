@@ -1427,6 +1427,24 @@ func (e *LineEditor) deleteWhitespaceWordBack(prompt string, prevW *int) {
 	*prevW = e.redrawAfterEdit(prompt, *prevW)
 }
 
+func (e *LineEditor) highlightLines() []string {
+	if e.config == nil || !e.config.SyntaxColor || len(e.buf) == 0 {
+		var raw []string
+		start := 0
+		for i, r := range e.buf {
+			if r == '\n' {
+				raw = append(raw, string(e.buf[start:i]))
+				start = i + 1
+			}
+		}
+		raw = append(raw, string(e.buf[start:]))
+		return raw
+	}
+	hl := e.syntaxHighlight()
+	parts := strings.Split(hl, "\n")
+	return parts
+}
+
 func (e *LineEditor) redraw(prompt string, prevBufW int) int {
 	if e.hasHadNewline {
 		return e.redrawMultiLine(prompt, prevBufW, false)
@@ -1607,13 +1625,14 @@ func (e *LineEditor) redrawMultiLine(prompt string, prevBufW int, full bool) int
 		}
 		buf.WriteString("\033[K\033[J")
 
-		buf.WriteString(string(lines[0]))
+		hlLines := e.highlightLines()
+		buf.WriteString(hlLines[0])
 		buf.WriteString("\033[K")
 
-		for i := 1; i < len(lines); i++ {
+		for i := 1; i < len(hlLines); i++ {
 			buf.WriteString("\r\n")
 			buf.WriteString(effectivePS2)
-			buf.WriteString(string(lines[i]))
+			buf.WriteString(hlLines[i])
 			buf.WriteString("\033[K")
 		}
 
@@ -1732,7 +1751,8 @@ func (e *LineEditor) redrawMultiLine(prompt string, prevBufW int, full bool) int
 	}
 	buf.WriteString("\033[K")
 
-	display := string(currentLine)
+	hlLines := e.highlightLines()
+	display := hlLines[len(hlLines)-1]
 	buf.WriteString("\033[?25l")
 	buf.WriteString(display)
 	buf.WriteString("\033[K")
