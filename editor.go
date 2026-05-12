@@ -1954,9 +1954,14 @@ func colorArgParts(b *strings.Builder, token string) {
 			i += 2
 			continue
 		}
-		if r == '\\' && !inDouble {
+		if r == '\\' && !inDouble && i+1 < len(token) {
 			writeColored(b, string(token[i:i+2]), colorCyan)
 			i += 2
+			continue
+		}
+		if r == '\\' && !inDouble {
+			writeColored(b, string(token[i]), colorCyan)
+			i++
 			continue
 		}
 		if r == '$' && i+1 < len(token) {
@@ -2644,7 +2649,11 @@ func (e *LineEditor) applyCompletion(prompt string, prevBufW int, candidates []c
 	if len(candidates) == 1 {
 		completion := candidates[0].name
 		if !isFirstToken {
-			info, err := os.Stat(e.resolvePartialPath(completion))
+			// Escape spaces before adding trailing char
+			if strings.Contains(completion, " ") && !strings.HasPrefix(completion, "\"") && !strings.HasPrefix(completion, "'") {
+				completion = strings.ReplaceAll(completion, " ", "\\ ")
+			}
+			info, err := os.Stat(e.resolvePartialPath(strings.ReplaceAll(completion, "\\ ", " ")))
 			if err == nil && info.IsDir() {
 				if !strings.HasSuffix(completion, "/") {
 					completion += "/"
@@ -2679,6 +2688,10 @@ func (e *LineEditor) applyCompletion(prompt string, prevBufW int, candidates []c
 			}
 		}
 		if commonActual != "" && commonActual != partial {
+			// Escape spaces in common prefix
+			if strings.Contains(commonActual, " ") && !strings.HasPrefix(commonActual, "\"") && !strings.HasPrefix(commonActual, "'") {
+				commonActual = strings.ReplaceAll(commonActual, " ", "\\ ")
+			}
 			partialRunes := utf8.RuneCountInString(partial)
 			for i := 0; i < partialRunes && e.cursor > 0; i++ {
 				e.buf = append(e.buf[:e.cursor-1], e.buf[e.cursor:]...)
@@ -2714,11 +2727,16 @@ func (e *LineEditor) applyCompletion(prompt string, prevBufW int, candidates []c
 		}
 	}
 
-	for _, r := range e.cycleCandidates[e.cycleIndex] {
+	cycleVal := e.cycleCandidates[e.cycleIndex]
+	// Escape spaces in cycled completion
+	if strings.Contains(cycleVal, " ") && !strings.HasPrefix(cycleVal, "\"") && !strings.HasPrefix(cycleVal, "'") {
+		cycleVal = strings.ReplaceAll(cycleVal, " ", "\\ ")
+	}
+	for _, r := range cycleVal {
 		e.buf = append(e.buf[:e.cursor], append([]rune{r}, e.buf[e.cursor:]...)...)
 		e.cursor++
 	}
-	e.cycleLen = utf8.RuneCountInString(e.cycleCandidates[e.cycleIndex])
+	e.cycleLen = utf8.RuneCountInString(cycleVal)
 	e.cycleLastBuf = string(e.buf)
 
 	if e.config != nil && e.config.CompletionMenu {

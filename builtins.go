@@ -51,7 +51,7 @@ func executeBuiltin(args []string, ctx *ExecContext) {
 	case "cd":
 		dir := ""
 		if len(args) > 1 {
-			dir = args[1]
+			dir = unescapePath(args[1])
 		} else {
 			dir = os.Getenv("HOME")
 		}
