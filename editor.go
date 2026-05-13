@@ -539,17 +539,18 @@ func (e *LineEditor) readLineFallback(prompt string) (string, error) {
 // check if the last command output ended with a newline
 // sends DSR (Device Status Report) and reads cursor position response from stdin
 func checkTrailingNewline() bool {
-	outFd := int(os.Stdout.Fd())
+	oldState, err := term.MakeRaw(int(os.Stdin.Fd()))
+	if err != nil {
+		return false
+	}
 
 	os.Stdout.WriteString("\033[6n")
-	syscall.Syscall(syscall.SYS_IOCTL, uintptr(outFd), 0x5402, uintptr(0x1))
-
-	os.Stdin.SetReadDeadline(time.Now().Add(200 * time.Millisecond))
-	defer os.Stdin.SetReadDeadline(time.Time{})
+	os.Stdout.Sync()
 
 	buf := make([]byte, 0, 32)
 	tmp := make([]byte, 1)
-	for {
+	deadline := time.Now().Add(100 * time.Millisecond)
+	for time.Now().Before(deadline) {
 		n, err := os.Stdin.Read(tmp)
 		if n > 0 {
 			buf = append(buf, tmp[0])
@@ -561,6 +562,8 @@ func checkTrailingNewline() bool {
 			break
 		}
 	}
+
+	term.Restore(int(os.Stdin.Fd()), oldState)
 
 	resp := string(buf)
 	if !strings.HasPrefix(resp, "\x1b[") {

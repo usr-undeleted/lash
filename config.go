@@ -60,7 +60,7 @@ func themesDirPath() string {
 }
 
 func LoadConfig() *Config {
-	cfg := &Config{LogoSize: "big", HistorySize: 1000, GlobCaseSensitive: true, AutoCorrectThreshold: 4, Keybinds: make(map[string]string)}
+	cfg := &Config{LogoSize: "big", HistorySize: 1000, GlobCaseSensitive: true, AutoCorrectThreshold: 4, PromptCR: true, Keybinds: make(map[string]string)}
 	path := configPath()
 	if path == "" {
 		return cfg

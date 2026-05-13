@@ -1223,7 +1223,7 @@ func main() {
 		drainNotifs()
 		if !firstLoop && shellInteractive && currentConfig != nil && currentConfig.PromptCR {
 			if checkTrailingNewline() {
-				os.Stdout.Write([]byte("\n" + promptCRIndicator + "\n"))
+				os.Stdout.Write([]byte(promptCRIndicator + "\n"))
 			}
 		}
 		firstLoop = false
